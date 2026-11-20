@@ -224,7 +224,7 @@ function renderOverview(){
         healthRow("Failed assignment writes","0 today","good","No simulated failures")+
       '</div>','<button class="panel-action" data-go="reliability">Reliability centre ↗</button>')+
     '</div>'+
-    panel("Member share by folder","Initial allocation count and share within each folder",shareMatrix(rows.slice().sort((a,b)=>b.total-a.total).slice(0,7),false),'<button class="panel-action" data-go="folders">Open full matrix ↗</button>')+
+    panel("Member share by folder","Initial allocation count and share within each folder",shareMatrix(rows,false),'<button class="panel-action" data-go="folders">Open full matrix ↗</button>')+
     '<div class="insight-grid">'+
       insightCard("↗","Brand demand insight","Audi and Volkswagen account for the largest share of the sample ticket volume.","blue")+
       insightCard("◷","Ageing work","42 sample tickets are in the over-24-hour ageing band.","amber")+
