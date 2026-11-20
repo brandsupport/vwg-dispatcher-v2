@@ -1,305 +1,582 @@
+/* VWG Dispatch Intelligence — complete UI foundation.
+ * All records are synthetic. This prototype has no live data or operational integration.
+ */
 const FOLDERS = [
-  { id: "agency", name: "Agency Detags", short: "Agency", received: 230, outstanding: 50 },
-  { id: "detags", name: "Detags", short: "Detags", received: 470, outstanding: 180 },
-  { id: "transfers", name: "Transfers", short: "Transfers", received: 300, outstanding: 94 },
-  { id: "unadopts", name: "Unadopts", short: "Unadopts", received: 194, outstanding: 58 }
+  { id: "agency", name: "Agency Detags", short: "Agency", received: 230, assigned: 218, resolved: 165, open: 50, color: "#568bd0" },
+  { id: "detags", name: "Detags", short: "Detags", received: 470, assigned: 445, resolved: 318, open: 180, color: "#2da28b" },
+  { id: "transfers", name: "Transfers", short: "Transfers", received: 300, assigned: 280, resolved: 205, open: 94, color: "#a27ac5" },
+  { id: "unadopts", name: "Unadopts", short: "Unadopts", received: 194, assigned: 176, resolved: 124, open: 58, color: "#d69b48" }
 ];
-
 const BRANDS = [
-  { id: "vw", name: "Volkswagen", count: 362, color: "#3c78bf" },
-  { id: "audi", name: "Audi", count: 286, color: "#8b5bb6" },
-  { id: "skoda", name: "Škoda", count: 196, color: "#159b83" },
-  { id: "seat", name: "SEAT", count: 118, color: "#d39a43" },
-  { id: "cupra", name: "CUPRA", count: 101, color: "#53657f" },
-  { id: "vwcv", name: "Volkswagen Commercial Vehicles", count: 91, color: "#4b9aae" },
-  { id: "other", name: "Other / unclassified", count: 40, color: "#b6bdc8" }
+  { id: "vw", name: "Volkswagen", count: 362, color: "#3c78bf", short: "VW" },
+  { id: "audi", name: "Audi", count: 286, color: "#8b5bb6", short: "AUDI" },
+  { id: "skoda", name: "Škoda", count: 196, color: "#159b83", short: "ŠKODA" },
+  { id: "seat", name: "SEAT", count: 118, color: "#d39a43", short: "SEAT" },
+  { id: "cupra", name: "CUPRA", count: 101, color: "#53657f", short: "CUPRA" },
+  { id: "vwcv", name: "Volkswagen Commercial Vehicles", count: 91, color: "#4b9aae", short: "VWCV" },
+  { id: "other", name: "Other / unclassified", count: 40, color: "#b6bdc8", short: "OTHER" }
 ];
-
-const FOLDER_BRAND_MIX = {
-  agency: [34, 24, 17, 9, 8, 6, 2],
-  detags: [25, 24, 19, 10, 9, 9, 4],
-  transfers: [28, 23, 18, 11, 9, 7, 4],
-  unadopts: [30, 22, 19, 10, 8, 7, 4]
+const BRAND_MIX = {
+  agency: [36, 24, 16, 8, 7, 6, 3],
+  detags: [29, 24, 18, 10, 8, 7, 4],
+  transfers: [29, 23, 18, 11, 9, 6, 4],
+  unadopts: [31, 22, 19, 10, 8, 6, 4]
 };
-
-const AGENT_NAMES = [
-  "Agent 01", "Agent 02", "Agent 03", "Agent 04", "Agent 05", "Agent 06", "Agent 07",
-  "Agent 08", "Agent 09", "Agent 10", "Agent 11", "Agent 12", "Agent 13", "Agent 14"
-];
-
-const ASSIGNMENT_MATRIX = [
+const AGENT_NAMES = Array.from({length:14}, (_,i) => "Agent " + String(i+1).padStart(2,"0"));
+const AGENT_WEIGHTS = [12,11,10,9,10,12,10,9,11,10,9,10,8,9];
+const SHIFT_GROUPS = ["Early","Late","Early","Late","Early","Late","Early","Late","Early","Late","Early","Late","Early","Late"];
+const AGENTS = AGENT_NAMES.map((name,index) => ({
+  id: "agent-" + String(index+1).padStart(2,"0"),
+  name,
+  shift: SHIFT_GROUPS[index],
+  start: SHIFT_GROUPS[index] === "Early" ? "08:00" : "10:00",
+  end: SHIFT_GROUPS[index] === "Early" ? "18:00" : "20:00",
+  availability: index === 12 ? "Break" : "Available",
+  assigned: 0,
+  open: [11,15,13,16,12,14,10,15,12,13,11,16,9,14][index],
+  response: [22,28,26,31,24,29,21,34,25,27,30,23,32,26][index],
+  resolution: [178,205,192,224,181,213,169,231,190,198,219,184,226,195][index],
+  handovers: [5,8,6,9,4,7,5,10,6,7,8,5,9,6][index],
+  flags: [3,4,5,6,2,4,3,5,4,3,6,2,4,3][index]
+}));
+const MATRIX_WEIGHTS = [
   [12,30,18,10],[11,28,17,9],[10,32,20,9],[9,26,16,8],[10,29,18,9],[12,31,19,10],[10,27,16,8],
   [9,25,15,7],[11,30,18,9],[10,28,17,8],[9,26,16,7],[10,27,17,8],[8,24,15,7],[9,27,18,9]
 ];
-
 const PERIODS = {
-  today: { label: "Today", factor: 0.055 },
-  week: { label: "Last 7 days", factor: 0.235 },
-  month: { label: "Last 30 days", factor: 1 },
-  quarter: { label: "Last 90 days", factor: 2.72 }
+  today:{label:"Today",factor:.055,days:1},
+  week:{label:"Last 7 days",factor:.235,days:7},
+  month:{label:"Last 30 days",factor:1,days:30},
+  quarter:{label:"Last 90 days",factor:2.72,days:90}
 };
-
-const state = { view: "overview", period: "month", folder: "all", memberSearch: "" };
+const TICKETS = [
+  {ref:"DSP-10482",brand:"Audi",folder:"Detags",member:"Agent 02",subject:"Vehicle de-tag request — retail handover",age:"18m",status:"Assigned",received:"09:42",last:"Initial allocation"},
+  {ref:"DSP-10481",brand:"Škoda",folder:"Agency Detags",member:"Agent 05",subject:"Agency PCP approval follow-up",age:"42m",status:"In progress",received:"09:18",last:"First response"},
+  {ref:"DSP-10480",brand:"Volkswagen",folder:"Transfers",member:"Agent 08",subject:"Transfer request — vehicle record check",age:"1h 12m",status:"Waiting",received:"08:48",last:"Awaiting information"},
+  {ref:"DSP-10479",brand:"CUPRA",folder:"Detags",member:"Agent 04",subject:"Retailer tag and status clarification",age:"2h 06m",status:"Flagged",received:"07:54",last:"Flag raised"},
+  {ref:"DSP-10478",brand:"SEAT",folder:"Unadopts",member:"Agent 11",subject:"Unadopt request validation",age:"3h 14m",status:"In progress",received:"06:46",last:"Customer contacted"},
+  {ref:"DSP-10477",brand:"Volkswagen Commercial Vehicles",folder:"Transfers",member:"Agent 01",subject:"Commercial vehicle transfer query",age:"4h 32m",status:"Reassigned",received:"05:28",last:"Manual reassignment"},
+  {ref:"DSP-10476",brand:"Audi",folder:"Agency Detags",member:"Agent 07",subject:"Agency de-tag confirmation",age:"7h 08m",status:"Overdue",received:"02:52",last:"No recent activity"},
+  {ref:"DSP-10475",brand:"Other / unclassified",folder:"Detags",member:"Unassigned",subject:"Brand requires confirmation",age:"9h 21m",status:"Unassigned",received:"00:39",last:"Awaiting allocation"}
+];
+const AUDIT_EVENTS = [
+  ["10:42:18","Assignment restored","Agent 03","Detags","Recovery"],
+  ["10:36:04","Manual assignment","Agent 08","Transfers","Manual"],
+  ["10:21:55","Flag raised","Agent 04","Detags","Flag"],
+  ["10:12:31","Ticket assigned","Agent 02","Agency Detags","Automatic"],
+  ["09:58:07","Handover recorded","Agent 11 → Agent 06","Unadopts","Handover"],
+  ["09:41:22","Ticket received","System","Transfers","Received"],
+  ["09:22:10","Assignment exception","System","Detags","Exception"],
+  ["09:08:45","Ticket resolved","Agent 01","Agency Detags","Resolved"]
+];
+const state = {
+  view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
+  selectedAgent:null, paused:false, pausedFolders:{}, modal:null
+};
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
+const modalRoot = document.getElementById("modalRoot");
+const VIEW_TITLES = {
+  overview:"Overview",live:"Live operations",tickets:"Ticket analytics",brands:"Brand insights",
+  workflow:"Workflow analytics",folders:"Folder share",team:"Team performance",my:"My performance",
+  roster:"Roster & coverage",rules:"Dispatch configuration",reliability:"Reliability centre",
+  audit:"Audit history",reports:"Reports & exports",admin:"Administration"
+};
 
-function number(value) {
-  return Math.round(value).toLocaleString("en-GB");
-}
-function scaled(value) {
-  return Math.max(0, Math.round(value * PERIODS[state.period].factor));
-}
-function selectedFolderName() {
-  if (state.folder === "all") return "All inboxes";
-  const item = FOLDERS.find(folder => folder.id === state.folder);
-  return item ? item.name : "All inboxes";
-}
-function folderAssignedTotals() {
-  return FOLDERS.map((folder, index) => ({
-    ...folder,
-    assigned: scaled(ASSIGNMENT_MATRIX.reduce((sum, row) => sum + row[index], 0))
-  }));
-}
-function allocateByWeights(total, weights) {
-  const denominator = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-  const values = weights.map(weight => Math.floor(total * weight / denominator));
-  let remaining = total - values.reduce((sum, value) => sum + value, 0);
-  const order = weights.map((weight, index) => ({ index, remainder: total * weight / denominator - values[index] })).sort((a, b) => b.remainder - a.remainder);
-  for (let i = 0; i < remaining; i++) values[order[i % order.length].index] += 1;
+function fmt(value){return Math.round(value).toLocaleString("en-GB");}
+function scaled(value){return Math.max(0,Math.round(value*PERIODS[state.period].factor));}
+function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
+function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
+function scopeName(){const folder=FOLDERS.find(f=>f.id===state.folder);return folder?folder.name:"All inboxes";}
+function distribute(total,weights){
+  const sum=weights.reduce((a,b)=>a+b,0)||1;
+  const values=weights.map(w=>Math.floor(total*w/sum));
+  let remaining=total-values.reduce((a,b)=>a+b,0);
+  const fractions=weights.map((w,i)=>({i,frac:total*w/sum-values[i]})).sort((a,b)=>b.frac-a.frac);
+  for(let n=0;n<remaining;n++)values[fractions[n%fractions.length].i]++;
   return values;
 }
-function brandRows() {
-  const targetTotal = state.folder === "all" ? scaled(1194) : scaled(FOLDERS.find(folder => folder.id === state.folder).received);
-  const weights = state.folder === "all" ? BRANDS.map(brand => brand.count) : FOLDER_BRAND_MIX[state.folder];
-  const values = allocateByWeights(targetTotal, weights);
-  return BRANDS.map((brand, index) => ({ ...brand, value: values[index] }));
+function folderAssignedRows(){
+  return FOLDERS.map((folder,fi)=>({...folder,assigned:scaled(folder.assigned),received:scaled(folder.received),resolved:scaled(folder.resolved),open:scaled(folder.open)}));
 }
-function matrixRows() {
-  return AGENT_NAMES.map((name, index) => {
-    const cells = ASSIGNMENT_MATRIX[index].map(value => scaled(value));
-    const total = cells.reduce((sum, value) => sum + value, 0);
-    const selectedIndex = FOLDERS.findIndex(folder => folder.id === state.folder);
-    return { name, cells, total, visibleTotal: state.folder === "all" ? total : cells[selectedIndex] };
+function allocationMatrix(){
+  return AGENTS.map((agent,ai)=>{
+    const cells=FOLDERS.map((folder,fi)=>distribute(scaled(folder.assigned),MATRIX_WEIGHTS.map(row=>row[fi]))[ai]);
+    return {...agent,cells,total:cells.reduce((a,b)=>a+b,0)};
   });
 }
-function totals() {
-  const received = state.folder === "all" ? scaled(1194) : scaled(FOLDERS.find(folder => folder.id === state.folder).received);
-  const assigned = folderAssignedTotals().filter(folder => state.folder === "all" || folder.id === state.folder).reduce((sum, folder) => sum + folder.assigned, 0);
-  const resolved = state.folder === "all" ? scaled(812) : Math.round(received * 0.68);
-  const outstanding = state.folder === "all" ? scaled(382) : scaled(FOLDERS.find(folder => folder.id === state.folder).outstanding);
-  return { received, assigned, resolved, outstanding };
-}
-function pageHeading(eyebrow, title, copy) {
-  return '<div class="page-heading"><div><div class="eyebrow">' + eyebrow + '</div><h1>' + title + '</h1><p class="heading-copy">' + copy + '</p></div><div class="heading-meta"><span>Reporting period</span><span class="period-pill">' + PERIODS[state.period].label + '</span></div></div>';
-}
-function kpiCard(label, value, note, symbol, tone) {
-  return '<article class="kpi-card"><div class="kpi-top"><span>' + label + '</span><span class="kpi-icon">' + symbol + '</span></div><div class="kpi-value">' + value + '</div><div class="kpi-foot">' + note + '</div></article>';
-}
-function brandBars(rows, compact) {
-  const max = Math.max(...rows.map(row => row.value), 1);
-  return '<div class="brand-list">' + rows.map(row => {
-    const share = rows.reduce((sum, item) => sum + item.value, 0) ? row.value / rows.reduce((sum, item) => sum + item.value, 0) * 100 : 0;
-    return '<div class="brand-row"><div class="brand-name"><span class="legend-dot" style="background:' + row.color + '"></span>' + row.name + '</div><div class="bar-track"><div class="bar-fill" style="width:' + (row.value / max * 100) + '%;background:' + row.color + '"></div></div><div class="brand-count">' + number(row.value) + '<span class="brand-share">' + share.toFixed(1) + '%</span></div></div>';
-  }).join("") + '</div>';
-}
-function folderRows() {
-  const rows = folderAssignedTotals().filter(folder => state.folder === "all" || folder.id === state.folder);
-  const visibleAssigned = rows.reduce((sum, row) => sum + row.assigned, 0);
-  return '<div class="folder-list">' +
-    '<div class="folder-row"><div></div><div class="folder-metric">RECEIVED</div><div class="folder-metric">ASSIGNED</div><div class="folder-metric">OPEN</div></div>' +
-    rows.map(folder => '<div class="folder-row"><div class="folder-name">' + folder.name + '<span class="folder-sub">' + (folder.assigned ? (folder.assigned / Math.max(1, visibleAssigned) * 100).toFixed(1) : "0.0") + '% of visible allocations</span></div><div class="folder-metric">' + number(scaled(folder.received)) + '</div><div class="folder-metric">' + number(folder.assigned) + '</div><div class="folder-metric">' + number(scaled(folder.outstanding)) + '</div></div>').join("") +
-    '</div>';
-}
-function memberCell(name) {
-  const initials = name.replace("Agent ", "A");
-  return '<div class="member-cell"><span class="member-avatar">' + initials + '</span><span><span class="member-name">' + name + '</span><span class="member-role">Team member</span></span></div>';
-}
-function shareTable(rows, full) {
-  const selectedFolders = state.folder === "all" ? FOLDERS : FOLDERS.filter(folder => folder.id === state.folder);
-  const allRows = matrixRows();
-  const totalsByFolder = selectedFolders.map(folder => {
-    const index = FOLDERS.findIndex(item => item.id === folder.id);
-    return allRows.reduce((sum, row) => sum + row.cells[index], 0);
+function brandRows(){
+  const folders=scopeFolders();
+  const total=folders.reduce((sum,f)=>sum+scaled(f.received),0);
+  const weights=BRANDS.map((brand,bi)=>{
+    if(state.folder==="all")return brand.count;
+    return BRAND_MIX[state.folder][bi];
   });
-  const totalVisibleAssignments = allRows.reduce((sum, row) => sum + selectedFolders.reduce((part, folder) => part + row.cells[FOLDERS.findIndex(item => item.id === folder.id)], 0), 0);
-  const shown = rows.filter(row => row.name.toLowerCase().includes(state.memberSearch.toLowerCase()));
-  if (!shown.length) return '<div class="empty-state">No team members match your search.</div>';
-  const head = '<thead><tr><th>Team member</th>' + selectedFolders.map(folder => '<th>' + folder.short + ' · share</th>').join("") + (full ? '<th>Total allocated</th><th>Overall share</th>' : '<th>Total</th>') + '</tr></thead>';
-  const body = '<tbody>' + shown.map(row => {
-    const cells = selectedFolders.map((folder, folderPosition) => {
-      const index = FOLDERS.findIndex(item => item.id === folder.id);
-      const value = row.cells[index];
-      const share = totalsByFolder[folderPosition] ? value / totalsByFolder[folderPosition] * 100 : 0;
-      return '<td class="share-cell"><div class="share-line"><span>' + number(value) + '</span><span class="share-mini-track"><span class="share-mini-fill" style="display:block;width:' + share + '%"></span></span><span class="share-percent">' + share.toFixed(1) + '%</span></div></td>';
+  const values=distribute(total,weights);
+  return BRANDS.map((brand,i)=>({...brand,value:values[i]}));
+}
+function totals(){
+  const folders=folderAssignedRows().filter(f=>state.folder==="all"||f.id===state.folder);
+  const received=folders.reduce((a,f)=>a+f.received,0);
+  const assigned=folders.reduce((a,f)=>a+f.assigned,0);
+  const resolved=folders.reduce((a,f)=>a+f.resolved,0);
+  const open=folders.reduce((a,f)=>a+f.open,0);
+  return {received,assigned,resolved,open,unassigned:Math.max(0,received-assigned)};
+}
+function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
+function heading(eyebrow,title,copy,actions){
+  return '<div class="page-heading"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1><p class="heading-copy">'+copy+'</p></div><div class="heading-actions">'+(actions||'')+'<span class="period-pill">'+PERIODS[state.period].label+'</span></div></div>';
+}
+function panel(title,subtitle,body,action){
+  return '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">'+title+'</h2><p class="panel-subtitle">'+subtitle+'</p></div>'+(action||'')+'</div>'+body+'</section>';
+}
+function kpi(label,value,note,symbol,trend,tone){
+  return '<article class="kpi-card"><div class="kpi-top"><span>'+label+'</span><span class="kpi-icon">'+symbol+'</span></div><div class="kpi-value">'+value+'</div><div class="kpi-foot">'+(trend?'<strong class="'+(tone||"positive")+'">'+trend+'</strong> · ':'')+note+'</div></article>';
+}
+function kpiGrid(items){return '<div class="kpi-grid">'+items.join("")+'</div>';}
+function barRows(rows,options){
+  const max=Math.max(1,...rows.map(r=>r.value));
+  return '<div class="bar-list">'+rows.map(r=>'<div class="bar-row"><div class="bar-label">'+(r.color?'<span class="legend-dot" style="background:'+r.color+'"></span>':'')+esc(r.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.max(1,r.value/max*100)+'%;background:'+(r.color||"#4f83c5")+'"></div></div><div class="bar-value">'+fmt(r.value)+(options&&options.percent?'<small>'+r.share+'%</small>':'')+'</div></div>').join("")+'</div>';
+}
+function brandBarList(list){
+  const total=list.reduce((a,b)=>a+b.value,0);
+  return barRows(list.slice().sort((a,b)=>b.value-a.value).map(r=>({...r,label:r.name,share:total?((r.value/total)*100).toFixed(1):"0.0"})),{percent:true});
+}
+function folderCards(){
+  return '<div class="folder-card-grid">'+folderAssignedRows().filter(f=>state.folder==="all"||f.id===state.folder).map(f=>'<article class="folder-card"><div class="folder-card-top"><span class="folder-icon" style="--folder-color:'+f.color+'">▤</span><span class="status-pill '+(state.pausedFolders[f.id]?"warning":"good")+'">'+(state.pausedFolders[f.id]?"Paused":"Active")+'</span></div><h3>'+f.name+'</h3><div class="folder-card-value">'+fmt(f.open)+'</div><div class="folder-card-caption">Outstanding tickets</div><div class="folder-card-meta"><span>'+fmt(f.received)+' received</span><span>'+fmt(f.assigned)+' assigned</span></div></article>').join("")+'</div>';
+}
+function shareMatrix(rows,full){
+  const folders=scopeFolders();
+  const totalsByFolder=folders.map(f=>{
+    const fi=FOLDERS.findIndex(x=>x.id===f.id);
+    return rows.reduce((sum,r)=>sum+r.cells[fi],0);
+  });
+  const totalVisible=totalsByFolder.reduce((a,b)=>a+b,0);
+  const visibleRows=rows.filter(r=>activeSearch(r.name)&&(!state.memberSearch||r.name.toLowerCase().includes(state.memberSearch.toLowerCase())));
+  if(!visibleRows.length)return '<div class="empty-state">No members match this search.</div>';
+  const header='<thead><tr><th>Team member</th>'+folders.map(f=>'<th>'+f.short+' · count / share</th>').join("")+'<th>Total allocated</th>'+(full?'<th>Overall share</th><th>Open work</th>':'')+'</tr></thead>';
+  const body='<tbody>'+visibleRows.map(r=>{
+    const cells=folders.map((f,idx)=>{
+      const fi=FOLDERS.findIndex(x=>x.id===f.id),count=r.cells[fi],share=totalsByFolder[idx]?count/totalsByFolder[idx]*100:0;
+      return '<td class="matrix-cell"><span class="matrix-count">'+fmt(count)+'</span><span class="matrix-share"><span class="share-mini-track"><span class="share-mini-fill" style="width:'+share+'%"></span></span>'+share.toFixed(1)+'%</span></td>';
     }).join("");
-    const visibleTotal = selectedFolders.reduce((sum, folder) => sum + row.cells[FOLDERS.findIndex(item => item.id === folder.id)], 0);
-    const overallShare = visibleTotal / Math.max(1, totalVisibleAssignments) * 100;
-    return '<tr><td>' + memberCell(row.name) + '</td>' + cells + '<td class="total-cell">' + number(visibleTotal) + '</td>' + (full ? '<td class="total-cell">' + overallShare.toFixed(1) + '%</td>' : '') + '</tr>';
-  }).join("") + '</tbody>';
-  return '<div class="table-wrap"><table class="data-table">' + head + body + '</table></div>';
+    const visibleTotal=folders.reduce((sum,f)=>sum+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0);
+    const overall=totalVisible?visibleTotal/totalVisible*100:0;
+    return '<tr><td>'+memberCell(r.name,r.shift)+'</td>'+cells+'<td class="total-cell">'+fmt(visibleTotal)+'</td>'+(full?'<td class="total-cell">'+overall.toFixed(1)+'%</td><td>'+fmt(r.open)+'</td>':'')+'</tr>';
+  }).join("")+'</tbody>';
+  return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>';
 }
-function summaryTiles() {
-  const t = totals();
-  const assignedShare = t.received ? (t.assigned / t.received * 100) : 0;
-  return '<div class="share-summary">' +
-    '<div class="summary-tile"><span>Assigned tickets</span><strong>' + number(t.assigned) + '</strong></div>' +
-    '<div class="summary-tile"><span>Assignment coverage</span><strong>' + assignedShare.toFixed(1) + '%</strong></div>' +
-    '<div class="summary-tile"><span>Open workload</span><strong>' + number(t.outstanding) + '</strong></div>' +
-    '<div class="summary-tile"><span>Team members</span><strong>14</strong></div>' +
+function memberCell(name,shift){
+  return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
+}
+function dataTable(headers,rows,empty){
+  if(!rows.length)return '<div class="empty-state">'+(empty||"No records match the current filters.")+'</div>';
+  return '<div class="table-wrap"><table class="data-table"><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join("")+'</tr></thead><tbody>'+rows.join("")+'</tbody></table></div>';
+}
+function statusPill(status){
+  const key=String(status).toLowerCase();
+  let type="neutral";
+  if(["assigned","available","resolved","automatic","healthy","active","in progress"].includes(key))type="good";
+  if(["flagged","waiting","break","paused","pending","reassigned"].includes(key))type="warning";
+  if(["overdue","unassigned","exception","failed","critical"].includes(key))type="danger";
+  return '<span class="status-pill '+type+'">'+esc(status)+'</span>';
+}
+function smallChart(values,labels,color){
+  const w=640,h=190,pad=20,max=Math.max(...values)*1.18;
+  const points=values.map((v,i)=>{
+    const x=pad+i*(w-pad*2)/Math.max(1,values.length-1);
+    const y=h-pad-(v/max)*(h-pad*2);
+    return x.toFixed(1)+","+y.toFixed(1);
+  }).join(" ");
+  const area="M "+points.replaceAll(" ", " L ")+" L "+(w-pad)+","+(h-pad)+" L "+pad+","+(h-pad)+" Z";
+  return '<div class="chart-wrap"><svg viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Trend chart"><defs><linearGradient id="chartFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="'+color+'" stop-opacity=".22"/><stop offset="100%" stop-color="'+color+'" stop-opacity="0"/></linearGradient></defs><path d="'+area+'" fill="url(#chartFade)"></path><polyline points="'+points+'" fill="none" stroke="'+color+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>'+points.split(" ").map(point=>{const xy=point.split(",");return '<circle cx="'+xy[0]+'" cy="'+xy[1]+'" r="4" fill="#fff" stroke="'+color+'" stroke-width="2"></circle>';}).join("")+'</svg><div class="chart-labels">'+labels.map(l=>'<span>'+l+'</span>').join("")+'</div></div>';
+}
+function horizontalLegend(items){
+  return '<div class="horizontal-legend">'+items.map(i=>'<span><i style="background:'+i.color+'"></i>'+i.label+'</span>').join("")+'</div>';
+}
+function ticketRows(){
+  return TICKETS.filter(t=>(state.folder==="all"||FOLDERS.find(f=>f.id===state.folder)?.name===t.folder)&&activeSearch([t.ref,t.brand,t.folder,t.member,t.subject].join(" "))).map(t=>
+    '<tr><td><button class="link-button" type="button" data-ticket="'+t.ref+'">'+t.ref+'</button></td><td>'+esc(t.brand)+'</td><td>'+esc(t.folder)+'</td><td>'+esc(t.member)+'</td><td>'+t.received+'</td><td>'+t.age+'</td><td>'+statusPill(t.status)+'</td><td>'+esc(t.last)+'</td></tr>'
+  );
+}
+function insightCard(icon,title,copy,kind){
+  return '<article class="insight-card '+(kind||"")+'"><span class="insight-icon">'+icon+'</span><div><strong>'+title+'</strong><p>'+copy+'</p></div></article>';
+}
+function renderOverview(){
+  const t=totals(),brands=brandRows(),brandTotal=brands.reduce((a,b)=>a+b.value,0),rows=allocationMatrix();
+  pageContent.innerHTML=heading("MANAGEMENT OVERVIEW","Good morning. Here’s your operation.","A live-style snapshot of ticket flow, brand mix, team allocation and operational health — populated with demonstration data.",'<button class="btn btn-secondary" data-action="refresh">↻ Refresh preview</button>')+
+    kpiGrid([
+      kpi("Tickets received",fmt(t.received),"Distinct tickets in selected scope","▤","+8.4%","positive"),
+      kpi("Initially assigned",fmt(t.assigned),t.received?((t.assigned/t.received)*100).toFixed(1)+"% of received volume":"—","↗","+5.2%","positive"),
+      kpi("Tickets resolved",fmt(t.resolved),"Recorded completed tickets","✓","+11.6%","positive"),
+      kpi("Outstanding workload",fmt(t.open),"Open at reporting snapshot","◷","42 aged over 24h","warning")
+    ])+
+    '<div class="grid-two">'+
+      panel("Ticket activity","Received and resolved · daily trend",smallChart([64,82,76,94,88,108,96,115,102,120,111,129],["1","3","5","7","9","11","13","15","17","19","21","23"],"#4788d2"),'<span class="subtle-tag">LAST 30 DAYS</span>')+
+      panel("Brand mix","Unique tickets by identified brand",brandBarList(brands.slice(0,6)),'<button class="panel-action" data-go="brands">Explore brands ↗</button>')+
+    '</div>'+
+    '<div class="grid-two">'+
+      panel("Inbox distribution","Volume and open workload by folder",folderCards(),'<button class="panel-action" data-go="live">Open live operations ↗</button>')+
+      panel("Operational health","Illustrative system status",'<div class="health-list">'+
+        healthRow("Dispatcher engine","Running","good","Last heartbeat 10:42:18")+
+        healthRow("Assignment tracker","Connected","good","Sample status only")+
+        healthRow("Recovery queue","2 pending","warning","Awaiting review")+
+        healthRow("Failed assignment writes","0 today","good","No simulated failures")+
+      '</div>','<button class="panel-action" data-go="reliability">Reliability centre ↗</button>')+
+    '</div>'+
+    panel("Member share by folder","Initial allocation count and share within each folder",shareMatrix(rows.slice().sort((a,b)=>b.total-a.total).slice(0,7),false),'<button class="panel-action" data-go="folders">Open full matrix ↗</button>')+
+    '<div class="insight-grid">'+
+      insightCard("↗","Brand demand insight","Audi and Volkswagen account for the largest share of the sample ticket volume.","blue")+
+      insightCard("◷","Ageing work","42 sample tickets are in the over-24-hour ageing band.","amber")+
+      insightCard("♧","Allocation coverage","All four inboxes have an initial-allocation share recorded in the sample matrix.","")+
     '</div>';
 }
-
-function renderOverview() {
-  const t = totals();
-  const brands = brandRows();
-  const totalBrands = brands.reduce((sum, row) => sum + row.value, 0);
-  const unclassified = brands.find(row => row.id === "other").value;
-  const assignedRate = t.received ? (t.assigned / t.received * 100) : 0;
-  pageContent.innerHTML = pageHeading("MANAGEMENT OVERVIEW", "Good morning. Here’s your operation.", "A consolidated view of ticket volume, brand mix and how work is distributed across the four inboxes.") +
-    '<div class="kpi-grid">' +
-      kpiCard("Tickets received", number(t.received), "Across the selected scope", "↓") +
-      kpiCard("Tickets assigned", number(t.assigned), assignedRate.toFixed(1) + "% of received volume", "↗") +
-      kpiCard("Tickets resolved", number(t.resolved), "Recorded completions in sample data", "✓") +
-      kpiCard("Outstanding workload", number(t.outstanding), "Open tickets at the reporting snapshot", "◷") +
-    '</div>' +
-    '<div class="grid-two">' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Tickets by brand</h2><p class="panel-subtitle">Volume and share of received tickets</p></div><button class="panel-action" type="button" data-go="brands">View details ↗</button></div>' +
-        brandBars(brands.slice().sort((a,b) => b.value-a.value), true) +
-        '<div class="unclassified-note"><strong>' + number(unclassified) + ' tickets</strong> (' + (totalBrands ? (unclassified/totalBrands*100).toFixed(1) : "0.0") + '%) are currently grouped as Other / unclassified in this sample. In the live system, uncertain brand matches should be reviewed rather than guessed.</div>' +
-      '</section>' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Inbox distribution</h2><p class="panel-subtitle">Received, allocated and currently open</p></div><button class="panel-action" type="button" data-go="folders">View folder share ↗</button></div>' +
-        folderRows() +
-      '</section>' +
-    '</div>' +
-    '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Member share by folder</h2><p class="panel-subtitle">Each member’s share of assigned tickets within the selected inbox</p></div><button class="panel-action" type="button" data-go="folders">Open full matrix ↗</button></div>' +
-      shareTable(matrixRows().sort((a,b) => b.visibleTotal-a.visibleTotal).slice(0,6), false) +
-    '</section>';
+function healthRow(label,value,type,note){
+  return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
 }
-function renderBrands() {
-  const rows = brandRows();
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
-  const known = total - (rows.find(row => row.id === "other")?.value || 0);
-  const unclassified = rows.find(row => row.id === "other")?.value || 0;
-  pageContent.innerHTML = pageHeading("BRAND INTELLIGENCE", "Which brands are driving the workload?", "Understand how many tickets relate to each brand, and how the mix changes by inbox and reporting period.") +
-    '<div class="kpi-grid">' +
-      kpiCard("Total tickets in scope", number(total), selectedFolderName(), "▤") +
-      kpiCard("Identified brands", number(known), total ? (known/total*100).toFixed(1) + "% of volume" : "0% of volume", "◉") +
-      kpiCard("Audi tickets", number(rows.find(row => row.id === "audi").value), "Audi share " + (total ? (rows.find(row => row.id === "audi").value/total*100).toFixed(1) : "0") + "%", "A") +
-      kpiCard("Škoda tickets", number(rows.find(row => row.id === "skoda").value), "Škoda share " + (total ? (rows.find(row => row.id === "skoda").value/total*100).toFixed(1) : "0") + "%", "Š") +
-    '</div>' +
-    '<div class="grid-two">' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Brand volume</h2><p class="panel-subtitle">Sorted by ticket count · descending</p></div></div>' +
-        brandBars(rows.slice().sort((a,b) => b.value-a.value), false) +
-      '</section>' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Brand mix at a glance</h2><p class="panel-subtitle">Share of tickets within the current scope</p></div></div>' +
-        '<div class="brand-detail-grid">' + rows.map(row => '<article class="brand-detail-card"><div class="brand-detail-top"><span class="legend-dot" style="background:' + row.color + '"></span><span class="brand-detail-name">' + row.name + '</span></div><div class="brand-detail-count">' + number(row.value) + '</div><div class="brand-detail-note">' + (total ? (row.value/total*100).toFixed(1) : "0.0") + '% of ticket volume</div></article>').join("") + '</div>' +
-        '<div class="unclassified-note"><strong>Brand identification rule:</strong> the live dashboard should prefer an explicit brand field or a validated ticket reference. Ambiguous subjects should remain unclassified until confirmed.</div>' +
-      '</section>' +
-    '</div>' +
-    '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Brand coverage</h2><p class="panel-subtitle">All supported brand categories are retained, including Other / unclassified</p></div></div>' +
-      '<div class="info-strip"><span>ⓘ</span><span>This preview uses illustrative brand totals. Once connected, this view will count unique tickets by brand and allow drill-down by inbox, period and ticket reference.</span></div>' +
-      brandBars(rows, false) +
-    '</section>';
+function renderLive(){
+  const t=totals();
+  const actionLabel=state.paused?"Resume dispatch (simulated)":"Pause dispatch (simulated)";
+  pageContent.innerHTML=heading("LIVE OPERATIONS","Operations control room","Monitor ticket queues, inbox health, available coverage and events that need management attention.",'<button class="btn '+(state.paused?"btn-primary":"btn-danger")+'" data-action="toggle-dispatch">'+(state.paused?"▶":"Ⅱ")+' '+actionLabel+'</button>')+
+    '<div class="prototype-warning"><strong>Simulation only.</strong> This control room is not connected to Outlook or the dispatch engine. Buttons below only change local prototype state.</div>'+
+    kpiGrid([
+      kpi("Open tickets",fmt(t.open),"Current sample backlog","◷"),
+      kpi("Unassigned",fmt(t.unassigned),"Received less initial allocations","＋"),
+      kpi("Inbox exceptions","3","Require sample review","!","2 new","warning"),
+      kpi("Scheduled agents","14","Sample roster coverage","♧")
+    ])+
+    '<div class="section-heading"><div><h2>Inbox status</h2><p>Open queue, ticket arrivals and local dispatch status by inbox.</p></div></div>'+
+    folderCards()+
+    '<div class="grid-two">'+
+      panel("Queue requiring attention","Sample tickets ordered by ageing",dataTable(["Ticket","Brand","Inbox","Owner","Age","Status"],ticketRows().slice(0,6).map(row=>row.replace(/<td>[^<]*<\/td><td>[^<]*<\/td><td>[^<]*<\/td><td>[^<]*<\/td>/,""))),'')+
+      panel("Agent availability","Illustrative shift and availability snapshot",'<div class="availability-list">'+AGENTS.map(a=>'<div class="availability-row">'+memberCell(a.name,a.shift)+'<span>'+a.start+'–'+a.end+'</span>'+statusPill(a.availability)+'</div>').join("")+'</div>','<button class="panel-action" data-go="roster">Manage coverage ↗</button>')+
+    '</div>'+
+    panel("Recent operational events","Latest sample events from the assignment timeline",auditTable(AUDIT_EVENTS.slice(0,6)),'<button class="panel-action" data-go="audit">View audit history ↗</button>');
 }
-function renderFolders() {
-  const rows = matrixRows();
-  const folderTotals = folderAssignedTotals();
-  const totalAssigned = rows.reduce((sum, row) => sum + row.total, 0);
-  pageContent.innerHTML = pageHeading("WORKLOAD DISTRIBUTION", "Every member. Every folder.", "See each member’s allocation volume and percentage share within each inbox. Open workload is shown separately from historical assignments.") +
-    summaryTiles() +
-    '<div class="info-strip"><span>ⓘ</span><span><strong>How to read this:</strong> each folder cell shows the member’s assigned-ticket count and their percentage of all assignments in that folder. The Total column is their combined allocation volume across the visible folders. These are sample figures, not actual team performance.</span></div>' +
-    '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Member allocation matrix</h2><p class="panel-subtitle">' + number(totalAssigned) + ' sample assignment records · ' + selectedFolderName() + '</p></div><div class="section-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search team members…" aria-label="Search team members" value="' + state.memberSearch.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + '"></div></div>' +
-      shareTable(rows, true) +
-    '</section>' +
-    '<div class="grid-equal" style="margin-top:15px">' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Folder allocation totals</h2><p class="panel-subtitle">How assignment volume is split between inboxes</p></div></div>' +
-        folderTotals.map(folder => '<div class="brand-row" style="grid-template-columns:116px minmax(80px,1fr) 48px;margin:13px 0"><div class="brand-name">' + folder.name + '</div><div class="bar-track"><div class="bar-fill" style="width:' + (folder.assigned/Math.max(1,totalAssigned)*100) + '%;background:#4d86c8"></div></div><div class="brand-count">' + number(folder.assigned) + '</div></div>').join("") +
-      '</section>' +
-      '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Outstanding work by folder</h2><p class="panel-subtitle">Current open tickets are a separate measure from allocated volume</p></div></div>' +
-        FOLDERS.filter(folder => state.folder === "all" || folder.id === state.folder).map(folder => '<div class="folder-row" style="grid-template-columns:1fr 72px"><div class="folder-name">' + folder.name + '<span class="folder-sub">Open tickets in sample data</span></div><div class="folder-metric">' + number(scaled(folder.outstanding)) + '</div></div>').join("") +
-      '</section>' +
+function renderTickets(){
+  const t=totals();
+  const rows=ticketRows();
+  pageContent.innerHTML=heading("TICKET ANALYTICS","Ticket flow, end to end","Understand what arrived, what was allocated, what was resolved and where work is accumulating.",'<button class="btn btn-secondary" data-action="export-tickets">↓ Export tickets</button>')+
+    kpiGrid([
+      kpi("Received",fmt(t.received),"Unique tickets in period","▤"),
+      kpi("Initially assigned",fmt(t.assigned),"First allocation events","↗"),
+      kpi("Resolved",fmt(t.resolved),"Unique resolved tickets","✓"),
+      kpi("Still outstanding",fmt(t.open),"Open at snapshot time","◷")
+    ])+
+    '<div class="grid-two">'+
+      panel("Ticket volume trend","Received vs resolved · sample daily series",'<div class="dual-bars">'+chartPair([76,88,94,83,108,102,121,115,96,130,118,125],[61,78,82,91,94,99,106,110,94,116,120,127],["Mon","Tue","Wed","Thu","Fri","Sat","Sun","Mon","Tue","Wed","Thu","Fri"])+'</div>',horizontalLegend([{label:"Received",color:"#4c84c5"},{label:"Resolved",color:"#1a9b82"}]))+
+      panel("Resolution time distribution","Elapsed time from receipt to resolution",barRows([{label:"Under 1 hour",value:18,color:"#2d9f89"},{label:"1–4 hours",value:42,color:"#4a87c8"},{label:"4–8 hours",value:22,color:"#d6a04f"},{label:"8–24 hours",value:13,color:"#c78359"},{label:"Over 24 hours",value:5,color:"#ca6871"}],{percent:true}),'<span class="subtle-tag">SAMPLE PROFILE</span>')+
+    '</div>'+
+    '<div class="grid-equal">'+
+      metricPanel("Assignment delay","12m","Average receipt-to-first-assignment","Median 7m")+
+      metricPanel("First response","28m","Average receipt-to-first-response","Median 19m")+
+      metricPanel("Elapsed resolution","3h 42m","Average total elapsed time","Median 2h 18m")+
+      metricPanel("Active handling","46m","Illustrative recorded active time","Requires activity events")+
+    '</div>'+
+    panel("Ticket explorer","Search across reference, brand, folder, owner and subject",dataTable(["Reference","Brand","Inbox","Assigned to","Received","Age","Status","Last event"],rows),'<span class="subtle-tag">'+rows.length+' SAMPLE RECORDS</span>');
+}
+function chartPair(a,b,labels){
+  const max=Math.max(...a,...b),h=115;
+  return '<div class="paired-chart">'+a.map((v,i)=>'<div class="paired-col"><div class="paired-bars"><span class="paired-bar received" style="height:'+v/max*100+'%"></span><span class="paired-bar resolved" style="height:'+b[i]/max*100+'%"></span></div><small>'+labels[i]+'</small></div>').join("")+'</div>';
+}
+function metricPanel(title,value,copy,note){
+  return '<article class="metric-panel"><span>'+title+'</span><strong>'+value+'</strong><p>'+copy+'</p><small>'+note+'</small></article>';
+}
+function renderBrands(){
+  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),known=total-rows.find(b=>b.id==="other").value;
+  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload","See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+    kpiGrid([
+      kpi("Total tickets",fmt(total),"Distinct received tickets","▤"),
+      kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
+      kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value"),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
+      kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value"),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
+    ])+
+    '<div class="grid-two">'+
+      panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
+      panel("Brand mix by inbox","The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">SAMPLE COMPARISON</span>')+
+    '</div>'+
+    panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],rows.map(b=>{
+      const share=total?b.value/total*100:0;
+      return '<tr><td><span class="brand-register-name"><i style="background:'+b.color+'"></i>'+b.name+'</span></td><td class="total-cell">'+fmt(b.value)+'</td><td>'+share.toFixed(1)+'%</td><td>'+statusPill(b.id==="other"?"Review required":"Identified")+'</td><td>'+(b.id==="other"?"Retain until confirmed":"Explicit / validated mapping")+'</td></tr>';
+    })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
+    '<div class="prototype-warning"><strong>Classification safeguard.</strong> In the live system, brand identity must come from an explicit field or validated reference mapping. Ambiguous records stay in Other / unclassified rather than being guessed from a subject line.</div>';
+}
+function brandFolderTable(){
+  const rows=FOLDERS.filter(f=>state.folder==="all"||f.id===state.folder);
+  return dataTable(["Inbox","VW","Audi","Škoda","Other"],rows.map(f=>{
+    const total=scaled(f.received),mix=BRAND_MIX[f.id],v=distribute(total,mix);
+    return '<tr><td>'+f.name+'</td><td>'+fmt(v[0])+'</td><td>'+fmt(v[1])+'</td><td>'+fmt(v[2])+'</td><td>'+fmt(v[6])+'</td></tr>';
+  }));
+}
+function renderWorkflow(){
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves","Separate ticket-level ratios from event counts so handovers, flags, manual interventions and recoveries are not double-counted.")+
+    kpiGrid([
+      kpi("Automatic allocation","1,064","89.5% of assigned tickets","↗"),
+      kpi("Manual allocation","55","4.6% of assigned tickets","✎"),
+      kpi("Handover events","128","96 unique tickets affected","⇄"),
+      kpi("Recovery events","27","25 unique tickets affected","↺")
+    ])+
+    '<div class="grid-two">'+
+      panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#3d83c8"},{label:"Manual",value:4.6,color:"#d7a04e"},{label:"Other / pending",value:5.9,color:"#c6ced9"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>')+
+      panel("Workflow events","Recorded event volume in the sample",barRows([{label:"Handover",value:128,color:"#568bd0"},{label:"Flag",value:88,color:"#d39a43"},{label:"Manual assignment",value:55,color:"#8b6bb3"},{label:"Recovery",value:27,color:"#229a82"},{label:"Reassignment",value:42,color:"#ca737b"}]),'')+
+    '</div>'+
+    panel("Metric definitions","What each ratio means",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],[
+      '<tr><td>Handover</td><td>96</td><td>128</td><td>8.6% of assigned tickets</td></tr>',
+      '<tr><td>Flagged</td><td>72</td><td>88</td><td>6.4% of handled tickets</td></tr>',
+      '<tr><td>Manual assignment</td><td>49</td><td>55</td><td>4.6% of assigned tickets</td></tr>',
+      '<tr><td>Recovery</td><td>25</td><td>27</td><td>2.2% of assigned tickets</td></tr>',
+      '<tr><td>Reassignment</td><td>34</td><td>42</td><td>3.0% of assigned tickets</td></tr>'
+    ]))+
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket rate and three times in the event count. These measures must stay separate.</div>';
+}
+function donutChart(items){
+  let offset=0;
+  const circles=items.map(item=>{
+    const length=item.value*2.45;
+    const circle='<circle cx="64" cy="64" r="39" fill="none" stroke="'+item.color+'" stroke-width="16" stroke-dasharray="'+length+' '+(245-length)+'" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 64 64)"></circle>';
+    offset+=length;return circle;
+  }).join("");
+  return '<div class="donut-layout"><svg viewBox="0 0 128 128" role="img" aria-label="Allocation method distribution">'+circles+'<text x="64" y="61" text-anchor="middle" class="donut-center">1,119</text><text x="64" y="76" text-anchor="middle" class="donut-sub">ASSIGNED</text></svg><div class="donut-legend">'+items.map(i=>'<div><span><i style="background:'+i.color+'"></i>'+i.label+'</span><strong>'+i.value+'%</strong></div>').join("")+'</div></div>';
+}
+function renderFolders(){
+  const rows=allocationMatrix(),scope=scopeFolders(),assigned=scope.reduce((sum,f)=>sum+scaled(f.assigned),0);
+  const folderCount=scope.length;
+  pageContent.innerHTML=heading("WORKLOAD DISTRIBUTION","Every member. Every folder.","See each member’s share of initial ticket allocations in each inbox. Current open workload is measured separately.",'<button class="btn btn-secondary" data-action="export-folders">↓ Export matrix</button>')+
+    kpiGrid([
+      kpi("Team members",String(AGENTS.length),"Illustrative team roster","♧"),
+      kpi("Initial allocations",fmt(assigned),"Distinct tickets first assigned","↗"),
+      kpi("Folders in scope",String(folderCount),"Four monitored workstreams","▤"),
+      kpi("Open workload",fmt(scope.reduce((a,f)=>a+scaled(f.open),0)),"Current-state sample snapshot","◷")
+    ])+
+    '<div class="prototype-warning"><strong>Share definition.</strong> Each percentage is the member’s distinct tickets first assigned in that folder divided by all first-assigned tickets in that folder. Handovers, recoveries and reassignments do not inflate original allocation share.</div>'+
+    panel("Member allocation matrix","Counts and percentage share are shown for every visible folder",'<div class="table-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search members…" value="'+esc(state.memberSearch)+'"></div>'+shareMatrix(rows,true),'<span class="subtle-tag">14 SAMPLE MEMBERS</span>')+
+    '<div class="grid-two">'+
+      panel("Folder allocation share","How the selected team shares initial allocations",barRows(scope.map(f=>({label:f.name,value:scaled(f.assigned),color:f.color}))),"")+
+      panel("Current open workload","Snapshot of open tickets by folder",barRows(scope.map(f=>({label:f.name,value:scaled(f.open),color:f.color}))),"")+
     '</div>';
-  const search = document.getElementById("memberSearch");
-  if (search) search.addEventListener("input", event => {
-    state.memberSearch = event.target.value;
-    const caret = event.target.selectionStart;
-    renderFolders();
-    const next = document.getElementById("memberSearch");
-    next.focus();
-    next.setSelectionRange(caret, caret);
-  });
+  const search=document.getElementById("memberSearch");
+  if(search)search.addEventListener("input",e=>{state.memberSearch=e.target.value;const pos=e.target.selectionStart;renderFolders();const el=document.getElementById("memberSearch");el.focus();el.setSelectionRange(pos,pos);});
 }
-function renderTeam() {
-  const rows = matrixRows();
-  const scopedTotal = rows.reduce((sum, row) => sum + row.visibleTotal, 0);
-  const filtered = rows.filter(row => state.folder === "all" || FOLDERS.some((folder, index) => folder.id === state.folder && row.cells[index] > 0));
-  pageContent.innerHTML = pageHeading("TEAM PERFORMANCE", "Understand the workload behind the numbers.", "This preview focuses on allocation distribution. Response and resolution performance will be added when the event history can measure them reliably.") +
-    '<div class="kpi-grid">' +
-      kpiCard("Team members", String(filtered.length), "Illustrative roster size", "♧") +
-      kpiCard("Allocated tickets", number(scopedTotal), selectedFolderName(), "↗") +
-      kpiCard("Average per member", number(scopedTotal/Math.max(1,filtered.length)), "Within the current filter", "◷") +
-      kpiCard("Folders in scope", state.folder === "all" ? "4" : "1", selectedFolderName(), "▤") +
-    '</div>' +
-    '<section class="panel"><div class="panel-heading"><div><h2 class="panel-title">Member allocation profiles</h2><p class="panel-subtitle">Sample allocation totals and folder mix</p></div></div>' +
-      '<div class="agent-grid">' + filtered.map(row => '<article class="agent-card"><div class="agent-card-head"><span class="member-avatar">' + row.name.replace("Agent ","A") + '</span><span class="member-name">' + row.name + '</span></div><div class="agent-card-total">' + number(row.visibleTotal) + '</div><div class="agent-card-caption">Assigned tickets · current filter</div><div class="agent-folder-tags">' + FOLDERS.filter(folder => state.folder === "all" || folder.id === state.folder).map(folder => '<span>' + folder.short + ': ' + number(row.cells[FOLDERS.findIndex(item => item.id === folder.id)]) + '</span>').join("") + '</div></article>').join("") + '</div>' +
-    '</section>' +
-    '<div class="info-strip" style="margin-top:15px"><span>ⓘ</span><span>Once the live event history is available, each profile can include resolution time, active handling time, first response, handovers, flags, reopened tickets and workload adjusted by scheduled working hours. Member visibility will be enforced by account permissions, not by hiding elements in the browser.</span></div>';
+function renderTeam(){
+  const rows=allocationMatrix().filter(r=>!state.search||activeSearch(r.name));
+  const totalsByMember=rows.map(r=>({...r,scopeTotal:scopeFolders().reduce((s,f)=>s+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0)}));
+  const total=totalsByMember.reduce((s,r)=>s+r.scopeTotal,0);
+  const average=total/Math.max(1,totalsByMember.length);
+  pageContent.innerHTML=heading("TEAM PERFORMANCE","Performance with the right context","Review allocation, workload, responsiveness, resolution and workflow activity without reducing performance to ticket volume alone.")+
+    kpiGrid([
+      kpi("Team members",String(totalsByMember.length),"Sample roster","♧"),
+      kpi("Allocated tickets",fmt(total),"Current reporting scope","↗"),
+      kpi("Average per member",fmt(average),"Allocation volume only","◷"),
+      kpi("Current open work",fmt(totalsByMember.reduce((s,r)=>s+r.open,0)),"Live-work sample snapshot","▤")
+    ])+
+    '<div class="agent-grid">'+totalsByMember.map(a=>'<button class="agent-card agent-card-button" data-agent="'+a.id+'" type="button"><div class="agent-card-head">'+memberCell(a.name,a.shift)+'</div><div class="agent-card-total">'+fmt(a.scopeTotal)+'</div><div class="agent-card-caption">Initial allocations · selected scope</div><div class="agent-progress"><span style="width:'+Math.min(100,a.scopeTotal/Math.max(1,average*1.7)*100)+'%"></span></div><div class="agent-card-foot"><span>'+fmt(a.open)+' open</span><span>'+a.handovers+' handovers</span></div></button>').join("")+'</div>'+
+    (state.selectedAgent?agentDetail(state.selectedAgent):'<div class="empty-state">Select a team member to open their sample performance profile.</div>');
 }
-function renderOperations() {
-  pageContent.innerHTML = pageHeading("OPERATIONS MANAGEMENT", "The control centre is being prepared.", "The interface will eventually manage dispatching, rosters, eligibility, inbox rules and system health.") +
-    '<div class="info-strip"><span>ⓘ</span><span><strong>Prototype safety:</strong> none of the controls below are connected to Outlook, the tracker or the dispatch engine. No operational action can be executed from this preview.</span></div>' +
-    '<div class="control-grid">' +
-      '<article class="control-card"><h3>Global dispatch control</h3><p>Pause, resume and emergency-stop dispatching with verification and audit history.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
-      '<article class="control-card"><h3>Roster and shift management</h3><p>Manage early and late schedules, special coverage windows and roster versions.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
-      '<article class="control-card"><h3>Agent eligibility</h3><p>Control which agents can receive tickets in each inbox, with a before-and-after preview.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
-      '<article class="control-card"><h3>Dispatch rules</h3><p>Configure global fairness, workload weighting, assignment priorities and recovery logic.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
-      '<article class="control-card"><h3>Inbox management</h3><p>Monitor the four inboxes, change permitted settings and review routing exceptions.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
-      '<article class="control-card"><h3>Reliability centre</h3><p>Review tracker writes, assignment failures, duplicate events, recoveries and sync health.</p><span class="control-tag">PLANNED · NOT CONNECTED</span></article>' +
+function agentDetail(id){
+  const a=AGENTS.find(x=>x.id===id);if(!a)return "";
+  const row=allocationMatrix().find(x=>x.id===id);
+  return '<section class="panel agent-detail"><div class="panel-heading"><div><div class="eyebrow">MEMBER PROFILE</div><h2 class="panel-title">'+a.name+' · '+a.shift+' shift</h2><p class="panel-subtitle">Illustrative metrics only — not an assessment of a real colleague.</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
+    '<div class="metric-row">'+metricPanel("Initial allocations",fmt(row.total),"First-assignment volume","Current filter")+metricPanel("Open tickets",fmt(a.open),"Current outstanding sample","Snapshot")+metricPanel("First response","'+a.response+'m","Average sample response","Illustrative")+metricPanel("Elapsed resolution",duration(a.resolution),"Average sample elapsed","Illustrative")+'</div>'+
+    '<div class="grid-two"><div><h3 class="mini-heading">Allocation by folder</h3>'+barRows(FOLDERS.map((f,i)=>({label:f.name,value:row.cells[i],color:f.color})))+'</div><div><h3 class="mini-heading">Workflow activity</h3>'+barRows([{label:"Handovers",value:a.handovers,color:"#568bd0"},{label:"Flags",value:a.flags,color:"#d39a43"}])+'</div></div></section>';
+}
+function duration(minutes){return Math.floor(minutes/60)+"h "+String(minutes%60).padStart(2,"0")+"m";}
+function renderMy(){
+  const a=AGENTS[3],r=allocationMatrix().find(x=>x.id===a.id),sum=scopeFolders().reduce((s,f)=>s+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0);
+  pageContent.innerHTML=heading("PERSONAL WORKSPACE","Your performance overview","A private agent experience. This prototype uses a placeholder identity; personal access will be enforced by server-side permissions.")+
+    '<div class="personal-banner"><div class="personal-avatar">A04</div><div><span class="eyebrow">SAMPLE PROFILE</span><h2>Agent 04</h2><p>Late shift · 10:00–20:00 · Demonstration identity</p></div><span class="status-pill good">Sample profile</span></div>'+
+    kpiGrid([
+      kpi("Tickets initially assigned",fmt(sum),"Selected reporting scope","↗"),
+      kpi("Open tickets",fmt(a.open),"Current workload snapshot","◷"),
+      kpi("First response","'+a.response+'m","Average sample time","⌁"),
+      kpi("Elapsed resolution",duration(a.resolution),"Average sample time","✓")
+    ])+
+    '<div class="grid-two">'+
+      panel("Your allocation mix","Initial allocation count by folder",barRows(FOLDERS.map((f,i)=>({label:f.name,value:r.cells[i],color:f.color}))),"")+
+      panel("Your workflow activity","Events recorded in the sample period",barRows([{label:"Handovers",value:a.handovers,color:"#568bd0"},{label:"Flags",value:a.flags,color:"#d39a43"}]),"")+
+    '</div>'+
+    panel("Personal performance guidance","What a future personal profile will show",'<div class="feature-list"><div><strong>Resolution quality</strong><span>Elapsed time, active handling time and reopen rates.</span></div><div><strong>Workload context</strong><span>Open tickets, folder mix, scheduled hours and shift comparisons.</span></div><div><strong>Workflow history</strong><span>Your handovers, flags, manual allocations and completed work.</span></div><div><strong>Targets</strong><span>Clear progress against agreed team service targets.</span></div></div>');
+}
+function renderRoster(){
+  pageContent.innerHTML=heading("WORKFORCE MANAGEMENT","Roster & coverage","Review shift coverage, scheduled hours, availability and the agent eligibility structure.",'<button class="btn btn-secondary" data-action="roster-preview">＋ Preview roster change</button>')+
+    kpiGrid([
+      kpi("Rostered agents","14","Illustrative team","♧"),
+      kpi("Early shift","7","Sample coverage group","☼"),
+      kpi("Late shift","7","Sample coverage group","☾"),
+      kpi("Coverage windows","4","Inbox workstreams","▤")
+    ])+
+    '<div class="prototype-warning"><strong>Illustrative roster.</strong> The shift times below are placeholders and must be confirmed against the approved fortnightly roster before live integration.</div>'+
+    panel("Team roster","Shift group, indicative coverage and availability",dataTable(["Member","Shift","Start (Egypt)","End (Egypt)","Availability","Agency","Detags","Transfers","Unadopts"],AGENTS.map((a,i)=>'<tr><td>'+memberCell(a.name)+'</td><td>'+statusPill(a.shift)+'</td><td>'+a.start+'</td><td>'+a.end+'</td><td>'+statusPill(a.availability)+'</td>'+[0,1,2,3].map(()=>'<td>'+statusPill("Eligible")+'</td>').join("")+'</tr>')),'<span class="subtle-tag">SAMPLE ROSTER</span>')+
+    '<div class="grid-two">'+
+      panel("Coverage by shift","Illustrative team distribution",'<div class="shift-card-grid"><div class="shift-card"><span>EARLY SHIFT</span><strong>7 agents</strong><small>08:00–18:00 sample window</small></div><div class="shift-card"><span>LATE SHIFT</span><strong>7 agents</strong><small>10:00–20:00 sample window</small></div></div>',"")+
+      panel("Eligibility policy","How future assignment eligibility will be managed",'<div class="feature-list"><div><strong>Inbox-specific access</strong><span>Agents can be eligible for any combination of folders.</span></div><div><strong>Temporary exclusion</strong><span>Availability changes must preserve roster and assignment history.</span></div><div><strong>Fortnightly schedule</strong><span>Preview coverage before applying an updated rotation.</span></div></div>',"")+
     '</div>';
 }
-function render() {
-  document.getElementById("topbarPage").textContent = ({
-    overview: "Overview", brands: "Brand insights", folders: "Folder share",
-    team: "Team performance", operations: "Operations control"
-  })[state.view];
-  document.querySelectorAll(".nav-item").forEach(button => {
-    button.classList.toggle("active", button.dataset.view === state.view);
-  });
-  if (state.view === "overview") renderOverview();
-  if (state.view === "brands") renderBrands();
-  if (state.view === "folders") renderFolders();
-  if (state.view === "team") renderTeam();
-  if (state.view === "operations") renderOperations();
+function renderRules(){
+  pageContent.innerHTML=heading("DISPATCH CONFIGURATION","Configure how work is allocated","Review fairness, eligibility and routing rules. Changes are preview-only in this prototype.",'<button class="btn btn-secondary" data-action="rules-preview">Review configuration</button>')+
+    '<div class="prototype-warning"><strong>No live controls.</strong> These settings are visual examples only. They do not change the current Outlook dispatcher or Excel tracker.</div>'+
+    '<div class="control-grid">'+
+      configCard("Global allocation","Balance work across all eligible agents and all four inboxes.","Fairness model","Global workload weighting","Enabled")+
+      configCard("Workload weighting","Use current open workload to avoid repeatedly assigning to a heavily loaded agent.","Weighting","Current open tickets","Enabled")+
+      configCard("Shift eligibility","Only allocate to agents in the active scheduled window.","Eligibility","Roster and local shift time","Required")+
+      configCard("Inbox routing","Respect folder-specific eligibility and monitored inbox boundaries.","Routing","Four configured inboxes","Enabled")+
+      configCard("Recovery behaviour","Restore a valid original assignment when an interrupted workflow is detected.","Recovery","Preserve original assignee","Review")+
+      configCard("Assignment safeguards","Prevent duplicates, stale writes and concurrent conflicting actions.","Protection","Idempotency and audit","Required")+
+    '</div>'+
+    panel("Configuration governance","Proposed review and activation lifecycle",'<div class="lifecycle"><div><b>01</b><strong>Draft</strong><small>Manager prepares a change.</small></div><i>→</i><div><b>02</b><strong>Validate</strong><small>Coverage and conflicts checked.</small></div><i>→</i><div><b>03</b><strong>Approve</strong><small>Higher authorisation if required.</small></div><i>→</i><div><b>04</b><strong>Apply</strong><small>Execution result verified.</small></div><i>→</i><div><b>05</b><strong>Audit</strong><small>Previous version retained.</small></div></div>');
 }
-function showToast(message) {
-  toast.textContent = message;
-  toast.classList.add("show");
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toast.classList.remove("show"), 2200);
+function configCard(title,copy,label,value,status){
+  return '<article class="control-card"><div class="control-card-top"><span class="control-symbol">⌘</span>'+statusPill(status)+'</div><h3>'+title+'</h3><p>'+copy+'</p><div class="config-setting"><span>'+label+'</span><strong>'+value+'</strong></div><button class="panel-action" data-action="config-preview">Preview setting</button></article>';
 }
-
-document.querySelectorAll(".nav-item").forEach(button => {
-  button.addEventListener("click", () => {
-    state.view = button.dataset.view;
-    state.memberSearch = "";
-    render();
-    if (window.innerWidth < 820) pageContent.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+function renderReliability(){
+  pageContent.innerHTML=heading("SYSTEM HEALTH","Reliability centre","A dedicated place for dispatcher health, failed writes, duplicate prevention, recovery queues and integration status.",'<button class="btn btn-secondary" data-action="refresh">↻ Refresh preview</button>')+
+    kpiGrid([
+      kpi("Assignment engine","Healthy","Illustrative status","◇"),
+      kpi("Failed writes","0","Sample events today","×"),
+      kpi("Pending recoveries","2","Awaiting review","↺","Needs attention","warning"),
+      kpi("Sync latency","4.2s","Illustrative connector delay","⌁")
+    ])+
+    '<div class="grid-two">'+
+      panel("Component status","Illustrative service health",'<div class="health-list">'+healthRow("Dispatch service","Healthy","good","Last check 10:42:18")+healthRow("Tracker connector","Connected","good","Prototype state")+healthRow("Event processor","Healthy","good","Queue depth 0")+healthRow("Recovery worker","Attention","warning","2 pending sample events")+healthRow("Audit persistence","Healthy","good","Sample storage only")+'</div>',"")+
+      panel("Reliability trend","Simulated exceptions over the last 12 intervals",smallChart([3,2,4,1,2,1,3,2,1,0,1,0],["01","02","03","04","05","06","07","08","09","10","11","12"],"#d39a43"),'<span class="subtle-tag">SAMPLE EVENTS</span>')+
+    '</div>'+
+    panel("Recent exceptions","Sample reliability and recovery events",dataTable(["Time","Event","Component","Impact","Status"],[
+      '<tr><td>10:38:12</td><td>Assignment recovery queued</td><td>Recovery worker</td><td>One ticket held for review</td><td>'+statusPill("Pending")+'</td></tr>',
+      '<tr><td>10:17:49</td><td>Tracker write retry</td><td>Tracker connector</td><td>Retry succeeded</td><td>'+statusPill("Resolved")+'</td></tr>',
+      '<tr><td>09:51:05</td><td>Duplicate event suppressed</td><td>Event processor</td><td>No duplicate assignment</td><td>'+statusPill("Healthy")+'</td></tr>'
+    ]))+
+    '<div class="prototype-warning"><strong>Reliability principle.</strong> A successful button click is not proof that an operation completed. Production status must be confirmed by the backend and independently recorded.</div>';
+}
+function auditTable(events){
+  return dataTable(["Time","Event","Actor","Inbox","Type"],events.map(e=>'<tr><td class="mono">'+e[0]+'</td><td>'+e[1]+'</td><td>'+e[2]+'</td><td>'+e[3]+'</td><td>'+statusPill(e[4])+'</td></tr>'));
+}
+function renderAudit(){
+  pageContent.innerHTML=heading("AUDIT & GOVERNANCE","A complete operational record","Searchable history for ticket events, manager actions, configuration changes and exceptions.",'<button class="btn btn-secondary" data-action="export-audit">↓ Export audit</button>')+
+    kpiGrid([
+      kpi("Events recorded","8,426","Synthetic historical events","◷"),
+      kpi("Manager actions","146","Sample configuration and overrides","⚙"),
+      kpi("Exceptions","23","Sample exceptions logged","!"),
+      kpi("Audit completeness","100%","Demonstration record set","✓")
+    ])+
+    panel("Activity timeline","Latest system and ticket activity",auditTable(AUDIT_EVENTS),'<span class="subtle-tag">LATEST 8 EVENTS</span>')+
+    panel("Audit principles","What the production audit record must preserve",'<div class="feature-list"><div><strong>Actor identity</strong><span>Who performed or initiated the action.</span></div><div><strong>Before and after values</strong><span>For every configuration and assignment change.</span></div><div><strong>Reason and approval</strong><span>Mandatory reason for critical and manual operations.</span></div><div><strong>Execution outcome</strong><span>Requested, approved, executed, verified or failed.</span></div><div><strong>Immutable history</strong><span>Corrections are appended, never silently overwritten.</span></div></div>');
+}
+function renderReports(){
+  pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<button class="btn btn-primary" data-action="export-summary">↓ Export current summary</button>')+
+    '<div class="report-grid">'+
+      reportCard("Daily operations report","Tickets received, assigned, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
+      reportCard("Weekly performance report","Team allocation, shift comparison, handovers, flags and resolution trends.","Weekly","CSV export ready")+
+      reportCard("Monthly management report","Brand volumes, folder share, service performance and exception trends.","Monthly","CSV export ready")+
+      reportCard("Individual performance report","Private per-agent workload and resolution summary with scheduled-hour context.","Individual","Permission required")+
+      reportCard("Brand volume report","Distinct ticket counts and brand share across all inboxes.","By brand","CSV export ready")+
+      reportCard("Reliability report","Assignment failures, recoveries, retries and service health.","System","CSV export ready")+
+    '</div>'+
+    panel("Current report scope","The selected global period and inbox filters apply",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>Demonstration only</strong></div></div>',"");
+}
+function reportCard(title,copy,tag,foot){
+  return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="export-summary">Export ↗</button></div></article>';
+}
+function renderAdmin(){
+  pageContent.innerHTML=heading("PLATFORM ADMINISTRATION","Manage the platform foundation","Accounts, role permissions, security, application settings and future integrations.")+
+    '<div class="prototype-warning"><strong>Administration is not active.</strong> User accounts and access controls have not yet been implemented. Do not use this prototype to store real colleague or ticket information.</div>'+
+    '<div class="control-grid">'+
+      configCard("Users & roles","Create administrator, manager and agent identities and apply least-privilege access.","Role model","Admin · Manager · Agent","Not configured")+
+      configCard("Access security","Session management, secure cookies, rate limits and server-enforced permissions.","Protection","Authentication required","Not configured")+
+      configCard("Data retention","Define audit retention, event immutability and backup policy.","Retention","Policy to be agreed","Draft")+
+      configCard("Integration settings","Configure Excel, Outlook and approved service connections using protected secrets.","Connectors","Not connected","Disabled")+
+      configCard("Notifications","Configure operational alerts, manager notifications and service warnings.","Channels","To be designed","Disabled")+
+      configCard("Application preferences","Timezones, reporting cutoffs, working calendars and display defaults.","Timezone","UK inbox · Egypt shifts","Draft")+
+    '</div>'+
+    panel("Environment information","Current standalone prototype state",'<div class="environment-grid"><div><span>Application</span><strong>VWG Dispatch Intelligence</strong></div><div><span>Version</span><strong>UI Foundation 0.2</strong></div><div><span>Data source</span><strong>Synthetic sample records</strong></div><div><span>Database</span><strong>Not configured</strong></div><div><span>Authentication</span><strong>Not configured</strong></div><div><span>Excel / Outlook</span><strong>Not connected</strong></div></div>');
+}
+function render(){
+  document.getElementById("topbarPage").textContent=VIEW_TITLES[state.view]||"Overview";
+  document.querySelectorAll(".nav-item").forEach(btn=>btn.classList.toggle("active",btn.dataset.view===state.view));
+  if(state.view==="overview")renderOverview();
+  else if(state.view==="live")renderLive();
+  else if(state.view==="tickets")renderTickets();
+  else if(state.view==="brands")renderBrands();
+  else if(state.view==="workflow")renderWorkflow();
+  else if(state.view==="folders")renderFolders();
+  else if(state.view==="team")renderTeam();
+  else if(state.view==="my")renderMy();
+  else if(state.view==="roster")renderRoster();
+  else if(state.view==="rules")renderRules();
+  else if(state.view==="reliability")renderReliability();
+  else if(state.view==="audit")renderAudit();
+  else if(state.view==="reports")renderReports();
+  else if(state.view==="admin")renderAdmin();
+  pageContent.focus({preventScroll:true});
+}
+function showToast(message){
+  toast.textContent=message;toast.classList.add("show");
+  clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove("show"),2600);
+}
+function navigate(view){
+  if(!VIEW_TITLES[view])return;
+  state.view=view;state.memberSearch="";render();
+  if(window.innerWidth<820)pageContent.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function csvDownload(filename,rows){
+  const csv=rows.map(row=>row.map(value=>'"'+String(value??"").replaceAll('"','""')+'"').join(",")).join("\r\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  showToast("Sample CSV exported. It contains demonstration data only.");
+}
+function exportTickets(){
+  csvDownload("dispatcher-sample-tickets.csv",[["Reference","Brand","Folder","Member","Subject","Age","Status"],...TICKETS.map(t=>[t.ref,t.brand,t.folder,t.member,t.subject,t.age,t.status])]);
+}
+function exportBrands(){
+  csvDownload("dispatcher-sample-brand-mix.csv",[["Brand","Tickets"],...brandRows().map(b=>[b.name,scaled(b.value)])]);
+}
+function exportFolders(){
+  const rows=allocationMatrix(),folders=scopeFolders();
+  csvDownload("dispatcher-sample-folder-share.csv",[["Member",...folders.flatMap(f=>[f.name+" assigned",f.name+" share"]), "Total"],...rows.map(r=>[r.name,...folders.flatMap(f=>{const fi=FOLDERS.findIndex(x=>x.id===f.id);const total=rows.reduce((s,x)=>s+x.cells[fi],0);return [r.cells[fi],(r.cells[fi]/Math.max(1,total)*100).toFixed(1)+"%"]; }),r.total])]);
+}
+function exportAudit(){
+  csvDownload("dispatcher-sample-audit.csv",[["Time","Event","Actor","Inbox","Type"],...AUDIT_EVENTS]);
+}
+function exportSummary(){
+  const t=totals();
+  csvDownload("dispatcher-sample-management-summary.csv",[["Metric","Value"],["Period",PERIODS[state.period].label],["Inbox",scopeName()],["Received",t.received],["Initially assigned",t.assigned],["Resolved",t.resolved],["Outstanding",t.open],["Unassigned",t.unassigned]]);
+}
+function openTicket(ref){
+  const ticket=TICKETS.find(t=>t.ref===ref);if(!ticket)return;
+  modalRoot.innerHTML='<div class="modal-backdrop" data-modal-close><section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><div><span class="eyebrow">SAMPLE TICKET TIMELINE</span><h2 id="modalTitle">'+ticket.ref+'</h2></div><button class="icon-button" data-modal-close aria-label="Close">×</button></div><p class="modal-copy">'+esc(ticket.subject)+'</p><div class="ticket-detail-grid"><div><span>Brand</span><strong>'+esc(ticket.brand)+'</strong></div><div><span>Inbox</span><strong>'+esc(ticket.folder)+'</strong></div><div><span>Assigned to</span><strong>'+esc(ticket.member)+'</strong></div><div><span>Current status</span><strong>'+esc(ticket.status)+'</strong></div><div><span>Received</span><strong>'+ticket.received+'</strong></div><div><span>Age</span><strong>'+ticket.age+'</strong></div></div><div class="modal-timeline"><div><i></i><strong>Ticket received</strong><small>'+ticket.received+' · '+ticket.folder+'</small></div><div><i></i><strong>Initial assignment</strong><small>'+esc(ticket.member)+' · Sample event</small></div><div><i></i><strong>'+esc(ticket.last)+'</strong><small>Most recent recorded sample event</small></div></div><div class="prototype-warning"><strong>Sample record.</strong> No real mailbox message is available and no assignment action can be performed.</div></section></div>';
+}
+function closeModal(){modalRoot.innerHTML="";}
+function handleAction(action){
+  if(action==="refresh"){showToast("Preview refreshed. Sample data remains unchanged.");return;}
+  if(action==="toggle-dispatch"){state.paused=!state.paused;showToast(state.paused?"Demo dispatch state set to paused. No live system affected.":"Demo dispatch state resumed. No live system affected.");render();return;}
+  if(action==="export-tickets"){exportTickets();return;}
+  if(action==="export-brands"){exportBrands();return;}
+  if(action==="export-folders"){exportFolders();return;}
+  if(action==="export-audit"){exportAudit();return;}
+  if(action==="export-summary"){exportSummary();return;}
+  if(action==="close-agent"){state.selectedAgent=null;render();return;}
+  if(action==="roster-preview"){showToast("Roster preview is a design placeholder. No roster has changed.");return;}
+  if(action==="rules-preview"||action==="config-preview"){showToast("Configuration preview only. No dispatch rules have changed.");return;}
+}
+document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click",()=>navigate(btn.dataset.view)));
+document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
+document.getElementById("folderSelect").addEventListener("change",e=>{state.folder=e.target.value;render();});
+document.getElementById("globalSearch").addEventListener("input",e=>{state.search=e.target.value;render();});
+document.getElementById("profileButton").addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
+document.addEventListener("click",event=>{
+  const action=event.target.closest("[data-action]");
+  const go=event.target.closest("[data-go]");
+  const ticket=event.target.closest("[data-ticket]");
+  const agent=event.target.closest("[data-agent]");
+  if(action)handleAction(action.dataset.action);
+  if(go)navigate(go.dataset.go);
+  if(ticket)openTicket(ticket.dataset.ticket);
+  if(agent){state.selectedAgent=agent.dataset.agent;render();}
+  if(event.target.closest("[data-modal-close]"))closeModal();
 });
-document.getElementById("periodSelect").addEventListener("change", event => {
-  state.period = event.target.value;
-  render();
-});
-document.getElementById("folderSelect").addEventListener("change", event => {
-  state.folder = event.target.value;
-  render();
-});
-document.addEventListener("click", event => {
-  const trigger = event.target.closest("[data-go]");
-  if (trigger) {
-    state.view = trigger.dataset.go;
-    state.memberSearch = "";
-    render();
+document.addEventListener("keydown",event=>{
+  if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="k"){
+    event.preventDefault();document.getElementById("globalSearch").focus();
   }
+  if(event.key==="Escape")closeModal();
 });
 render();
