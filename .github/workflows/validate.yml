@@ -34,7 +34,7 @@ jobs:
           import fs from 'node:fs';
           const html = fs.readFileSync('index.html', 'utf8');
           const js = fs.readFileSync('dashboard.js', 'utf8');
-          const css = fs.readFileSync('dashboard.css', 'utf8');
+          const css = fs.readFileSync('dashboard.css', 'utf8');\n          for (const view of ['live','tickets','brands','workflow','folders','team','my','roster','rules','reliability','audit','reports','admin']) {\n            if (!js.includes('render' + view[0].toUpperCase() + view.slice(1) + '()')) throw new Error('Missing view renderer: ' + view);\n          }\n          if (!html.includes('globalSearch') || !html.includes('periodSelect') || !html.includes('folderSelect')) throw new Error('Global search and filters must be present.');
           for (const text of ['Brand insights', 'Folder share', 'Team performance', 'DEMO DATA']) {
             if (!html.includes(text)) throw new Error('Missing HTML requirement: ' + text);
           }
