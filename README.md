@@ -19,17 +19,25 @@ Its central goals are to make ticket volume, brand mix, workload allocation, res
 
 ## Current prototype
 
-The first prototype includes:
+The complete UI foundation now includes fourteen navigable areas:
 
-- Overview with ticket-volume KPIs, brand mix and inbox distribution.
+- Overview and live operations control room.
+- Ticket analytics and ticket explorer with sample ticket detail timelines.
 - Brand insights for Volkswagen, Audi, Škoda, SEAT, CUPRA, Volkswagen Commercial Vehicles and Other / unclassified.
-- Reporting-period filters and inbox filter.
-- Folder allocation matrix showing member counts and each member's percentage share within each folder.
-- Team performance preview.
-- Operations control preview showing planned capabilities without active controls.
-- Responsive desktop, tablet and mobile styling.
+- Workflow analytics for handovers, flags, manual allocation, recoveries, reassignments and exceptions.
+- Folder share matrix showing each member's initial-allocation count and percentage share within each folder.
+- Team performance with selectable member profiles.
+- Private-performance screen layout (placeholder identity in the prototype).
+- Roster and coverage.
+- Dispatch configuration.
+- Reliability centre.
+- Audit history.
+- Reports and CSV exports.
+- Administration and environment overview.
 
-The sample member labels are intentionally anonymised (Agent 01–Agent 14). Do not replace them with real team names until real data and access controls are ready.
+Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal, CSV exports work with synthetic data, and operational preview buttons only change local prototype state or display an explanatory message.
+
+All member names remain anonymised (Agent 01–Agent 14). Do not replace them with real team names until authentication, role permissions and the live data connection are ready.
 
 ## Metric definitions to preserve
 
