@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development; never commit .dev.vars.
+ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+ACCESS_AUD=replace-with-cloudflare-access-application-audience
+APP_ENV=local
