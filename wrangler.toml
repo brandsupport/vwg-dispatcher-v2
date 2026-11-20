@@ -9,7 +9,7 @@ APP_ENV = "staging"
 [[d1_databases]]
 binding = "DB"
 database_name = "vwg-dispatcher-staging"
-database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+database_id = "a634ae1e-e96f-4346-8a7d-864e3e44a581"
 migrations_dir = "migrations"
 
 # Configure these as Worker secrets/variables after creating the Cloudflare Access app:
