@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101827">
+  <meta name="theme-color" content="#0b111a">
   <title>VWG Dispatch Intelligence | Dispatcher 2.0</title>
   <meta name="description" content="VWG Brand Support Dispatch Intelligence operations dashboard prototype">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./dashboard.css">
   <script src="./dashboard.js" defer></script>
 </head>
@@ -16,7 +16,7 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="./" aria-label="VWG Dispatch Intelligence home">
-        <span class="brand-symbol"><span>D</span></span>
+        <span class="brand-symbol" aria-hidden="true"><span class="logo-glow"><span class="logo-glyph"></span></span></span>
         <span class="brand-copy"><strong>VWG</strong><small>DISPATCH INTELLIGENCE</small></span>
       </a>
       <div class="workspace-label">OPERATIONS WORKSPACE</div>
@@ -50,7 +50,7 @@
 
     <div class="main-shell">
       <header class="topbar">
-        <div class="mobile-brand"><span class="brand-symbol small"><span>D</span></span><strong>DISPATCH INTELLIGENCE</strong></div>
+        <div class="mobile-brand"><span class="brand-symbol small" aria-hidden="true"><span class="logo-glow"><span class="logo-glyph"></span></span></span><strong>DISPATCH INTELLIGENCE</strong></div>
         <div class="topbar-context"><span class="context-kicker">OPERATIONS PLATFORM</span><span class="context-divider">/</span><span id="topbarPage">Overview</span></div>
         <div class="topbar-tools">
           <label class="global-search" aria-label="Search dashboard">
