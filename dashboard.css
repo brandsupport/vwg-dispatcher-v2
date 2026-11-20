@@ -858,6 +858,8 @@ h1 {
 
 /* Warm Graphite palette: deliberately distinct from the Knowledge Base's cool neon theme. */
 :root {
+  --navy: #211a18;
+  --navy-2: #2a211e;
   --canvas: #171514;
   --panel: #251f1d;
   --surface-raised: #302522;
