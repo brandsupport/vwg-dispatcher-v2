@@ -564,7 +564,19 @@ document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click"
 document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
 document.getElementById("folderSelect").addEventListener("change",e=>{state.folder=e.target.value;render();});
 document.getElementById("globalSearch").addEventListener("input",e=>{state.search=e.target.value;render();});
-document.getElementById("profileButton").addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
+document.getElementById("profileButton").addEventListener("click",async()=>{
+  if(!location.hostname.endsWith(".workers.dev")){
+    showToast("This public preview uses synthetic demo data. Sign-out is available in the secured application.");
+    return;
+  }
+  try{
+    const response=await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});
+    if(!response.ok)throw new Error("Sign-out request was rejected");
+    location.assign("/login.html");
+  }catch{
+    showToast("Could not sign out. Please refresh and try again.");
+  }
+});
 document.addEventListener("click",event=>{
   const action=event.target.closest("[data-action]");
   const go=event.target.closest("[data-go]");
