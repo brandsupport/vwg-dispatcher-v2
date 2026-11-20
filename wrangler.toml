@@ -1,0 +1,19 @@
+name = "vwg-dispatcher-api"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+APP_ENV = "staging"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vwg-dispatcher-staging"
+database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Configure these as Worker secrets/variables after creating the Cloudflare Access app:
+# ACCESS_TEAM_DOMAIN = "https://your-team.cloudflareaccess.com"
+# ACCESS_AUD = "your-cloudflare-access-application-audience"
+#
+# Do not put tokens, private keys, mailbox credentials or real user data in this file.
