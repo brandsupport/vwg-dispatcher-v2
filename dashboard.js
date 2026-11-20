@@ -237,6 +237,9 @@ function healthRow(label,value,type,note){
 function renderLive(){
   const t=totals();
   const actionLabel=state.paused?"Resume dispatch (simulated)":"Pause dispatch (simulated)";
+  const attentionRows=TICKETS.filter(ticket=>(state.folder==="all"||FOLDERS.find(folder=>folder.id===state.folder)?.name===ticket.folder)&&activeSearch([ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject].join(" "))).slice(0,6).map(ticket=>
+    '<tr><td><button class="link-button" type="button" data-ticket="'+ticket.ref+'">'+ticket.ref+'</button></td><td>'+esc(ticket.brand)+'</td><td>'+esc(ticket.folder)+'</td><td>'+esc(ticket.member)+'</td><td>'+ticket.age+'</td><td>'+statusPill(ticket.status)+'</td></tr>'
+  );
   pageContent.innerHTML=heading("LIVE OPERATIONS","Operations control room","Monitor ticket queues, inbox health, available coverage and events that need management attention.",'<button class="btn '+(state.paused?"btn-primary":"btn-danger")+'" data-action="toggle-dispatch">'+(state.paused?"▶":"Ⅱ")+' '+actionLabel+'</button>')+
     '<div class="prototype-warning"><strong>Simulation only.</strong> This control room is not connected to Outlook or the dispatch engine. Buttons below only change local prototype state.</div>'+
     kpiGrid([
@@ -248,8 +251,8 @@ function renderLive(){
     '<div class="section-heading"><div><h2>Inbox status</h2><p>Open queue, ticket arrivals and local dispatch status by inbox.</p></div></div>'+
     folderCards()+
     '<div class="grid-two">'+
-      panel("Queue requiring attention","Sample tickets ordered by ageing",dataTable(["Ticket","Brand","Inbox","Owner","Age","Status"],ticketRows().slice(0,6).map(row=>row.replace(/<td>[^<]*<\/td><td>[^<]*<\/td><td>[^<]*<\/td><td>[^<]*<\/td>/,""))),'')+
-      panel("Agent availability","Illustrative shift and availability snapshot",'<div class="availability-list">'+AGENTS.map(a=>'<div class="availability-row">'+memberCell(a.name,a.shift)+'<span>'+a.start+'–'+a.end+'</span>'+statusPill(a.availability)+'</div>').join("")+'</div>','<button class="panel-action" data-go="roster">Manage coverage ↗</button>')+
+      panel("Queue requiring attention","Sample tickets ordered by ageing",dataTable(["Ticket","Brand","Inbox","Owner","Age","Status"],attentionRows),"")+
+      panel("Agent availability","Illustrative shift and availability snapshot",'<div class="availability-list">'+AGENTS.map(agent=>'<div class="availability-row">'+memberCell(agent.name,agent.shift)+'<span>'+agent.start+'–'+agent.end+'</span>'+statusPill(agent.availability)+'</div>').join("")+'</div>','<button class="panel-action" data-go="roster">Manage coverage ↗</button>')+
     '</div>'+
     panel("Recent operational events","Latest sample events from the assignment timeline",auditTable(AUDIT_EVENTS.slice(0,6)),'<button class="panel-action" data-go="audit">View audit history ↗</button>');
 }
@@ -288,8 +291,8 @@ function renderBrands(){
     kpiGrid([
       kpi("Total tickets",fmt(total),"Distinct received tickets","▤"),
       kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
-      kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value"),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
-      kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value"),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
+      kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
+      kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
     ])+
     '<div class="grid-two">'+
       panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
