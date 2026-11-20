@@ -1,0 +1,49 @@
+name: Validate Dispatcher 2.0 prototype
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard.js"
+      - "index.html"
+      - "docs/**"
+      - ".github/workflows/validate.yml"
+  pull_request:
+    paths:
+      - "dashboard.js"
+      - "index.html"
+      - "docs/**"
+      - ".github/workflows/validate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check dashboard JavaScript syntax
+        run: node --check dashboard.js
+      - name: Verify required dashboard sections and prototype safety labels
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const html = fs.readFileSync('index.html', 'utf8');
+          const js = fs.readFileSync('dashboard.js', 'utf8');
+          const css = fs.readFileSync('dashboard.css', 'utf8');
+          for (const text of ['Brand insights', 'Folder share', 'Team performance', 'DEMO DATA']) {
+            if (!html.includes(text)) throw new Error('Missing HTML requirement: ' + text);
+          }
+          for (const text of ['Audi', 'Škoda', 'Agency Detags', 'Transfers', 'Unadopts', 'Other / unclassified']) {
+            if (!js.includes(text)) throw new Error('Missing dashboard data category: ' + text);
+          }
+          if (!js.includes('member initial-allocation share') && !fs.readFileSync('README.md', 'utf8').includes('first assignment')) {
+            throw new Error('Metric definition documentation is missing.');
+          }
+          if (!css.includes('.sidebar') || !css.includes('@media')) throw new Error('Responsive dashboard styles are missing.');
+          console.log('Dispatcher 2.0 prototype validation passed.');
+          NODE
