@@ -110,14 +110,15 @@ The existing Excel tracker remains an operational component until a deliberate m
 
 ## Security and deployment
 
-**Do not publish this prototype to a publicly accessible production URL with real data.** A private GitHub repository does not automatically make a Cloudflare Pages deployment private.
+The public GitHub Pages address is a synthetic-data-only prototype. It is not protected by sign-in and must never contain real ticket, colleague, workload or performance information.
 
-Before live deployment or loading real ticket/member data, implement one of:
+The separate staging Worker serves both the dashboard shell and API from one `workers.dev` origin. It uses Microsoft Entra OIDC sign-in, server-side D1 user allowlisting, role-based authorisation and revocable D1 sessions. Cloudflare Zero Trust / Access and a custom domain are not part of this staging design.
 
-- Application authentication and server-enforced role-based access, backed by the Dispatcher 2.0 database; or
-- Cloudflare Access in front of the dashboard, with an appropriate identity policy, plus server-side authorisation for any APIs.
+The Entra application is single-tenant and requests only `openid profile email`; it does not request mailbox or Microsoft Graph permissions. An account must also be explicitly provisioned in `app_users`. The application uses a host-only Secure, HttpOnly, SameSite=Lax session cookie and stores only a SHA-256 hash of the session token in D1.
 
-The production application must use a dedicated data store and secrets, separate from the Knowledge Base. Never put API tokens, PINs, credentials or real mailbox content in this repository.
+`workers.dev` is used for staging only. Do not load live operational data or treat this as a business-critical production host. Before production, complete company IT approval, hosting review, backup/restore testing, retention controls, monitoring, and formal security/privacy review.
+
+Operational write APIs, Outlook/Excel integration, user provisioning UI and production data ingestion are not enabled. The UI prototype continues to show synthetic data only.
 
 ## Development
 

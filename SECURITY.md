@@ -2,27 +2,44 @@
 
 ## Current status
 
-This repository currently contains a demonstration-only dashboard. It has no authentication, no server-side API and no live data connection.
+The GitHub Pages site is a public demonstration containing synthetic data only. A separate draft-branch staging Worker foundation is being prepared. It is not deployed and is not connected to Outlook, Excel or production tickets.
 
-## Important
+## Staging authentication design
 
-A private GitHub repository controls source-code visibility only. It does not automatically protect a website deployed from that repository.
+- Microsoft Entra ID single-tenant OpenID Connect sign-in.
+- OAuth authorisation-code flow with PKCE, state and nonce verification.
+- Microsoft ID-token signature, issuer, audience and tenant validation.
+- Explicit D1 `app_users` allowlist and server-owned role/agent mapping.
+- First sign-in binds the pre-provisioned account to its Entra object ID.
+- Opaque random session tokens; only SHA-256 hashes are stored in D1.
+- Secure, HttpOnly, SameSite=Lax host-only session cookie; eight-hour expiry.
+- D1 session revocation on sign-out and immediate access rejection for inactive users.
+- Dashboard and API served from the same Worker origin to avoid cross-site session cookies.
+- No Cloudflare Zero Trust / Access dependency.
 
-The static demonstration UI may be published publicly only while it contains synthetic records and anonymised placeholder members. Do not add real ticket, colleague, workload or performance information, credentials, or production endpoints until an access-control layer is configured.
+Microsoft Entra app registration may be restricted by company policy. If the user cannot register an application, an authorised organisation administrator must create/approve the single-tenant OIDC app. Do not bypass company approval.
 
-## Required before production
+## Public demo restrictions
 
-1. Choose application login with server-enforced role permissions, Cloudflare Access, or a layered approach.
-2. Protect all data APIs independently of the browser interface.
-3. Enforce manager and administrator permissions on the server.
-4. Restrict agent requests to the signed-in agent's own records.
-5. Keep secrets in Cloudflare environment secrets, never in source files.
-6. Use a dedicated Dispatcher 2.0 database and account/session tables.
-7. Log access to sensitive individual-performance information and all operational actions.
-8. Add CSRF/origin checks, rate limits, secure session cookies and account recovery controls.
-9. Test unauthorised API access, cross-agent data access and session revocation.
-10. Keep demo and production environments separate.
+A private GitHub repository does not make a website deployed from it private. Do not add real ticket, colleague, workload or performance information, credentials, or production endpoints to the public Pages demo.
 
-## Demo data
+The Worker uses a `workers.dev` hostname for staging only. Do not treat it as a business-critical production host or load live operational data into it.
 
-All current dashboard data is synthetic. Agent labels are placeholders. They must not be interpreted as real team performance.
+## Required before any live pilot
+
+1. Complete company IT/security approval of the Entra app and staging design.
+2. Review tenant restrictions, allowed user population, and joiner/mover/leaver process.
+3. Verify ID-token validation, session expiry, revocation and account deactivation.
+4. Test manager, administrator and agent authorisation, including cross-agent data isolation.
+5. Add CSRF/origin protection to every future state-changing route.
+6. Add abuse controls and monitoring for authentication and sensitive endpoints.
+7. Complete D1 backup/restore, retention, privacy and incident-response procedures.
+8. Review audit access to individual-performance information.
+9. Build user provisioning and operational approval workflows.
+10. Keep staging, demo and production data stores and secrets separate.
+
+## Operational safety
+
+No ticket assignment, reassignment, roster, eligibility, dispatch configuration or other operational write API is enabled in this foundation. The application must not indicate that an action succeeded until a backend confirms it.
+
+Never commit Microsoft client secrets, tokens, mailbox credentials, real user lists or live ticket contents.

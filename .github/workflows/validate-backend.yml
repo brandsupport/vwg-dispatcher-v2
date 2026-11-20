@@ -1,0 +1,114 @@
+name: Validate Dispatcher secure backend foundation
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "worker/**"
+      - "migrations/**"
+      - "wrangler.toml"
+      - "package.json"
+      - "scripts/**"
+      - "login.html"
+      - ".github/workflows/validate-backend.yml"
+  pull_request:
+    paths:
+      - "worker/**"
+      - "migrations/**"
+      - "wrangler.toml"
+      - "package.json"
+      - "scripts/**"
+      - "login.html"
+      - ".github/workflows/validate-backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install Worker dependencies
+        run: npm install
+      - name: Prepare Worker static assets
+        run: npm run prepare:assets
+      - name: Check Worker and asset script syntax
+        run: npm run check
+      - name: Validate D1 schema in SQLite
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys = ON")
+          sql = Path("migrations/0001_initial.sql").read_text()
+          db.executescript(sql)
+
+          expected = {
+              "app_users", "agents", "inboxes", "brands",
+              "agent_inbox_eligibility", "agent_shifts", "tickets",
+              "ticket_events", "handling_sessions", "dispatch_config_versions",
+              "audit_log", "integration_sync_runs", "integration_inbox",
+              "user_sessions", "oauth_transactions"
+          }
+          actual = {row[0] for row in db.execute(
+              "SELECT name FROM sqlite_master WHERE type='table'"
+          )}
+          missing = expected - actual
+          if missing:
+              raise SystemExit(f"Missing tables: {sorted(missing)}")
+
+          columns = {row[1] for row in db.execute("PRAGMA table_info(app_users)")}
+          if "entra_object_id" not in columns:
+              raise SystemExit("Microsoft Entra object-ID mapping is missing")
+
+          inboxes = db.execute("SELECT COUNT(*) FROM inboxes").fetchone()[0]
+          brands = db.execute("SELECT COUNT(*) FROM brands").fetchone()[0]
+          if inboxes != 4 or brands != 7:
+              raise SystemExit(f"Unexpected reference data: inboxes={inboxes}, brands={brands}")
+
+          try:
+              db.execute("""
+                INSERT INTO ticket_events (id, ticket_id, event_type, occurred_at)
+                VALUES ('bad', 'missing-ticket', 'received', '2026-01-01T00:00:00Z')
+              """)
+              raise SystemExit("Foreign-key constraint was not enforced")
+          except sqlite3.IntegrityError:
+              pass
+
+          print("D1 schema validation passed: tables, identity mapping, reference rows and foreign keys.")
+          PY
+      - name: Check authentication and operational safety boundaries
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          worker = Path("worker/index.js").read_text()
+          config = Path("wrangler.toml").read_text()
+          required = [
+              "jwtVerify", "MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET",
+              "payload.tid", "payload.oid", "transaction.nonce",
+              "user_sessions", "oauth_transactions", "SameSite=Lax",
+              "HttpOnly", "Secure", "env.ASSETS.fetch"
+          ]
+          missing = [item for item in required if item not in worker]
+          if missing:
+              raise SystemExit(f"Missing Microsoft authentication controls: {missing}")
+          if "ACCESS_TEAM_DOMAIN" in worker or "cf-access-jwt-assertion" in worker:
+              raise SystemExit("Legacy Cloudflare Access authentication remains in Worker")
+          if '[assets]' not in config or 'binding = "ASSETS"' not in config or "run_worker_first = true" not in config:
+              raise SystemExit("Same-origin authenticated static asset hosting is not configured")
+          if "Operational write routes are not enabled" not in worker:
+              raise SystemExit("Ticket/operational write safety boundary is missing")
+          for name in ["index.html", "dashboard.css", "dashboard.js", "login.html"]:
+              if not (Path("public") / name).exists():
+                  raise SystemExit(f"Worker static asset missing: {name}")
+          print("Microsoft OIDC, server-side sessions, same-origin hosting and write safety checks passed.")
+          PY
