@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS app_users (
   email TEXT NOT NULL UNIQUE COLLATE NOCASE,
   role TEXT NOT NULL CHECK (role IN ('system_administrator', 'operations_manager', 'agent')),
   agent_id TEXT,
+  entra_object_id TEXT UNIQUE,
   active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -169,6 +170,28 @@ CREATE TABLE IF NOT EXISTS integration_inbox (
   last_error TEXT,
   UNIQUE (source_system, event_key)
 );
+
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES app_users(id),
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  last_seen_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS oauth_transactions (
+  state_hash TEXT PRIMARY KEY,
+  nonce TEXT NOT NULL,
+  code_verifier TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_expiry ON user_sessions(user_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_oauth_transactions_expiry ON oauth_transactions(expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_tickets_inbox_received ON tickets(inbox_id, received_at);
 CREATE INDEX IF NOT EXISTS idx_tickets_assignee_status ON tickets(current_assignee_agent_id, status);
