@@ -1,0 +1,19 @@
+{
+  "name": "vwg-dispatcher-v2-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply dispatcher-db --local",
+    "db:remote": "wrangler d1 migrations apply dispatcher-db --remote",
+    "check": "node --check worker/index.js"
+  },
+  "dependencies": {
+    "jose": "^6.1.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.45.0"
+  }
+}
