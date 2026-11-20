@@ -1,140 +1,155 @@
-# Dispatcher 2.0 — Secure Foundation Runbook
+# Dispatcher 2.0 — Secure Staging Foundation Runbook
 
-## Scope and safety boundary
+## Scope and current boundary
 
-This branch adds a Cloudflare Worker API, a D1 schema and Cloudflare Access JWT validation. It is a staging foundation only.
+This branch provides a staging foundation only.
 
-- The existing static dashboard remains unchanged.
+- The existing GitHub Pages address remains a public, synthetic-data-only demonstration.
+- The authenticated staging application and API are served together from one Cloudflare Worker `workers.dev` origin.
+- Sign-in uses Microsoft Entra ID (OpenID Connect). Cloudflare Zero Trust / Access is not used.
+- Authorisation is based on the active account and role stored in the Dispatcher D1 database.
 - No Outlook, Excel, Salesforce or mailbox integration is configured.
 - No production records or real colleague identities are included.
-- No assignment, reassignment, roster or dispatch write endpoint exists.
-- The Worker denies identities not explicitly provisioned in the `app_users` table.
-- Team-wide analytics are restricted to System Administrator and Operations Manager roles.
-- Agent ticket access is scoped to the agent identity stored server-side.
+- No ticket assignment, reassignment, roster, eligibility or dispatch write endpoint exists.
+- Agents can only access their own ticket endpoint; team-wide endpoints are manager/admin only.
 
-Do not point this staging API at production data until security review, access approval, backup/restore testing and data-protection approval are complete.
+Cloudflare describes `workers.dev` as intended for quick starts and personal or hobby projects, not business-critical production workloads. Keep this environment limited to staging and synthetic data. Do not load production ticket, colleague, workload or performance data here.
 
 ## Architecture
 
-- Static frontend: existing GitHub Pages prototype for synthetic-only preview.
-- API: Cloudflare Worker (`worker/index.js`).
-- Authentication: Cloudflare Access JWT assertion, verified against the Access team's published JWKS.
-- Authorisation: active identity and role loaded from D1 on every protected request.
-- Database: Cloudflare D1, with migrations in `migrations/`.
-- Audit: append-only `audit_log`; ticket history in append-only `ticket_events`.
+- Frontend and API: one Cloudflare Worker, served from its `workers.dev` hostname.
+- Static dashboard assets: bundled with the Worker and passed through the Worker before being served.
+- Identity provider: the organisation's Microsoft Entra tenant.
+- Authentication: OAuth 2.0 authorisation-code flow with PKCE, OIDC nonce/state checks and Microsoft signing-key validation.
+- Session: random opaque session token; only its SHA-256 hash is stored in D1.
+- Browser cookie: Secure, HttpOnly, SameSite=Lax, host-only cookie with an eight-hour lifetime.
+- Authorisation: active identity, role and agent mapping loaded from D1 on each protected request.
+- Database: dedicated Cloudflare D1 database, with migrations in `migrations/`.
+- Audit: authentication and protected access events are recorded in the append-only audit log.
 
-The Worker trusts neither browser-supplied role values nor a role claim from the Access JWT. The email claim identifies the user; the database determines whether they are provisioned and what role they have.
+The Worker does not trust a browser-supplied role, agent ID or email as an authorisation decision. It validates the Microsoft ID token, checks the configured tenant, binds the stable Entra object ID to a pre-provisioned email allowlist entry, and then reads the role from D1.
 
-## 1. Create a staging D1 database
+## 1. Cloudflare staging resources
 
-From a trusted terminal with Wrangler authenticated to the correct Cloudflare account:
+The current Wrangler configuration points to the staging D1 database:
+
+- Database: `vwg-dispatcher-staging`
+- Database ID: configured in `wrangler.toml`
+- Worker: `vwg-dispatcher-api`
+- Worker hostname: generated under the account's `workers.dev` subdomain
+
+No custom domain or Cloudflare Access application is required for this staging setup.
+
+From a trusted terminal:
 
 ```sh
 npm install
 npx wrangler login
-npx wrangler d1 create vwg-dispatcher-staging
+npm run db:remote
 ```
 
-Copy the returned database ID into `wrangler.toml` at `[[d1_databases]].database_id`. Do not commit credentials or account tokens.
+Confirm the migration completes against `vwg-dispatcher-staging`. Do not substitute another database name or ID.
 
-Apply the initial migration to staging:
+## 2. Register the Microsoft Entra application
+
+This step uses the organisation's existing work/school identity tenant. It does not grant Dispatcher access by itself; D1 provisioning remains mandatory.
+
+1. Open the Microsoft Entra admin centre and select the organisation's tenant.
+2. Go to **Applications → App registrations → New registration**.
+3. Use a clear name such as `VWG Dispatcher 2.0 Staging`.
+4. Choose **Accounts in this organisational directory only (Single tenant)**.
+5. Register the application. Record the **Application (client) ID** and **Directory (tenant) ID**.
+6. Under **Authentication**, add a **Web** platform redirect URI:
+   `https://<worker-name>.<account-subdomain>.workers.dev/api/auth/callback`
+7. Under **Certificates & secrets**, create a client secret and copy its value immediately.
+
+The exact redirect URI must match the Worker hostname and callback path character-for-character. Deploy the Worker once first if you need Cloudflare to show you the generated hostname.
+
+The application requests only the OIDC scopes `openid profile email`; it does not request Outlook, mailbox, Graph or SharePoint permissions. Do not add broader API permissions.
+
+You need permission to register an application in the organisation's Entra tenant (Microsoft documents the Application Developer role as a minimum). The organisation may restrict user app registrations or require an administrator to create/approve the app. If the option is blocked, stop and ask the authorised IT/Entra administrator to create the single-tenant registration and provide the client ID, tenant ID and client-secret value through an approved secure channel. Do not attempt to bypass company policy.
+
+## 3. Configure Worker secrets
+
+Use Wrangler from a trusted terminal. Each command prompts for the value; do not put values in source code, GitHub, chat or screenshots.
 
 ```sh
-npx wrangler d1 migrations apply dispatcher-db --remote
+npx wrangler secret put MS_TENANT_ID
+npx wrangler secret put MS_CLIENT_ID
+npx wrangler secret put MS_CLIENT_SECRET
 ```
 
-If Wrangler reports that the database binding/name differs, use the database name shown in the created D1 resource and keep the binding name `DB` in the Worker config.
-
-## 2. Configure Cloudflare Access
-
-In the Cloudflare Zero Trust dashboard:
-
-1. Create an Access application for the intended staging API hostname (for example, `dispatcher-api-staging.<your-domain>`).
-2. Create an allow policy limited to the approved company identities or identity group.
-3. Do not use a public/bypass policy.
-4. Copy the team domain and application audience (AUD) from the Access application details.
-5. Set Worker secrets/variables:
-   - `ACCESS_TEAM_DOMAIN`: the HTTPS team domain, e.g. `https://example.cloudflareaccess.com`.
-   - `ACCESS_AUD`: the exact audience tag for this Access application.
-
-Set them as secrets rather than committing values:
-
-```sh
-npx wrangler secret put ACCESS_TEAM_DOMAIN
-npx wrangler secret put ACCESS_AUD
-```
-
-Cloudflare Access must protect the API hostname. The Worker independently validates the JWT and checks the D1 user allowlist/role.
-
-## 3. Deploy the Worker
-
-Update `wrangler.toml` with the actual staging D1 database ID, then:
-
-```sh
-npx wrangler deploy
-```
-
-Verify the public health route:
-
-```sh
-curl https://<worker-hostname>/api/health
-```
-
-Expected response has `ok: true`. This endpoint reveals no user or ticket data.
+The tenant ID and client ID are identifiers; the client secret is a credential. Treat all three as deployment configuration and keep them out of Git.
 
 ## 4. Provision the first administrator
 
-Only after the Access policy is in place, provision the approved administrator email in D1 using a secure, authenticated administrative workflow. The initial schema intentionally does not create a default administrator and the Worker has no public self-registration endpoint.
+There is no public self-registration and no default administrator.
 
-For an initial controlled staging bootstrap, an authorised Cloudflare account operator can run a parameterised D1 insert from a trusted environment after confirming the exact email and obtaining approval. Never place real email addresses in Git history or public seed files.
-
-Example SQL shape (replace placeholders locally; do not commit the replaced values):
+After the D1 migration, provision an approved administrator account in D1 using the Cloudflare dashboard's D1 SQL console or Wrangler from a trusted terminal. Replace the email with the exact sign-in address/UPN in the organisation's Entra tenant:
 
 ```sql
 INSERT INTO app_users (id, email, role, active)
-VALUES ('<random-user-id>', '<approved-email>', 'system_administrator', 1);
+VALUES ('dispatcher-initial-admin', '<approved-work-email>', 'system_administrator', 1);
 ```
 
-Create agent profile records and agent-role mappings only after the real roster has been approved for this staging environment.
+Only an authorised person should perform this action. The first successful sign-in links the account to its signed Entra object ID. Subsequent authentication uses that stable object ID rather than relying on a mutable email claim.
 
-## 5. API smoke tests
+For agents, create an `agents` row first, then an `app_users` row with `role = 'agent'` and the matching `agent_id`. Provision only approved users. Never seed real colleagues or email addresses in repository migrations.
 
-- `GET /api/health`: public, returns service health only.
-- `GET /api/me`: requires Access JWT and a provisioned active D1 user.
-- `GET /api/overview/summary`: System Administrator / Operations Manager only.
-- `GET /api/agents`: System Administrator / Operations Manager only.
-- `GET /api/my/tickets`: Agent only; query is scoped to the server-side agent ID.
+## 5. Prepare and deploy the staging Worker
 
-Expected security tests:
+The root dashboard files remain the source of truth. The asset preparation script copies them plus `login.html` into the ignored `public/` build directory.
 
-1. No JWT → 401.
-2. Invalid/expired JWT → 401.
-3. Valid Access identity absent from D1 → 403.
-4. Inactive D1 identity → 403.
-5. Agent requests team overview → 403 and an audit event.
-6. Agent requests own tickets → only records assigned to their mapped agent ID.
-7. Browser-supplied role or agent ID has no effect on permissions.
+```sh
+npm run deploy
+```
 
-## 6. Data model and metric integrity
+Wrangler deploys the Worker and bundled static assets to the account's `workers.dev` hostname. The dashboard root is protected by the server-side session check; the login page and health endpoint are public.
 
-- All stored event timestamps are ISO-8601 UTC strings.
-- Convert to UK mailbox time or Africa/Cairo shift time only for presentation and schedule calculations.
-- `ticket_events` and `audit_log` are protected by database triggers against updates/deletes.
+Verify:
+
+- `GET /api/health` returns `ok: true` and identifies the Microsoft OIDC authentication mode.
+- Opening the application root without a session redirects to `/login.html`.
+- The Microsoft sign-in button redirects to the configured organisation tenant.
+- A pre-provisioned account can sign in and reach the dashboard.
+- An account absent from `app_users` is rejected.
+- The profile control signs out and revokes the session.
+
+## 6. Security tests
+
+Before considering even a controlled pilot, verify:
+
+1. Unauthenticated requests to `/api/me`, team analytics and agent ticket routes return 401.
+2. Invalid, expired, wrong-tenant, wrong-audience or nonce-mismatched ID tokens are rejected.
+3. A Microsoft account not present in the D1 allowlist is rejected.
+4. An inactive D1 account is rejected, including when it has an existing session.
+5. Deactivated/revoked sessions cannot access protected routes.
+6. An Agent calling team overview or agent-directory routes receives 403.
+7. An Agent ticket query is scoped using the server-side `agent_id`.
+8. Browser-supplied role or agent ID values have no effect on authorisation.
+9. Logout revokes the D1 session and clears the browser cookie.
+10. No ticket/dispatch write endpoint is enabled.
+
+## 7. Data and metric integrity
+
+- Store event timestamps as ISO-8601 UTC strings.
+- Convert to UK mailbox time or Africa/Cairo shift time only for display and schedule calculations.
+- `ticket_events` and `audit_log` are append-only; corrections are represented by new events.
 - Deduplicate source retries with `source_event_key` and/or `idempotency_key`.
-- The first-assignment share must be derived from each distinct ticket's initial assignment event, never from all later assignment events.
-- Handover, recovery and reassignment are separate event types.
-- Active handling time must be calculated only from explicit start/pause/resume/end sessions in `handling_sessions`.
+- First-assignment share derives from each distinct ticket's initial assignment event, not later assignment events.
+- Handover, recovery and reassignment remain separate event types.
+- Active handling time is calculated only from explicit start/pause/resume/end sessions.
 - Outstanding workload is a current-state snapshot, not a historical allocation-share metric.
-- Brand counts must use validated `brand_id`; uncertain tickets belong in Other / unclassified.
+- Brand counts use validated `brand_id`; uncertain tickets remain Other / unclassified.
 
 ## Not yet implemented
 
-- Frontend sign-in/session UX and API connection.
-- User/agent provisioning interface.
+- User/agent provisioning interface and approval workflow.
 - Outlook/Excel read-only ingestion and reconciliation.
 - Source-event queue processor and retry policy.
 - Ticket ingestion/write API.
 - Configuration approval workflow and operational write controls.
-- Production logging/alerting, backup policy, retention policy and formal security review.
+- Production hosting and approved company domain.
+- Production monitoring, alerting, backup/restore, retention policy and formal security/privacy review.
 
-These are deliberate follow-on steps, not implied capabilities.
+These are deliberate follow-on items. This staging foundation must not be represented as connected to live operations.
