@@ -8,7 +8,7 @@ This repository currently contains a demonstration-only dashboard. It has no aut
 
 A private GitHub repository controls source-code visibility only. It does not automatically protect a website deployed from that repository.
 
-Do not publish a production dashboard or add real ticket, colleague, workload or performance information until an access-control layer is configured.
+The static demonstration UI may be published publicly only while it contains synthetic records and anonymised placeholder members. Do not add real ticket, colleague, workload or performance information, credentials, or production endpoints until an access-control layer is configured.
 
 ## Required before production
 
