@@ -4,6 +4,21 @@
 
 A management-grade operations intelligence platform for the VWG Brand Support shared-mailbox operation. It combines management insight, workforce management, dispatch controls and a durable audit trail.
 
+## Visual identity
+
+Dispatcher 2.0 uses a **Warm Graphite** palette to remain part of the VWG Brand Support product family without duplicating the Knowledge Base's cool midnight / cyan / violet appearance.
+
+- Warm charcoal canvas: `#171514`
+- Graphite / espresso navigation: `#211a18` and `#2a211e`
+- Raised panels: `#251f1d` and `#302522`
+- Primary coral: `#f1846f`
+- Copper: `#d49a68`
+- Restrained plum accent: `#a88bb8`
+- Soft sage for positive states: `#8fb39a`
+- Warm ivory text: `#f4ede7`
+
+Keep the exact VW mark, typography family, rounded component language and restrained glow treatment as shared cues. The Knowledge Base retains its cool neon cyan/violet emphasis; Dispatcher uses warm graphite, coral and copper to feel like the operational command product. Avoid reintroducing navy-blue as a dominant surface or primary accent.
+
 ## Confirmed product decisions
 
 - Standalone web application and separate GitHub repository.
