@@ -1,0 +1,90 @@
+name: Validate Dispatcher secure backend foundation
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "worker/**"
+      - "migrations/**"
+      - "wrangler.toml"
+      - "package.json"
+      - ".github/workflows/validate-backend.yml"
+  pull_request:
+    paths:
+      - "worker/**"
+      - "migrations/**"
+      - "wrangler.toml"
+      - "package.json"
+      - ".github/workflows/validate-backend.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install Worker dependencies
+        run: npm install
+      - name: Check Worker JavaScript syntax
+        run: npm run check
+      - name: Validate D1 schema in SQLite
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          db = sqlite3.connect(":memory:")
+          db.execute("PRAGMA foreign_keys = ON")
+          sql = Path("migrations/0001_initial.sql").read_text()
+          db.executescript(sql)
+
+          expected = {
+              "app_users", "agents", "inboxes", "brands",
+              "agent_inbox_eligibility", "agent_shifts", "tickets",
+              "ticket_events", "handling_sessions", "dispatch_config_versions",
+              "audit_log", "integration_sync_runs", "integration_inbox"
+          }
+          actual = {row[0] for row in db.execute(
+              "SELECT name FROM sqlite_master WHERE type='table'"
+          )}
+          missing = expected - actual
+          if missing:
+              raise SystemExit(f"Missing tables: {sorted(missing)}")
+
+          inboxes = db.execute("SELECT COUNT(*) FROM inboxes").fetchone()[0]
+          brands = db.execute("SELECT COUNT(*) FROM brands").fetchone()[0]
+          if inboxes != 4 or brands != 7:
+              raise SystemExit(f"Unexpected reference data: inboxes={inboxes}, brands={brands}")
+
+          try:
+              db.execute("""
+                INSERT INTO ticket_events (id, ticket_id, event_type, occurred_at)
+                VALUES ('bad', 'missing-ticket', 'received', '2026-01-01T00:00:00Z')
+              """)
+              raise SystemExit("Foreign-key constraint was not enforced")
+          except sqlite3.IntegrityError:
+              pass
+
+          print("D1 schema validation passed: tables, reference rows and foreign keys.")
+          PY
+      - name: Check access-control and safety boundaries
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          worker = Path("worker/index.js").read_text()
+          if "jwtVerify" not in worker or "ACCESS_AUD" not in worker:
+              raise SystemExit("Access JWT verification is missing")
+          if "FROM app_users WHERE email" not in worker:
+              raise SystemExit("Database-backed identity allowlist is missing")
+          if "Operational write routes are not enabled" not in worker:
+              raise SystemExit("Write-operation safety boundary is missing")
+          print("Backend safety-boundary checks passed.")
+          PY
