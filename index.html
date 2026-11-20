@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101827">
-  <title>VWG Dispatch Intelligence</title>
-  <meta name="description" content="VWG Brand Support Dispatch Intelligence dashboard prototype">
+  <title>VWG Dispatch Intelligence | Dispatcher 2.0</title>
+  <meta name="description" content="VWG Brand Support Dispatch Intelligence operations dashboard prototype">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -15,26 +15,36 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <a class="brand" href="/dispatch/" aria-label="VWG Dispatch Intelligence home">
+      <a class="brand" href="/" aria-label="VWG Dispatch Intelligence home">
         <span class="brand-symbol"><span>D</span></span>
         <span class="brand-copy"><strong>VWG</strong><small>DISPATCH INTELLIGENCE</small></span>
       </a>
-
-      <div class="workspace-label">WORKSPACE</div>
-      <nav class="primary-nav" aria-label="Main navigation">
+      <div class="workspace-label">OPERATIONS WORKSPACE</div>
+      <nav class="primary-nav" id="primaryNav" aria-label="Main navigation">
+        <div class="nav-group-label">COMMAND</div>
         <button class="nav-item active" type="button" data-view="overview"><span class="nav-icon">◫</span><span>Overview</span></button>
-        <button class="nav-item" type="button" data-view="brands"><span class="nav-icon">◉</span><span>Brand insights</span></button>
-        <button class="nav-item" type="button" data-view="folders"><span class="nav-icon">▤</span><span>Folder share</span></button>
+        <button class="nav-item" type="button" data-view="live"><span class="nav-icon">◉</span><span>Live operations</span><span class="nav-count">4</span></button>
+        <div class="nav-group-label">ANALYTICS</div>
+        <button class="nav-item" type="button" data-view="tickets"><span class="nav-icon">▤</span><span>Ticket analytics</span></button>
+        <button class="nav-item" type="button" data-view="brands"><span class="nav-icon">◈</span><span>Brand insights</span></button>
+        <button class="nav-item" type="button" data-view="workflow"><span class="nav-icon">⌁</span><span>Workflow analytics</span></button>
+        <button class="nav-item" type="button" data-view="folders"><span class="nav-icon">▦</span><span>Folder share</span></button>
         <button class="nav-item" type="button" data-view="team"><span class="nav-icon">♧</span><span>Team performance</span></button>
-        <button class="nav-item" type="button" data-view="operations"><span class="nav-icon">⌘</span><span>Operations control</span><span class="nav-soon">Preview</span></button>
+        <button class="nav-item" type="button" data-view="my"><span class="nav-icon">◎</span><span>My performance</span></button>
+        <div class="nav-group-label">WORKFORCE & CONTROL</div>
+        <button class="nav-item" type="button" data-view="roster"><span class="nav-icon">▣</span><span>Roster & coverage</span></button>
+        <button class="nav-item" type="button" data-view="rules"><span class="nav-icon">⌘</span><span>Dispatch configuration</span></button>
+        <div class="nav-group-label">SYSTEM</div>
+        <button class="nav-item" type="button" data-view="reliability"><span class="nav-icon">◇</span><span>Reliability centre</span></button>
+        <button class="nav-item" type="button" data-view="audit"><span class="nav-icon">◷</span><span>Audit history</span></button>
+        <button class="nav-item" type="button" data-view="reports"><span class="nav-icon">↗</span><span>Reports & exports</span></button>
+        <button class="nav-item" type="button" data-view="admin"><span class="nav-icon">⚙</span><span>Administration</span></button>
       </nav>
-
       <div class="sidebar-spacer"></div>
       <div class="sidebar-note">
         <span class="status-dot"></span>
         <div><strong>Prototype environment</strong><small>Sample data · Not connected</small></div>
       </div>
-      <div class="back-link">VWG BRAND SUPPORT · OPERATIONS WORKSPACE</div>
       <div class="sidebar-footer">VWG BRAND SUPPORT <span>•</span> DISPATCH 2.0</div>
     </aside>
 
@@ -43,13 +53,17 @@
         <div class="mobile-brand"><span class="brand-symbol small"><span>D</span></span><strong>DISPATCH INTELLIGENCE</strong></div>
         <div class="topbar-context"><span class="context-kicker">OPERATIONS PLATFORM</span><span class="context-divider">/</span><span id="topbarPage">Overview</span></div>
         <div class="topbar-tools">
+          <label class="global-search" aria-label="Search dashboard">
+            <span>⌕</span><input id="globalSearch" type="search" placeholder="Search tickets, members…" autocomplete="off">
+            <kbd>⌘ K</kbd>
+          </label>
           <label class="filter-control">
             <span>PERIOD</span>
             <select id="periodSelect" aria-label="Select reporting period">
               <option value="today">Today</option>
-              <option value="week">Last 7 days</option>
-              <option value="month" selected>Last 30 days</option>
-              <option value="quarter">Last 90 days</option>
+              <option value="week">7 days</option>
+              <option value="month" selected>30 days</option>
+              <option value="quarter">90 days</option>
             </select>
           </label>
           <label class="filter-control folder-global-filter">
@@ -63,7 +77,7 @@
             </select>
           </label>
           <span class="demo-badge"><span></span> DEMO DATA</span>
-          <div class="user-avatar" aria-label="Prototype account">DI</div>
+          <button class="user-avatar" id="profileButton" type="button" aria-label="Prototype profile">DI</button>
         </div>
       </header>
 
@@ -72,10 +86,11 @@
       </main>
       <footer class="app-footer">
         <span>VWG DISPATCH INTELLIGENCE</span>
-        <span>Prototype preview · No Outlook or Excel connection</span>
+        <span>Prototype preview · No Outlook or Excel connection · All figures synthetic</span>
       </footer>
     </div>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div id="modalRoot"></div>
 </body>
 </html>
