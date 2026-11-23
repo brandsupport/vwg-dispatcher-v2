@@ -1,5 +1,6 @@
 /* VWG Dispatch Intelligence — complete UI foundation.
  * All records are synthetic. This prototype has no live data or operational integration.
+ * Dispatch Configuration 2.0 remains a local planning surface with no operational write path.
  */
 const FOLDERS = [
   { id: "agency", name: "Agency Detags", short: "Agency", received: 230, assigned: 218, resolved: 165, open: 50, color: "#ff5c91" },
@@ -91,7 +92,8 @@ const state = {
   selectedAgent:null, paused:false, pausedFolders:{}, modal:null,
   liveStatus:"all", liveOwner:"all", liveBrand:"all", liveSort:"oldest", liveSearch:"",
   ticketStatus:"all", ticketBrand:"all", ticketOwner:"all", ticketSort:"oldest", ticketSearch:"",
-  rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null
+  rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null,
+  configPreviewFolder:"agency", configPreviewWeight:50
 };
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
@@ -1066,18 +1068,74 @@ function renderRoster(){
     '</div>'+
     '<div class="roster-final-note"><strong>Before this becomes operational:</strong> load the approved fortnightly rota, define minimum cover by time and inbox, connect timestamped availability, validate inbox eligibility and add authenticated preview/approval/write controls. This screen does not change the Outlook dispatcher or Excel tracker.</div>';
 }
+function configurationPreviewRows(folderId,weightPct){
+  const folder=FOLDERS.find(item=>item.id===folderId);
+  if(!folder)return [];
+  const eligible=AGENTS.filter(agent=>(agent.eligibleFolders||[]).includes(folderId));
+  if(!eligible.length)return [];
+  const loads=eligible.map(agent=>Number(agent.open)||0);
+  const lowest=Math.min(...loads);
+  const highest=Math.max(...loads);
+  const spread=highest-lowest;
+  const weight=Math.max(0,Math.min(100,Number(weightPct)||0))/100;
+  return eligible.map(agent=>({
+    id:agent.id,
+    name:agent.name,
+    shift:agent.shift,
+    open:Number(agent.open)||0,
+    score:spread===0?100:100-(((Number(agent.open)||0)-lowest)/spread)*weight*100
+  })).sort((a,b)=>b.score-a.score||a.open-b.open||a.name.localeCompare(b.name));
+}
+function configurationPreviewResults(){
+  const folder=FOLDERS.find(item=>item.id===state.configPreviewFolder)||FOLDERS[0];
+  const rows=configurationPreviewRows(folder.id,state.configPreviewWeight);
+  return '<div class="config-preview-summary"><div><span>Inbox scope</span><strong>'+esc(folder.name)+'</strong></div><div><span>Eligible sample profiles</span><strong>'+rows.length+' / '+AGENTS.length+'</strong></div><div><span>Open-work influence</span><strong>'+state.configPreviewWeight+'%</strong></div></div>'+
+    '<div class="config-preview-list">'+rows.slice(0,6).map((agent,index)=>'<div class="config-preview-row"><span class="config-preview-rank">'+String(index+1).padStart(2,"0")+'</span><div class="config-preview-member"><strong>'+esc(agent.name)+'</strong><small>'+esc(agent.shift)+' shift · '+agent.open+' open sample tickets</small></div><div class="config-preview-score"><div class="config-score-track"><span style="width:'+agent.score.toFixed(1)+'%"></span></div><strong>'+agent.score.toFixed(0)+' pts</strong></div></div>').join("")+'</div>'+
+    '<div class="config-preview-footnote">Priority order only. This uses the global, synthetic open-work snapshot and the sample inbox-eligibility list. It does not inspect timestamped availability, create an assignment, or predict a live dispatch outcome.</div>';
+}
+function configRuleCard(title,summary,proposal,dependency,scope){
+  return '<article class="config-rule-card"><div class="config-rule-top"><span class="config-rule-symbol">⌘</span>'+statusPill("Not configured")+'</div><h3>'+title+'</h3><p>'+summary+'</p><div class="config-rule-detail"><span>Proposed design</span><strong>'+proposal+'</strong></div><div class="config-rule-detail"><span>Required source / control</span><strong>'+dependency+'</strong></div><div class="config-rule-foot"><span>'+scope+'</span><span>DESIGN PROPOSAL</span></div></article>';
+}
 function renderRules(){
-  pageContent.innerHTML=heading("DISPATCH CONFIGURATION","Configure how work is allocated","Review fairness, eligibility and routing rules. Changes are preview-only in this prototype.",'<button class="btn btn-secondary" data-action="rules-preview">Review configuration</button>')+
-    '<div class="prototype-warning"><strong>No live controls.</strong> These settings are visual examples only. They do not change the current Outlook dispatcher or Excel tracker.</div>'+
-    '<div class="control-grid">'+
-      configCard("Global allocation","Balance work across all eligible agents and all four inboxes.","Fairness model","Global workload weighting","Enabled")+
-      configCard("Workload weighting","Use current open workload to avoid repeatedly assigning to a heavily loaded agent.","Weighting","Current open tickets","Enabled")+
-      configCard("Shift eligibility","Only allocate to agents in the active scheduled window.","Eligibility","Roster and local shift time","Required")+
-      configCard("Inbox routing","Respect folder-specific eligibility and monitored inbox boundaries.","Routing","Four configured inboxes","Enabled")+
-      configCard("Recovery behaviour","Restore a valid original assignment when an interrupted workflow is detected.","Recovery","Preserve original assignee","Review")+
-      configCard("Assignment safeguards","Prevent duplicates, stale writes and concurrent conflicting actions.","Protection","Idempotency and audit","Required")+
+  const eligibility=FOLDERS.map(folder=>{
+    const count=AGENTS.filter(agent=>(agent.eligibleFolders||[]).includes(folder.id)).length;
+    return '<div class="config-routing-row"><div><strong>'+esc(folder.name)+'</strong><small>'+folder.id.toUpperCase()+'</small></div><strong>'+count+' / '+AGENTS.length+'</strong><span>'+statusPill("Illustrative")+'</span></div>';
+  }).join("");
+  pageContent.innerHTML=heading("DISPATCH CONFIGURATION 2.0","Design the rules before they go live.","A manager workspace for fairness, workload weighting, inbox eligibility, recovery safeguards and controlled change governance. Everything here is a design proposal, not an active dispatcher setting.",'<button class="btn btn-secondary" data-action="rules-preview">Review scenario</button><button class="btn btn-primary" data-action="export-config">↓ Export rule proposal</button>')+
+    '<div class="config-demo-strip"><span><i></i> DESIGN PREVIEW · READ ONLY</span><span>Configuration state <b>Not configured</b></span><span>Outlook / Excel <b>Not connected</b></span><span>Apply permissions <b>Unavailable</b></span></div>'+
+    '<div class="config-status-grid">'+
+      '<article><span>GLOBAL ALLOCATION MODEL</span><strong>Not configured</strong><small>One cross-inbox policy is proposed</small></article>'+
+      '<article><span>APPROVED ROSTER</span><strong>Not connected</strong><small>Egypt-local schedule source required</small></article>'+
+      '<article><span>AVAILABILITY GATE</span><strong>Not connected</strong><small>Timestamped break and absence feed required</small></article>'+
+      '<article><span>WRITE / AUDIT PATH</span><strong>Unavailable</strong><small>No backend or persistent audit service</small></article>'+
     '</div>'+
-    panel("Configuration governance","Proposed review and activation lifecycle",'<div class="lifecycle"><div><b>01</b><strong>Draft</strong><small>Manager prepares a change.</small></div><i>→</i><div><b>02</b><strong>Validate</strong><small>Coverage and conflicts checked.</small></div><i>→</i><div><b>03</b><strong>Approve</strong><small>Higher authorisation if required.</small></div><i>→</i><div><b>04</b><strong>Apply</strong><small>Execution result verified.</small></div><i>→</i><div><b>05</b><strong>Audit</strong><small>Previous version retained.</small></div></div>');
+    '<div class="config-section-heading"><div><h2>Proposed dispatch policy</h2><p>Six control areas. None is currently enabled or connected.</p></div><span class="subtle-tag">ALL NOT CONFIGURED</span></div>'+
+    '<div class="config-rule-grid">'+
+      configRuleCard("Global allocation model","Use one fairness view across all four shared inboxes, rather than resetting fairness inside each folder.","Shared eligible-agent pool with a single cross-inbox workload view.","Stable ticket identity and a common allocation ledger.","CROSS-INBOX FAIRNESS")+
+      configRuleCard("Workload weighting","Use current open workload as a balancing input, separate from historical first-assignment share.","Configurable open-work influence; proposed starting point 50%.","Trusted current-state snapshot with a defined refresh time.","CURRENT OPEN WORK")+
+      configRuleCard("Shift and availability eligibility","Only consider people whose approved Egypt-local shift is active and whose timestamped status permits work.","Approved rota plus timestamped Available / Break / Leave state.","Fortnightly roster, timezone-aware boundaries and availability events.","ELIGIBILITY GATE")+
+      configRuleCard("Four-inbox routing matrix","Apply explicit eligibility for Agency Detags, Detags, Transfers and Unadopts before scoring candidates.","Inbox-specific allow-list; no implicit routing across folders.","Manager-approved member-to-inbox mapping and mailbox boundary checks.","ROUTING CONTROL")+
+      configRuleCard("Recovery behaviour","Preserve ownership during interrupted workflows and avoid silent reassignment on recovery.","Restore the original owner when still valid; otherwise hold for review.","Durable assignment record, recovery queue and idempotent retry key.","OWNERSHIP SAFETY")+
+      configRuleCard("Assignment safeguards","Prevent duplicate allocations, conflicting concurrent writes and unverified success states.","Idempotency key, atomic claim / version check, retry policy and append-only audit.","Server-side dispatcher, transaction-capable store and verified write response.","EXECUTION SAFETY")+
+    '</div>'+
+    '<div class="grid-two config-mid-grid">'+
+      panel("Four-inbox eligibility baseline","The sample directory currently marks every anonymised profile as eligible for each inbox. This is illustrative only.",'<div class="config-routing-list">'+eligibility+'</div><div class="config-inline-note">Do not treat this matrix as approved production access. Eligibility must come from a manager-owned, versioned source and be revalidated when a ticket is dispatched.</div>','<span class="subtle-tag">SAMPLE BASELINE · 14 PROFILES</span>')+
+      panel("Time and workload boundaries","Keep unlike measures separate so the fairness model cannot quietly become a performance score.",'<div class="config-principle-list"><div><strong>UK mailbox time</strong><span>Received and event timestamps stay in the UK source timezone.</span></div><div><strong>Egypt-local shifts</strong><span>Roster windows use explicit timezone-aware dates and daylight-saving rules.</span></div><div><strong>Initial allocations</strong><span>Distinct first assignments remain a historical distribution measure.</span></div><div><strong>Open workload</strong><span>A current snapshot is a separate balancing input, never an assignment-history total.</span></div><div><strong>Availability</strong><span>Untimestamped snapshots cannot prove someone is currently available.</span></div></div>','<span class="subtle-tag">METRIC GUARDRAILS</span>')+
+    '</div>'+
+    panel("Safe scenario preview","Explore how sample open workload would influence candidate priority for one inbox. This is a local calculation, not a routing test.",'<div id="configPreviewPanel" class="config-preview-workspace"><div class="config-preview-controls"><label><span>INBOX SCOPE</span><select class="live-select" data-config-scenario="folder">'+FOLDERS.map(folder=>'<option value="'+folder.id+'" '+(state.configPreviewFolder===folder.id?"selected":"")+'>'+esc(folder.name)+'</option>').join("")+'</select></label><label class="config-weight-control"><span>OPEN-WORK INFLUENCE <strong id="configWeightValue">'+state.configPreviewWeight+'%</strong></span><input type="range" min="0" max="100" step="10" value="'+state.configPreviewWeight+'" data-config-scenario="weight" aria-label="Open-work influence percentage"><small>0% = equal priority · 100% = strongest influence from the sample open-work snapshot</small></label><button class="text-action" data-action="reset-config-preview">Reset scenario</button></div><div id="configPreviewResults">'+configurationPreviewResults()+'</div></div>','<span class="subtle-tag">LOCAL PREVIEW ONLY</span>')+
+    '<div class="config-section-heading"><div><h2>Change governance and release gates</h2><p>A configuration change must be reviewed, verified and auditable before it can affect allocation.</p></div><span class="subtle-tag">NO APPLY ACTION</span></div>'+
+    '<section class="panel config-governance-panel"><div class="config-lifecycle">'+
+      '<div><b>01</b><strong>Draft</strong><small>Proposal can be documented locally</small><em>DESIGN ONLY</em></div><i>→</i>'+
+      '<div><b>02</b><strong>Validate</strong><small>Coverage, conflicts and eligibility</small><em>BLOCKED · SOURCES MISSING</em></div><i>→</i>'+
+      '<div><b>03</b><strong>Approve</strong><small>Authorised manager and version review</small><em>BLOCKED · AUTH MISSING</em></div><i>→</i>'+
+      '<div><b>04</b><strong>Apply</strong><small>Backend-confirmed configuration write</small><em>BLOCKED · NO BACKEND</em></div><i>→</i>'+
+      '<div><b>05</b><strong>Audit</strong><small>Immutable before / after record</small><em>NOT CONFIGURED</em></div>'+
+    '</div></section>'+
+    '<div class="grid-two config-mid-grid">'+
+      panel("Production readiness checklist","Required before any proposed rule can be activated.",'<div class="config-gate-list"><div><span>01</span><strong>Approved roster and Week A / Week B rotation</strong>'+statusPill("Not connected")+'</div><div><span>02</span><strong>Timestamped availability and absence feed</strong>'+statusPill("Not connected")+'</div><div><span>03</span><strong>Verified inbox eligibility and manager owner</strong>'+statusPill("Not configured")+'</div><div><span>04</span><strong>Persistent ticket identity and allocation ledger</strong>'+statusPill("Not configured")+'</div><div><span>05</span><strong>Authenticated roles and approval policy</strong>'+statusPill("Not configured")+'</div><div><span>06</span><strong>Atomic writes, idempotency and audit persistence</strong>'+statusPill("Not configured")+'</div></div>')+
+      panel("Configuration safety contract","The demo will not claim that a requested operation succeeded.",'<div class="config-principle-list"><div><strong>Preview is not approval</strong><span>A local scenario never saves or changes the proposed rule set.</span></div><div><strong>Approval is not execution</strong><span>Only a backend-confirmed write can move a change to Applied.</span></div><div><strong>Failure stays visible</strong><span>Timeouts and write errors must remain exceptions, never green success states.</span></div><div><strong>History is append-only</strong><span>Every approved change records actor, reason, version, before / after values and outcome.</span></div></div>')+
+    '</div>'+
+    '<div class="config-final-note"><strong>Operational boundary:</strong> this screen does not update Outlook rules, the existing Excel tracker, live roster eligibility or the current dispatcher. The sample scenario and exported proposal are planning aids only. Production activation requires a private authenticated application, server-enforced permissions, approved source data, a protected write service and persistent audit history.</div>';
 }
 function configCard(title,copy,label,value,status){
   return '<article class="control-card"><div class="control-card-top"><span class="control-symbol">⌘</span>'+statusPill(status)+'</div><h3>'+title+'</h3><p>'+copy+'</p><div class="config-setting"><span>'+label+'</span><strong>'+value+'</strong></div><button class="panel-action" data-action="config-preview">Preview setting</button></article>';
@@ -1220,6 +1278,32 @@ function exportTeam(){
   ];
   csvDownload("dispatcher-sample-team-performance.csv",rows);
 }
+function exportConfiguration(){
+  const rows=[
+    ["DISPATCH CONFIGURATION 2.0 — DESIGN PROPOSAL ONLY"],
+    ["Status","Not configured. No rules are active and no settings are persisted."],
+    ["Scope","All four shared inboxes; cross-inbox fairness proposal."],
+    ["Scenario inbox",FOLDERS.find(folder=>folder.id===state.configPreviewFolder)?.name||"Agency Detags"],
+    ["Scenario open-work influence",state.configPreviewWeight+"%"],
+    ["Scenario method","Relative priority score from synthetic global open-work snapshots; no assignments created."],
+    [],
+    ["Control area","Proposed design","Required source / control","Status"],
+    ["Global allocation model","Shared eligible-agent pool across all four inboxes","Stable ticket identity and common allocation ledger","Not configured"],
+    ["Workload weighting","Configurable current open-work influence; illustrative default 50%","Timestamped current-state snapshot","Not configured"],
+    ["Shift and availability eligibility","Approved Egypt-local rota plus timestamped availability","Fortnightly roster and timezone-aware availability events","Not connected"],
+    ["Four-inbox routing","Explicit eligibility allow-list per inbox","Manager-owned versioned eligibility matrix","Not configured"],
+    ["Recovery behaviour","Restore original owner if valid; otherwise hold for review","Durable assignment record and idempotent recovery queue","Not configured"],
+    ["Assignment safeguards","Idempotency, atomic claim/version checks and append-only audit","Server-side write service and persistent transaction store","Not configured"],
+    [],
+    ["Release gate","Current state"],
+    ["Draft","Design proposal only"],
+    ["Validate","Blocked — source data not connected"],
+    ["Approve","Blocked — authentication and approval workflow missing"],
+    ["Apply","Blocked — no backend write path"],
+    ["Audit","Not configured — no persistent audit store"]
+  ];
+  csvDownload("dispatcher-sample-dispatch-configuration-proposal.csv",rows);
+}
 function exportRoster(){
   const agents=rosterFilteredAgents();
   const segments=coverageSegments(AGENTS);
@@ -1285,7 +1369,10 @@ function handleAction(action){
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
   if(action==="reset-roster-filters"){state.rosterSearch="";state.rosterShift="all";state.rosterAvailability="all";state.selectedRosterAgent=null;render();return;}
-  if(action==="rules-preview"||action==="config-preview"){showToast("Configuration preview only. No dispatch rules have changed.");return;}
+  if(action==="rules-preview"){const target=document.getElementById("configPreviewPanel");if(target)target.scrollIntoView({behavior:"smooth",block:"center"});return;}
+  if(action==="reset-config-preview"){state.configPreviewFolder="agency";state.configPreviewWeight=50;renderRules();showToast("Local scenario reset. No dispatch settings were changed.");return;}
+  if(action==="export-config"){exportConfiguration();return;}
+  if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
 document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click",()=>navigate(btn.dataset.view)));
 document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
@@ -1308,8 +1395,19 @@ document.addEventListener("change",event=>{
     const key=rosterFilter.dataset.rosterFilter;
     if(["rosterShift","rosterAvailability"].includes(key)){state[key]=rosterFilter.value;renderRoster();}
   }
+  const configFolder=event.target.closest('[data-config-scenario="folder"]');
+  if(configFolder){state.configPreviewFolder=configFolder.value;renderRules();}
 });
 document.addEventListener("input",event=>{
+  const configWeight=event.target.closest('[data-config-scenario="weight"]');
+  if(configWeight){
+    state.configPreviewWeight=Math.max(0,Math.min(100,Number(configWeight.value)||0));
+    const value=document.getElementById("configWeightValue");
+    const results=document.getElementById("configPreviewResults");
+    if(value)value.textContent=state.configPreviewWeight+"%";
+    if(results)results.innerHTML=configurationPreviewResults();
+    return;
+  }
   const ticketSearch=event.target.closest("[data-ticket-search]");
   if(ticketSearch){
     state.ticketSearch=ticketSearch.value;
