@@ -145,9 +145,13 @@ jobs:
           const teamStart = js.indexOf('function renderTeam(){');
           const teamEnd = js.indexOf('\nfunction agentDetail(', teamStart);
           const teamView = teamStart >= 0 && teamEnd > teamStart ? js.slice(teamStart, teamEnd) : '';
-          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Member snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED','Not available']) {
+          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Member snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED']) {
             if (!teamView.includes(text)) throw new Error('Team Performance 2.0 section or disclosure missing: ' + text);
           }
+          const teamEvidenceStart = js.indexOf('function teamEvidencePanel(');
+          const teamEvidenceEnd = js.indexOf('\nfunction renderTeam(', teamEvidenceStart);
+          const teamEvidence = teamEvidenceStart >= 0 && teamEvidenceEnd > teamEvidenceStart ? js.slice(teamEvidenceStart, teamEvidenceEnd) : '';
+          if (!teamEvidence.includes('Not available')) throw new Error('Team evidence-gated measures must be clearly marked unavailable.');
           for (const text of ['.team-demo-strip','.team-profile-grid','.team-profile-card','.team-workload-row','.team-agent-detail','.team-event-ledger','.team-private-state','.team-evidence-list']) {
             if (!css.includes(text)) throw new Error('Team Performance styling missing: ' + text);
           }
