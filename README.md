@@ -120,6 +120,24 @@ The integration-readiness list deliberately reports Outlook event ingestion, the
 
 The CSV export includes only the currently filtered synthetic case records and labels the file as demonstration data. It is an investigation example, not an operational incident export.
 
+### Administration & Security 2.0
+
+Administration & Security 2.0 is a **proposed governance catalogue**, not an active identity or security administration service. Its four role templates (Platform Administrator, Operations Manager, Team Agent and Read-only Auditor), permission comparison matrix and access-request examples are design material for policy review. The four access requests are synthetic illustrations and do not represent real colleagues, accounts or decisions.
+
+The proposed role model follows least privilege and separation of duties:
+- Platform administrators own identity lifecycle, security policy, integration registration and retention administration; routine ticket handling should use a separate lower-privilege identity.
+- Operations managers receive proposed operational queue, roster, dispatch-proposal, reporting and audit-read access, but not platform identity, security, secret or retention administration.
+- Team agents are scoped to assigned work and personal reporting. Access to other agents' private performance, full audit exports, platform settings and configuration administration is not proposed.
+- Read-only auditors receive proposed audit and approved reporting access, without ticket assignment, roster changes or platform administration.
+
+The matrix is not enforced by the browser. Hiding a button or filtering a menu is not an authorisation control. Before production, every protected API and object must validate an authenticated principal and an explicit permission on the server, default to deny, restrict each record to an authorised scope, and test privilege escalation and cross-user access. Privileged changes require independent review where appropriate, documented reason, time-bounded elevation and an auditable result.
+
+The security baseline reports identity provider, MFA, server-side authorisation, session lifecycle, request protection, rate limiting, audit telemetry, secret management, encryption and backup controls as Not configured / Not connected / Not verified. No control is represented as active. A production session design must use server-issued sessions, secure HttpOnly and SameSite cookies, expiry, rotation and revocation; validate CSRF and CORS boundaries; protect exports; and log privileged actions.
+
+No retention period is selected or implied. Ticket content, workflow events, security events, exports, reports and backups each require a separately approved purpose, owner, retention rule, legal-hold process and defensible deletion or anonymisation method. The prototype cannot make a legal retention decision.
+
+The integration register distinguishes Outlook mailbox events, the Excel tracker, identity provider, database/audit store and secret manager. No connector is connected and no credential is held in the browser. Production secrets must live in a protected server-side vault and be accessed through scoped service identities with rotation, access logging and revocation. The CSV is a proposed design blueprint only and is not an executable configuration file.
+
 ## Planned application areas
 
 1. Overview
