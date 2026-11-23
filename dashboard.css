@@ -1424,3 +1424,96 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Management Overview — command-centre information hierarchy */
+.overview-demo-strip{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;margin:-8px 0 16px;padding:11px 14px;border:1px solid rgba(255,85,132,.25);border-radius:11px;background:linear-gradient(100deg,rgba(73,15,39,.72),rgba(24,8,17,.76));color:#c4a8b4;font-size:9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+.overview-demo-strip>span{display:inline-flex;align-items:center;gap:6px}
+.overview-demo-strip b{color:#fff0f5}
+.overview-demo-label{color:#ff9ab6;font-size:8px;font-weight:900;letter-spacing:.11em}
+.overview-demo-label i{width:7px;height:7px;border-radius:50%;background:#ff174f;box-shadow:0 0 10px rgba(255,23,79,.9)}
+.overview-metric-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:-3px 0 17px}
+.overview-metric-tile{min-width:0;padding:12px 14px;border:1px solid rgba(255,87,135,.19);border-radius:11px;background:linear-gradient(145deg,rgba(48,14,31,.76),rgba(20,8,16,.8));box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.overview-metric-tile span,.overview-metric-tile strong,.overview-metric-tile small{display:block}
+.overview-metric-tile span{color:#b78e9e;font-size:8px;font-weight:900;letter-spacing:.085em}
+.overview-metric-tile strong{margin-top:7px;color:#fff0f5;font:800 21px Manrope,sans-serif;letter-spacing:-.035em}
+.overview-metric-tile small{margin-top:3px;color:#a98b99;font-size:8px;line-height:1.45}
+.overview-metric-na strong{font-size:15px;color:#ffd08a}
+.overview-primary-grid{grid-template-columns:minmax(0,1.08fr) minmax(330px,.92fr);align-items:stretch}
+.overview-primary-grid>.panel,.overview-secondary-grid>.panel{min-width:0}
+.overview-chart-note{margin-top:10px;color:#a98a98;font-size:8px;line-height:1.5}
+.overview-risk-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 9px}
+.overview-risk-stats>div,.overview-team-summary>div{min-width:0;padding:9px;border:1px solid rgba(255,91,139,.17);border-radius:9px;background:rgba(55,15,34,.58)}
+.overview-risk-stats strong,.overview-risk-stats span,.overview-team-summary strong,.overview-team-summary span{display:block}
+.overview-risk-stats strong{color:#fff0f5;font:800 20px Manrope,sans-serif}
+.overview-risk-stats span{margin-top:2px;color:#ad8c9a;font-size:8px}
+.overview-risk-caption{margin:4px 0 8px;color:#a88997;font-size:8px;line-height:1.45}
+.overview-risk-list{display:grid;gap:3px}
+.overview-risk-ticket{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:9px;width:100%;padding:9px 0;border:0;border-bottom:1px solid rgba(255,100,148,.13);background:transparent;text-align:left}
+.overview-risk-ticket:last-child{border-bottom:0}
+.overview-risk-ref{min-width:0;color:#ffedf3;font-size:9px;font-weight:800}
+.overview-risk-ref small{display:block;max-width:190px;margin-top:3px;overflow:hidden;color:#a88a98;font-size:8px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.overview-risk-age{color:#d9bdc9;font-size:8px;white-space:nowrap}
+.overview-section-heading{margin-top:17px}
+.overview-inbox-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.overview-inbox-card{min-width:0;padding:13px;border:1px solid rgba(255,87,135,.20);border-radius:12px;background:linear-gradient(145deg,rgba(49,14,31,.78),rgba(20,8,16,.82));box-shadow:0 13px 32px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.045)}
+.overview-inbox-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.overview-inbox-head strong{overflow:hidden;color:#fcebf1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.overview-inbox-head span{color:#b48c9b;font-size:8px;font-weight:800}
+.overview-inbox-open{display:flex;align-items:baseline;gap:7px;margin:13px 0 12px}
+.overview-inbox-open strong{color:#fff2f6;font:800 27px Manrope,sans-serif;letter-spacing:-.05em}
+.overview-inbox-open span{color:#b18e9d;font-size:8px}
+.overview-inbox-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.overview-inbox-metrics small,.overview-inbox-metrics b{display:block}
+.overview-inbox-metrics small{color:#a88796;font-size:7px;font-weight:800;letter-spacing:.04em}
+.overview-inbox-metrics b{margin-top:4px;color:#f7e5ec;font:700 11px Manrope,sans-serif}
+.overview-inbox-track{height:5px;margin-top:12px;overflow:hidden;border-radius:8px;background:rgba(255,255,255,.085)}
+.overview-inbox-track span{display:block;height:100%;border-radius:inherit;box-shadow:0 0 9px currentColor}
+.overview-inbox-foot{display:flex;justify-content:space-between;gap:5px;margin-top:7px;color:#ad8d9b;font-size:7px}
+.overview-team-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 11px}
+.overview-team-summary strong{color:#fff0f5;font:800 19px Manrope,sans-serif}
+.overview-team-summary span{margin-top:2px;color:#ad8c9a;font-size:8px}
+.overview-team-list{display:grid;gap:8px}
+.overview-team-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(65px,.9fr) 26px;align-items:center;gap:9px}
+.overview-team-person .member-cell{min-width:0;gap:6px}
+.overview-team-person .member-avatar{width:23px;height:23px;font-size:7px}
+.overview-team-person .member-name{font-size:8px}
+.overview-team-person .member-role{font-size:7px}
+.overview-team-bar{height:5px;overflow:hidden;border-radius:8px;background:rgba(255,255,255,.09)}
+.overview-team-bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#ff174f,#ff8fb1);box-shadow:0 0 9px rgba(255,23,79,.25)}
+.overview-team-row>strong{color:#f4dce5;font:800 10px Manrope,sans-serif;text-align:right}
+.overview-panel-foot{margin:10px 0 0;color:#a88998;font-size:8px;line-height:1.5}
+.overview-allocation-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-bottom:12px}
+.overview-allocation-summary>div{padding:9px;border:1px solid rgba(255,90,139,.17);border-radius:9px;background:rgba(55,15,34,.55)}
+.overview-allocation-summary strong,.overview-allocation-summary span{display:block}
+.overview-allocation-summary strong{color:#fff0f5;font:800 17px Manrope,sans-serif}
+.overview-allocation-summary span{margin-top:3px;color:#aa8998;font-size:7px;line-height:1.4}
+.overview-allocation-bars{display:grid;gap:9px}
+.overview-allocation-bars>div{display:grid;grid-template-columns:minmax(85px,1fr) 42px minmax(75px,1.15fr);align-items:center;gap:8px}
+.overview-allocation-bars span{overflow:hidden;color:#ddc4ce;font-size:8px;text-overflow:ellipsis;white-space:nowrap}
+.overview-allocation-bars b{color:#f9e9ef;font:700 9px Manrope,sans-serif;text-align:right}
+.overview-allocation-bars i{display:block;height:5px;overflow:hidden;border-radius:8px;background:rgba(255,255,255,.08)}
+.overview-allocation-bars em{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#ff174f,#ff8fb1)}
+.overview-integration-list .health-row{padding:9px 0}
+.overview-integration-list .health-copy strong{color:#f8e6ed;font-size:9px}
+.overview-integration-list .health-copy small{color:#ad8c9a;font-size:8px}
+.overview-final-note{margin-top:15px;padding:12px 14px;border:1px solid rgba(194,160,255,.20);border-radius:10px;background:rgba(104,67,145,.09);color:#c8b7dc;font-size:8px;line-height:1.6}
+.overview-final-note strong{color:#e0ceff}
+@media(max-width:1250px){
+  .overview-inbox-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .overview-primary-grid{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .overview-metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .overview-secondary-grid{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .overview-demo-strip{align-items:flex-start;flex-direction:column;gap:7px}
+  .overview-metric-strip{gap:7px}
+  .overview-metric-tile{padding:10px}
+  .overview-metric-tile strong{font-size:18px}
+  .overview-inbox-grid{grid-template-columns:1fr}
+  .overview-team-row{grid-template-columns:minmax(90px,1fr) minmax(50px,.8fr) 22px;gap:6px}
+  .overview-risk-ticket{grid-template-columns:minmax(0,1fr) auto}
+  .overview-risk-ticket .sla-pill{grid-column:2;grid-row:2;justify-self:end}
+}
