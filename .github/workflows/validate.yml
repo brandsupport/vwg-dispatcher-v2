@@ -56,6 +56,13 @@ jobs:
           if (!js.includes('Simulation only') || !js.includes('No live system affected')) {
             throw new Error('Operational controls must remain explicitly simulated.');
           }
+          for (const text of ['liveFilteredTickets','liveInboxCards','liveStatusTabs','data-live-search','data-live-filter','data-live-status','data-live-folder','exportLiveQueue']) {
+            if (!js.includes(text)) throw new Error('Live Operations feature missing: ' + text);
+          }
+          if (js.includes('data-action="toggle-dispatch"')) throw new Error('A simulated dispatch control must not be presented as an operational action.');
+          for (const text of ['.live-queue-layout','.live-inbox-grid','.live-status-tab','.live-coverage-row']) {
+            if (!css.includes(text)) throw new Error('Live Operations styling missing: ' + text);
+          }
           if (!css.includes('.sidebar') || !css.includes('@media') || !css.includes('.modal-card')) {
             throw new Error('Responsive layout or ticket detail modal styles are missing.');
           }
