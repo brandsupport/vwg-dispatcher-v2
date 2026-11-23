@@ -239,7 +239,7 @@ jobs:
           const configStart = js.indexOf('function renderRules(){');
           const configEnd = js.indexOf('\nfunction configCard(', configStart);
           const configView = configStart >= 0 && configEnd > configStart ? js.slice(configStart, configEnd) : '';
-          for (const text of ['DISPATCH CONFIGURATION 2.0','Proposed dispatch policy','Global allocation model','Workload weighting','Shift and availability eligibility','Four-inbox routing matrix','Recovery behaviour','Assignment safeguards','Safe scenario preview','Four-inbox eligibility baseline','Change governance and release gates','Production readiness checklist','Operational boundary','Not configured','Not connected','Blocked · NO BACKEND']) {
+          for (const text of ['DISPATCH CONFIGURATION 2.0','Proposed dispatch policy','Global allocation model','Workload weighting','Shift and availability eligibility','Four-inbox routing matrix','Recovery behaviour','Assignment safeguards','Safe scenario preview','Four-inbox eligibility baseline','Change governance and release gates','Production readiness checklist','Operational boundary','Not configured','Not connected','BLOCKED · NO BACKEND']) {
             if (!configView.includes(text)) throw new Error('Dispatch Configuration 2.0 section or safety disclosure missing: ' + text);
           }
           if (configView.includes('"Enabled"') || configView.includes('data-action="config-preview"')) {
