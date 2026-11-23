@@ -77,7 +77,7 @@ jobs:
           }
 
           const overviewStart = js.indexOf('function renderOverview(){');
-          const overviewEnd = js.indexOf('\\nfunction healthRow(', overviewStart);
+          const overviewEnd = js.indexOf('\nfunction healthRow(', overviewStart);
           const overview = overviewStart >= 0 && overviewEnd > overviewStart ? js.slice(overviewStart, overviewEnd) : '';
           for (const helper of ['overviewTrendData','overviewRiskSummary','overviewInboxSnapshot','overviewTeamPanel','overviewAllocationSummary','overviewIntegrationPanel']) {
             if (!js.includes('function ' + helper + '(')) throw new Error('Missing management overview component: ' + helper);
@@ -92,13 +92,13 @@ jobs:
             if (!css.includes(text)) throw new Error('Management overview styling missing: ' + text);
           }
           const trendStart = js.indexOf('function overviewTrendData(');
-          const trendEnd = js.indexOf('\\nfunction ', trendStart + 10);
+          const trendEnd = js.indexOf('\nfunction ', trendStart + 10);
           const trendFunction = trendStart >= 0 && trendEnd > trendStart ? js.slice(trendStart, trendEnd) : '';
           const distributeStart = js.indexOf('function distribute(');
-          const distributeEnd = js.indexOf('\\nfunction ', distributeStart + 10);
+          const distributeEnd = js.indexOf('\nfunction ', distributeStart + 10);
           const distributeFunction = distributeStart >= 0 && distributeEnd > distributeStart ? js.slice(distributeStart, distributeEnd) : '';
           if (!trendFunction || !distributeFunction) throw new Error('Overview trend calculation helpers are missing.');
-          const trendCheck = vm.runInNewContext(distributeFunction + '\\n' + trendFunction + '; overviewTrendData(1284, 1086)');
+          const trendCheck = vm.runInNewContext(distributeFunction + '\n' + trendFunction + '; overviewTrendData(1284, 1086)');
           if (trendCheck.received.length !== 12 || trendCheck.resolved.length !== 12 || trendCheck.received.reduce((a,b)=>a+b,0)!==1284 || trendCheck.resolved.reduce((a,b)=>a+b,0)!==1086) {
             throw new Error('Overview interval distribution does not reconcile to the selected totals.');
           }
