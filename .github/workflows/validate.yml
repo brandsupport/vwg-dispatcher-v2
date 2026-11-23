@@ -222,13 +222,17 @@ jobs:
           if (badCoverage.length !== 1 || badCoverage[0].start !== 600 || badCoverage[0].end !== 1200) {
             throw new Error('Roster invalid or overnight shift boundaries were not handled safely.');
           }
+          const gapCoverage = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"08:00",end:"10:00"},{shift:"Late",start:"11:00",end:"12:00"}])');
+          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No sample shift coverage") {
+            throw new Error('Roster coverage calculation must preserve zero-headcount gap intervals.');
+          }
           const eligibilityStart = js.indexOf('const AGENTS = AGENT_NAMES.map(');
           const eligibilityEnd = js.indexOf('\n}));', eligibilityStart) + 5;
           const agentDeclaration = eligibilityStart >= 0 && eligibilityEnd > eligibilityStart ? js.slice(eligibilityStart, eligibilityEnd) : '';
           if (!agentDeclaration.includes('eligibleFolders: ["agency","detags","transfers","unadopts"]')) {
             throw new Error('Sample inbox eligibility must be explicit for all four inboxes.');
           }
-          for (const text of ['availability timestamps','minimum staffing requirement','approved fortnightly rota']) {
+          for (const text of ['untimestamped snapshots','minimum staffing targets','fortnightly rotations']) {
             if (!readme.toLowerCase().includes(text.toLowerCase())) throw new Error('Roster data limitation missing from README: ' + text);
           }
 
