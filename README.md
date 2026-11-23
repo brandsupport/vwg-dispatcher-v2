@@ -141,6 +141,10 @@ The integration register distinguishes Outlook mailbox events, the Excel tracker
 Timezone governance is explicit: persist canonical timezone-aware UTC instants, display mailbox/ticket timestamps in **Europe/London**, and interpret roster and shift schedules in **Africa/Cairo**. Do not compare local wall-clock strings or apply a fixed offset across daylight-saving changes. Reporting cutoffs, late-arriving event treatment and holiday calendars remain unapproved until an owner defines them.
 
 
+## Readability and typography
+
+The shared dashboard typography has been increased slightly for easier scanning of headings, KPI labels, panel descriptions, tables, filters and status labels. The Reliability Centre, Audit History, Reports & Exports and Administration screens use a larger scoped type scale for their dense investigation details, permission matrices, review evidence and metadata. Responsive rules preserve horizontal scrolling for wide tables and stack the denser panels on narrow screens.
+
 ## Planned application areas
 
 1. Overview
