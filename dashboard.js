@@ -87,13 +87,109 @@ const AUDIT_EVENTS = [
   ["09:22:10","Assignment exception","System","Detags","Exception"],
   ["09:08:45","Ticket resolved","Agent 01","Agency Detags","Resolved"]
 ];
+
+/* Reliability Centre 2.0 — synthetic investigation records only */
+const RELIABILITY_EVENTS = [
+  {
+    id:"EXC-2108",time:"10:42:18",kind:"write_failure",type:"Write failure",severity:"critical",status:"Retry exhausted",
+    component:"Excel tracker adapter",folder:"detags",ticket:"DSP-10482",title:"Tracker write rejected after retry limit",
+    attempts:3,actor:"Sample dispatcher",owner:"Agent 02",idempotency:"SAMPLE-ASSIGN-10482-V4",
+    signal:"Three illustrative write attempts returned a rejected result. The sample record remains unresolved until a human reconciles the ticket and tracker state.",
+    impact:"One synthetic assignment record is held from further automatic processing.",
+    evidence:"Sample response: write rejected · attempt 3 of 3 · no verified commit acknowledgement.",
+    next:"Check workbook availability, access, row schema and existing tracker state. Reconcile the assignment before any controlled retry."
+  },
+  {
+    id:"EXC-2107",time:"10:38:12",kind:"recovery",type:"Recovery",severity:"warning",status:"Awaiting review",
+    component:"Recovery coordinator",folder:"agency",ticket:"DSP-10481",title:"Interrupted assignment needs ownership review",
+    attempts:2,actor:"Recovery queue",owner:"Agent 05",idempotency:"SAMPLE-RECOVERY-10481-R2",
+    signal:"A sample interrupted workflow was detected. The original owner is preserved in the record while a reviewer confirms that the original assignment is still valid.",
+    impact:"One synthetic ticket is held for review; no new owner is selected in this prototype.",
+    evidence:"Sample recovery marker found · prior owner Agent 05 · current assignment not verified from a live source.",
+    next:"Compare the current mailbox category and tracker row with the stored original assignment. Keep the original owner unless a documented manual decision overrides it."
+  },
+  {
+    id:"EXC-2106",time:"10:34:06",kind:"duplicate_delivery",type:"Duplicate delivery",severity:"info",status:"Suppressed (sample)",
+    component:"Event deduplicator",folder:"transfers",ticket:"DSP-10480",title:"Repeated delivery matched an existing event key",
+    attempts:2,actor:"Event processor",owner:"Agent 08",idempotency:"SAMPLE-EVENT-10480-DELIVERY-01",
+    signal:"A second copy of the same sample delivery matched the idempotency reference already recorded for the ticket event.",
+    impact:"One duplicate sample delivery was suppressed from the illustrative event stream.",
+    evidence:"Event reference SAMPLE-EVENT-10480-DELIVERY-01 · first-seen marker present · duplicate flag true.",
+    next:"In production, retain both delivery observations, link them to one canonical event and verify that only one assignment side effect exists."
+  },
+  {
+    id:"EXC-2105",time:"10:21:55",kind:"concurrency_conflict",type:"Concurrency conflict",severity:"warning",status:"Blocked (sample)",
+    component:"Assignment writer",folder:"detags",ticket:"DSP-10479",title:"Concurrent update detected before sample write",
+    attempts:1,actor:"Assignment writer",owner:"Agent 04",idempotency:"SAMPLE-CLAIM-10479-V12",
+    signal:"The sample assignment version changed between read and write, so the stale request was rejected rather than overwriting a newer state.",
+    impact:"One synthetic update was blocked. The event does not prove the live system has concurrency protection.",
+    evidence:"Illustrative expected version 12 · observed version 13 · write not applied.",
+    next:"Reload the canonical ticket state, compare the latest owner and event version, then prepare a fresh reviewed request."
+  },
+  {
+    id:"EXC-2104",time:"10:12:31",kind:"recovery",type:"Recovery",severity:"info",status:"Restored (sample)",
+    component:"Recovery coordinator",folder:"unadopts",ticket:"DSP-10478",title:"Original owner retained in sample recovery",
+    attempts:1,actor:"Recovery queue",owner:"Agent 11",idempotency:"SAMPLE-RECOVERY-10478-R1",
+    signal:"The illustrative recovery record found the original owner still eligible in the sample policy and recorded a restoration outcome.",
+    impact:"One sample recovery case reached a marked restored state. No mailbox or tracker write was performed by this UI.",
+    evidence:"Stored original owner Agent 11 · sample eligibility match · outcome label Restored (sample).",
+    next:"Production must confirm the mailbox category, tracker state and backend write acknowledgement before recording a recovery as complete."
+  },
+  {
+    id:"EXC-2103",time:"09:58:07",kind:"write_unknown",type:"Write outcome unknown",severity:"critical",status:"Retry exhausted",
+    component:"Excel tracker adapter",folder:"agency",ticket:"DSP-10477",title:"Tracker write timed out on all sample attempts",
+    attempts:3,actor:"Sample dispatcher",owner:"Agent 01",idempotency:"SAMPLE-ASSIGN-10477-V2",
+    signal:"Three illustrative attempts timed out without a confirmed response. The final state is unknown, not a verified failure or success.",
+    impact:"One synthetic assignment requires reconciliation before another write can be considered.",
+    evidence:"Sample response: timeout · attempts 1–3 · acknowledgement unavailable.",
+    next:"Read the tracker and mailbox state first. Never repeat a timed-out write blindly; use the same idempotency identity and verify the outcome."
+  },
+  {
+    id:"EXC-2102",time:"09:41:22",kind:"retry",type:"Retry",severity:"info",status:"Retry succeeded (sample)",
+    component:"Event processor",folder:"transfers",ticket:"DSP-10476",title:"Illustrative retry completed after transient error",
+    attempts:2,actor:"Event processor",owner:"Agent 05",idempotency:"SAMPLE-EVENT-10476-RETRY-02",
+    signal:"The sample event processor records one transient attempt followed by a successful retry outcome.",
+    impact:"One synthetic event has a retry-success label; it is not evidence of actual connector availability.",
+    evidence:"Attempt 1 transient response · attempt 2 sample success marker · persistent event ID retained.",
+    next:"Production telemetry should retain both attempts, the same canonical event identity, duration and the final service acknowledgement."
+  },
+  {
+    id:"EXC-2101",time:"09:22:10",kind:"duplicate_delivery",type:"Duplicate delivery",severity:"warning",status:"Awaiting review",
+    component:"Event deduplicator",folder:"unadopts",ticket:"DSP-10475",title:"Repeated assignment signal needs reconciliation",
+    attempts:2,actor:"Event processor",owner:"Unassigned",idempotency:"SAMPLE-ASSIGN-10475-CANDIDATE",
+    signal:"Two sample assignment signals reference the same ticket but do not share a verified canonical event key.",
+    impact:"Potential duplicate side effect is unconfirmed. The case is deliberately held for review rather than labelled safely suppressed.",
+    evidence:"Sample event IDs differ · same ticket reference · canonical idempotency match not established.",
+    next:"Compare both event payloads and the current mailbox category and tracker assignment. Establish one stable event identity before allowing another write."
+  },
+  {
+    id:"EXC-2100",time:"09:08:45",kind:"stale_write",type:"Stale write guard",severity:"info",status:"Blocked (sample)",
+    component:"Assignment writer",folder:"detags",ticket:"DSP-10474",title:"Stale assignment request rejected",
+    attempts:1,actor:"Assignment writer",owner:"Agent 06",idempotency:"SAMPLE-CLAIM-10474-V8",
+    signal:"The sample writer detected that its source version was older than the current record and marked the request blocked.",
+    impact:"One synthetic stale update was not applied.",
+    evidence:"Illustrative source version 8 · canonical version 9 · request rejected before write.",
+    next:"Refresh the canonical state and re-evaluate eligibility. Preserve the conflict as an auditable event."
+  },
+  {
+    id:"EXC-2099",time:"08:52:39",kind:"recovery",type:"Recovery",severity:"warning",status:"Awaiting review",
+    component:"Recovery coordinator",folder:"transfers",ticket:"DSP-10473",title:"Original assignment state could not be confirmed",
+    attempts:1,actor:"Recovery queue",owner:"Agent 03",idempotency:"SAMPLE-RECOVERY-10473-R1",
+    signal:"The sample recovery payload contains an original owner but lacks a matching current-state confirmation.",
+    impact:"One synthetic ticket remains in a hold-for-review state; no replacement owner is suggested.",
+    evidence:"Original owner Agent 03 · current category unavailable in sample payload · verification required.",
+    next:"Confirm the latest category and tracker row, then preserve or escalate the original assignment through an authorised process."
+  }
+];
+
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   selectedAgent:null, paused:false, pausedFolders:{}, modal:null,
   liveStatus:"all", liveOwner:"all", liveBrand:"all", liveSort:"oldest", liveSearch:"",
   ticketStatus:"all", ticketBrand:"all", ticketOwner:"all", ticketSort:"oldest", ticketSearch:"",
   rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null,
-  configPreviewFolder:"agency", configPreviewWeight:50
+  configPreviewFolder:"agency", configPreviewWeight:50,
+  reliabilitySearch:"", reliabilityType:"all", reliabilityStatus:"all", reliabilitySeverity:"all", selectedReliabilityEvent:"EXC-2108"
 };
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
@@ -210,9 +306,9 @@ function dataTable(headers,rows,empty){
 function statusPill(status){
   const key=String(status).toLowerCase();
   let type="neutral";
-  if(["assigned","available","resolved","automatic","healthy","active","in progress"].includes(key))type="good";
-  if(["flagged","waiting","break","paused","pending","reassigned","not connected","not configured"].includes(key))type="warning";
-  if(["overdue","unassigned","exception","failed","critical"].includes(key))type="danger";
+  if(["assigned","available","resolved","automatic","healthy","active","in progress","suppressed (sample)","restored (sample)","retry succeeded (sample)"].includes(key))type="good";
+  if(["flagged","waiting","break","paused","pending","reassigned","not connected","not configured","awaiting review","blocked (sample)"].includes(key))type="warning";
+  if(["overdue","unassigned","exception","failed","critical","retry exhausted"].includes(key))type="danger";
   return '<span class="status-pill '+type+'">'+esc(status)+'</span>';
 }
 function smallChart(values,labels,color){
@@ -1140,25 +1236,160 @@ function renderRules(){
 function configCard(title,copy,label,value,status){
   return '<article class="control-card"><div class="control-card-top"><span class="control-symbol">⌘</span>'+statusPill(status)+'</div><h3>'+title+'</h3><p>'+copy+'</p><div class="config-setting"><span>'+label+'</span><strong>'+value+'</strong></div><button class="panel-action" data-action="config-preview">Preview setting</button></article>';
 }
-function renderReliability(){
-  pageContent.innerHTML=heading("SYSTEM HEALTH","Reliability centre","A dedicated place for dispatcher health, failed writes, duplicate prevention, recovery queues and integration status.",'<button class="btn btn-secondary" data-action="refresh">↻ Refresh preview</button>')+
-    kpiGrid([
-      kpi("Assignment engine","Healthy","Illustrative status","◇"),
-      kpi("Failed writes","0","Sample events today","×"),
-      kpi("Pending recoveries","2","Awaiting review","↺","Needs attention","warning"),
-      kpi("Sync latency","4.2s","Illustrative connector delay","⌁")
-    ])+
-    '<div class="grid-two">'+
-      panel("Component status","Illustrative service health",'<div class="health-list">'+healthRow("Dispatch service","Healthy","good","Last check 10:42:18")+healthRow("Tracker connector","Connected","good","Prototype state")+healthRow("Event processor","Healthy","good","Queue depth 0")+healthRow("Recovery worker","Attention","warning","2 pending sample events")+healthRow("Audit persistence","Healthy","good","Sample storage only")+'</div>',"")+
-      panel("Reliability trend","Simulated exceptions over the last 12 intervals",smallChart([3,2,4,1,2,1,3,2,1,0,1,0],["01","02","03","04","05","06","07","08","09","10","11","12"],"#ffbd68"),'<span class="subtle-tag">SAMPLE EVENTS</span>')+
-    '</div>'+
-    panel("Recent exceptions","Sample reliability and recovery events",dataTable(["Time","Event","Component","Impact","Status"],[
-      '<tr><td>10:38:12</td><td>Assignment recovery queued</td><td>Recovery worker</td><td>One ticket held for review</td><td>'+statusPill("Pending")+'</td></tr>',
-      '<tr><td>10:17:49</td><td>Tracker write retry</td><td>Tracker connector</td><td>Retry succeeded</td><td>'+statusPill("Resolved")+'</td></tr>',
-      '<tr><td>09:51:05</td><td>Duplicate event suppressed</td><td>Event processor</td><td>No duplicate assignment</td><td>'+statusPill("Healthy")+'</td></tr>'
-    ]))+
-    '<div class="prototype-warning"><strong>Reliability principle.</strong> A successful button click is not proof that an operation completed. Production status must be confirmed by the backend and independently recorded.</div>';
+function reliabilityBaseEvents(){
+  return RELIABILITY_EVENTS.filter(event=>state.folder==="all"||event.folder===state.folder);
 }
+function reliabilityFilteredEvents(){
+  const query=state.reliabilitySearch.trim().toLowerCase();
+  return reliabilityBaseEvents().filter(event=>{
+    const matchesType=state.reliabilityType==="all"||event.kind===state.reliabilityType;
+    const matchesStatus=state.reliabilityStatus==="all"||event.status===state.reliabilityStatus;
+    const matchesSeverity=state.reliabilitySeverity==="all"||event.severity===state.reliabilitySeverity;
+    const haystack=[event.id,event.time,event.type,event.title,event.component,event.ticket,event.folder,event.actor,event.owner,event.status,event.idempotency,event.signal].join(" ").toLowerCase();
+    return matchesType&&matchesStatus&&matchesSeverity&&(!query||haystack.includes(query));
+  }).sort((a,b)=>b.time.localeCompare(a.time)||b.id.localeCompare(a.id));
+}
+function reliabilitySeverityPill(severity){
+  return '<span class="reliability-severity '+esc(severity)+'">'+esc(severity.toUpperCase())+'</span>';
+}
+function reliabilityFolderName(id){
+  return FOLDERS.find(folder=>folder.id===id)?.name||id;
+}
+function reliabilityEventRows(){
+  const events=reliabilityFilteredEvents();
+  if(!events.length)return '<div class="empty-state">No sample exception records match these filters.</div>';
+  return dataTable(["Sample time","Case / ticket","Signal","Component / inbox","Severity","Outcome"],events.map(event=>
+    '<tr class="'+(state.selectedReliabilityEvent===event.id?"selected":"")+'">'+
+      '<td class="mono">'+esc(event.time)+'</td>'+
+      '<td><button class="reliability-event-select" type="button" data-reliability-event="'+esc(event.id)+'" aria-pressed="'+(state.selectedReliabilityEvent===event.id?'true':'false')+'"><strong>'+esc(event.id)+'</strong><small>'+esc(event.ticket)+'</small></button></td>'+
+      '<td>'+esc(event.type)+'</td>'+
+      '<td><strong class="reliability-table-main">'+esc(event.component)+'</strong><small class="reliability-table-sub">'+esc(reliabilityFolderName(event.folder))+'</small></td>'+
+      '<td>'+reliabilitySeverityPill(event.severity)+'</td>'+
+      '<td>'+statusPill(event.status)+'</td>'+
+    '</tr>'
+  ));
+}
+function reliabilityDetailMarkup(event){
+  if(!event)return '<div class="reliability-detail-empty"><strong>Select a sample case</strong><span>Choose an exception from the ledger to inspect its signal, impact, evidence and recommended investigation steps.</span></div>';
+  return '<div class="reliability-detail-head"><div><span class="eyebrow">SYNTHETIC CASE · READ ONLY</span><h3>'+esc(event.id)+'</h3><p>'+esc(event.title)+'</p></div>'+statusPill(event.status)+'</div>'+
+    '<div class="reliability-detail-facts"><div><span>Sample time</span><strong class="mono">'+esc(event.time)+'</strong></div><div><span>Ticket reference</span><strong>'+esc(event.ticket)+'</strong></div><div><span>Inbox</span><strong>'+esc(reliabilityFolderName(event.folder))+'</strong></div><div><span>Component</span><strong>'+esc(event.component)+'</strong></div><div><span>Attempts recorded</span><strong>'+event.attempts+'</strong></div><div><span>Original / sample owner</span><strong>'+esc(event.owner)+'</strong></div></div>'+
+    '<div class="reliability-detail-section"><span>Signal summary</span><p>'+esc(event.signal)+'</p></div>'+
+    '<div class="reliability-detail-section"><span>Impact boundary</span><p>'+esc(event.impact)+'</p></div>'+
+    '<div class="reliability-detail-section"><span>Sample evidence</span><p class="mono">'+esc(event.evidence)+'</p></div>'+
+    '<div class="reliability-next-step"><strong>Recommended investigation</strong><p>'+esc(event.next)+'</p></div>'+
+    '<div class="reliability-idempotency"><span>Sample event / idempotency reference</span><strong class="mono">'+esc(event.idempotency)+'</strong></div>'+
+    '<div class="reliability-no-action">No retry, restore, reopen or assignment action is available here. This detail view cannot change Outlook, Excel or the dispatcher.</div>';
+}
+function reliabilityTypeBreakdown(events){
+  const labels=[
+    ["write_failure","Write failures"],
+    ["write_unknown","Unknown write outcomes"],
+    ["recovery","Recoveries"],
+    ["duplicate_delivery","Duplicate deliveries"],
+    ["concurrency_conflict","Concurrency conflicts"],
+    ["stale_write","Stale-write guards"],
+    ["retry","Retry outcomes"]
+  ];
+  const maximum=Math.max(1,...labels.map(([kind])=>events.filter(event=>event.kind===kind).length));
+  return '<div class="reliability-breakdown-list">'+labels.map(([kind,label])=>{
+    const count=events.filter(event=>event.kind===kind).length;
+    return '<div class="reliability-breakdown-row"><div><strong>'+label+'</strong><span>'+count+' sample records</span></div><div class="reliability-breakdown-track"><i style="width:'+(count/maximum*100)+'%"></i></div><b>'+count+'</b></div>';
+  }).join("")+'</div>';
+}
+function reliabilityComponentReadiness(){
+  const items=[
+    ["Outlook mailbox event feed","Not connected","No live received / category event stream"],
+    ["Excel tracker adapter","Not connected","No verified workbook reads or writes"],
+    ["Dispatcher runtime and heartbeat","Not connected","No live process health or queue telemetry"],
+    ["Recovery worker and retry queue","Not connected","No executable recovery worker or retry scheduler"],
+    ["Persistent audit store","Not configured","No durable append-only event or config history"]
+  ];
+  return '<div class="reliability-component-list">'+items.map(item=>
+    '<div><span class="reliability-component-dot"></span><div><strong>'+item[0]+'</strong><small>'+item[2]+'</small></div>'+statusPill(item[1])+'</div>'
+  ).join("")+'</div>';
+}
+function reliabilityRecoveryPanel(events){
+  const recoveries=events.filter(event=>event.kind==="recovery");
+  if(!recoveries.length)return '<div class="empty-state">No recovery sample records in this inbox scope.</div>';
+  return '<div class="reliability-recovery-list">'+recoveries.map(event=>
+    '<div class="reliability-recovery-row"><div class="reliability-recovery-ref"><strong>'+esc(event.id)+'</strong><small>'+esc(event.ticket)+' · '+esc(reliabilityFolderName(event.folder))+'</small></div><div class="reliability-recovery-owner"><span>Original owner</span><strong>'+esc(event.owner)+'</strong></div>'+statusPill(event.status)+'<p>'+esc(event.impact)+'</p></div>'
+  ).join("")+'</div>';
+}
+function reliabilityIntegrityPanel(events){
+  const duplicates=events.filter(event=>event.kind==="duplicate_delivery");
+  const conflicts=events.filter(event=>event.kind==="concurrency_conflict");
+  const stale=events.filter(event=>event.kind==="stale_write");
+  return '<div class="reliability-integrity-grid">'+
+    '<div><span>Duplicate deliveries</span><strong>'+duplicates.length+'</strong><small>'+duplicates.filter(event=>event.status==="Suppressed (sample)").length+' carry a suppressed sample outcome</small></div>'+
+    '<div><span>Concurrency conflicts</span><strong>'+conflicts.length+'</strong><small>Rejected before a sample write</small></div>'+
+    '<div><span>Stale-write guards</span><strong>'+stale.length+'</strong><small>Older sample versions marked blocked</small></div>'+
+    '</div>'+
+    '<div class="reliability-integrity-note">A suppression or guard label in sample data is not proof that the production dispatcher prevents duplicate side effects. Production must verify stable event identity, atomic writes and the final mailbox / tracker state.</div>';
+}
+function renderReliability(){
+  const base=reliabilityBaseEvents();
+  if(state.reliabilityType!=="all"&&!base.some(event=>event.kind===state.reliabilityType))state.reliabilityType="all";
+  if(state.reliabilityStatus!=="all"&&!base.some(event=>event.status===state.reliabilityStatus))state.reliabilityStatus="all";
+  if(state.reliabilitySeverity!=="all"&&!base.some(event=>event.severity===state.reliabilitySeverity))state.reliabilitySeverity="all";
+  const filtered=reliabilityFilteredEvents();
+  if(!filtered.some(event=>event.id===state.selectedReliabilityEvent))state.selectedReliabilityEvent=filtered[0]?.id||null;
+  const selected=filtered.find(event=>event.id===state.selectedReliabilityEvent)||null;
+  const writeIssues=base.filter(event=>["write_failure","write_unknown"].includes(event.kind)).length;
+  const pendingRecoveries=base.filter(event=>event.kind==="recovery"&&event.status==="Awaiting review").length;
+  const retryRecords=base.filter(event=>event.attempts>1).length;
+  const scopeLabel=state.folder==="all"?"All four inboxes":scopeName();
+  pageContent.innerHTML=heading("RELIABILITY CENTRE 2.0","Investigate the exception — not just the status.","Explore synthetic write failures, retries, recovery cases and integrity guards. The screen reports what its sample records contain; it does not observe a live service.",'<button class="btn btn-secondary" data-action="reset-reliability-filters">Reset filters</button><button class="btn btn-primary" data-action="export-reliability">↓ Export incident ledger</button>')+
+    '<div class="reliability-demo-strip"><span><i></i> SYNTHETIC INVESTIGATION DATA · READ ONLY</span><span>Runtime health <b>Not observable</b></span><span>Connector telemetry <b>Not connected</b></span><span>Recovery actions <b>Unavailable</b></span></div>'+
+    kpiGrid([
+      kpi("Sample incident records",String(base.length),"Unique synthetic exception references","◷"),
+      kpi("Write issues to verify",String(writeIssues),"Rejected or unconfirmed sample outcomes","×"),
+      kpi("Recoveries awaiting review",String(pendingRecoveries),"Ownership held for manual verification","↺",pendingRecoveries?"Review queue":"No sample queue","warning"),
+      kpi("Cases with retry attempts",String(retryRecords),"Case records with more than one attempt","⟳"),
+    ])+
+    '<div class="reliability-scope-note"><strong>Scope:</strong> '+esc(scopeLabel)+'. All counts below are counts of synthetic incident records in the selected inbox scope, not live tickets, current failures or production service-level indicators. Repeated attempts remain part of one case record.</div>'+
+    '<div class="grid-two reliability-overview-grid">'+
+      panel("Integration and telemetry readiness","No live health claim is possible until these trusted sources are connected.",reliabilityComponentReadiness(),'<span class="subtle-tag">SOURCE STATUS</span>')+
+      panel("Incident categories","Distribution of sample incident records in the selected inbox scope.",reliabilityTypeBreakdown(base),'<span class="subtle-tag">RECORD COUNTS</span>')+
+    '</div>'+
+    '<div class="section-heading reliability-section-heading"><div><h2>Exception investigation ledger</h2><p>Filter the sample cases, then open a record for its evidence and recommended next checks.</p></div><span class="subtle-tag">NO LIVE EVENT STREAM</span></div>'+
+    '<section class="panel reliability-ledger-panel">'+
+      '<div class="reliability-filter-toolbar">'+
+        '<label class="live-queue-search"><span>⌕</span><input type="search" data-reliability-search value="'+esc(state.reliabilitySearch)+'" placeholder="Search case, ticket, component or key…" aria-label="Search reliability events" autocomplete="off"></label>'+
+        '<label><span class="live-filter-label">CATEGORY</span><select class="live-select" data-reliability-filter="reliabilityType"><option value="all">All categories</option>'+[
+          ["write_failure","Write failure"],["write_unknown","Write outcome unknown"],["recovery","Recovery"],["duplicate_delivery","Duplicate delivery"],["concurrency_conflict","Concurrency conflict"],["retry","Retry"],["stale_write","Stale write guard"]
+        ].map(([value,label])=>'<option value="'+value+'" '+(state.reliabilityType===value?"selected":"")+'>'+label+'</option>').join("")+'</select></label>'+
+        '<label><span class="live-filter-label">SEVERITY</span><select class="live-select" data-reliability-filter="reliabilitySeverity"><option value="all">All severities</option>'+["critical","warning","info"].map(value=>'<option value="'+value+'" '+(state.reliabilitySeverity===value?"selected":"")+'>'+value.toUpperCase()+'</option>').join("")+'</select></label>'+
+        '<label><span class="live-filter-label">OUTCOME</span><select class="live-select" data-reliability-filter="reliabilityStatus"><option value="all">All outcomes</option>'+[...new Set(base.map(event=>event.status))].map(value=>'<option value="'+esc(value)+'" '+(state.reliabilityStatus===value?"selected":"")+'>'+esc(value)+'</option>').join("")+'</select></label>'+
+      '</div>'+
+      '<div class="live-queue-meta"><span id="reliabilityLedgerCount">Showing '+filtered.length+' of '+base.length+' sample cases in '+esc(scopeLabel)+'</span><span>Repeated retries are not counted as separate cases</span></div>'+
+      '<div id="reliabilityLedgerRows">'+reliabilityEventRows()+'</div>'+
+    '</section>'+
+    '<div id="reliabilityCaseDetail" class="panel reliability-case-panel">'+reliabilityDetailMarkup(selected)+'</div>'+
+    '<div class="grid-two reliability-secondary-grid">'+
+      panel("Recovery review queue","Preserve the original owner until the latest mailbox and tracker state has been verified.",reliabilityRecoveryPanel(base),'<span class="subtle-tag">'+pendingRecoveries+' AWAITING REVIEW</span>')+
+      panel("Duplicate and write-integrity signals","Sample observations for deduplication, concurrency and stale-write protection.",reliabilityIntegrityPanel(base),'<span class="subtle-tag">GUARDRAIL EVIDENCE</span>')+
+    '</div>'+
+    '<div class="reliability-principle-grid">'+
+      '<div><strong>Never blindly retry a timeout</strong><span>Read the canonical mailbox and tracker state before considering another write.</span></div>'+
+      '<div><strong>One canonical event identity</strong><span>Retries and repeated deliveries must retain one idempotency identity and a linked attempt history.</span></div>'+
+      '<div><strong>Preserve original ownership</strong><span>Recovery should restore the valid original owner or hold for review, never silently choose a new owner.</span></div>'+
+      '<div><strong>Verify before green</strong><span>Only a backend acknowledgement plus independent state verification can confirm an operational success.</span></div>'+
+    '</div>'+
+    '<div class="reliability-final-note"><strong>Production boundary:</strong> this public page contains synthetic case records only. It has no live heartbeat, event ingestion, Excel / Outlook connector, recovery worker, queue control, persistent audit store or permission-checked operational action. Do not use it to decide whether a real assignment has succeeded or failed.</div>';
+}
+function exportReliability(){
+  const events=reliabilityFilteredEvents();
+  const rows=[
+    ["RELIABILITY CENTRE 2.0 — SYNTHETIC DATA ONLY"],
+    ["Scope",state.folder==="all"?"All four inboxes":scopeName()],
+    ["Note","These sample case records do not represent current live system health or actual mailbox incidents."],
+    [],
+    ["Case reference","Sample time","Ticket","Inbox","Category","Severity","Outcome","Component","Attempts","Sample owner","Idempotency reference","Signal summary","Impact boundary","Sample evidence","Recommended investigation"],
+    ...events.map(event=>[event.id,event.time,event.ticket,reliabilityFolderName(event.folder),event.type,event.severity,event.status,event.component,event.attempts,event.owner,event.idempotency,event.signal,event.impact,event.evidence,event.next])
+  ];
+  csvDownload("dispatcher-sample-reliability-investigation.csv",rows);
+}
+
 function auditTable(events){
   return dataTable(["Time","Event","Actor","Inbox","Type"],events.map(e=>'<tr><td class="mono">'+e[0]+'</td><td>'+e[1]+'</td><td>'+e[2]+'</td><td>'+e[3]+'</td><td>'+statusPill(e[4])+'</td></tr>'));
 }
@@ -1372,6 +1603,8 @@ function handleAction(action){
   if(action==="rules-preview"){const target=document.getElementById("configPreviewPanel");if(target)target.scrollIntoView({behavior:"smooth",block:"center"});return;}
   if(action==="reset-config-preview"){state.configPreviewFolder="agency";state.configPreviewWeight=50;renderRules();showToast("Local scenario reset. No dispatch settings were changed.");return;}
   if(action==="export-config"){exportConfiguration();return;}
+  if(action==="export-reliability"){exportReliability();return;}
+  if(action==="reset-reliability-filters"){state.reliabilitySearch="";state.reliabilityType="all";state.reliabilityStatus="all";state.reliabilitySeverity="all";state.selectedReliabilityEvent=null;renderReliability();return;}
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
 document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click",()=>navigate(btn.dataset.view)));
@@ -1397,8 +1630,26 @@ document.addEventListener("change",event=>{
   }
   const configFolder=event.target.closest('[data-config-scenario="folder"]');
   if(configFolder){state.configPreviewFolder=configFolder.value;renderRules();}
+  const reliabilityFilter=event.target.closest("[data-reliability-filter]");
+  if(reliabilityFilter){
+    state[reliabilityFilter.dataset.reliabilityFilter]=reliabilityFilter.value;
+    renderReliability();
+  }
 });
 document.addEventListener("input",event=>{
+  const reliabilitySearch=event.target.closest("[data-reliability-search]");
+  if(reliabilitySearch){
+    state.reliabilitySearch=reliabilitySearch.value;
+    const filtered=reliabilityFilteredEvents();
+    if(!filtered.some(item=>item.id===state.selectedReliabilityEvent))state.selectedReliabilityEvent=filtered[0]?.id||null;
+    const count=document.getElementById("reliabilityLedgerCount");
+    const rows=document.getElementById("reliabilityLedgerRows");
+    const detail=document.getElementById("reliabilityCaseDetail");
+    if(count)count.textContent="Showing "+filtered.length+" of "+reliabilityBaseEvents().length+" sample cases in "+(state.folder==="all"?"All four inboxes":scopeName());
+    if(rows)rows.innerHTML=reliabilityEventRows();
+    if(detail)detail.innerHTML=reliabilityDetailMarkup(filtered.find(item=>item.id===state.selectedReliabilityEvent)||null);
+    return;
+  }
   const configWeight=event.target.closest('[data-config-scenario="weight"]');
   if(configWeight){
     state.configPreviewWeight=Math.max(0,Math.min(100,Number(configWeight.value)||0));
@@ -1447,7 +1698,9 @@ document.addEventListener("click",event=>{
   const liveStatus=event.target.closest("[data-live-status]");
   const ticketStatus=event.target.closest("[data-ticket-status]");
   const liveFolder=event.target.closest("[data-live-folder]");
+  const reliabilityEvent=event.target.closest("[data-reliability-event]");
   if(action)handleAction(action.dataset.action);
+  if(reliabilityEvent){state.selectedReliabilityEvent=reliabilityEvent.dataset.reliabilityEvent;renderReliability();}
   if(go)navigate(go.dataset.go);
   if(ticket)openTicket(ticket.dataset.ticket);
   if(ticketStatus){state.ticketStatus=ticketStatus.dataset.ticketStatus;render();}

@@ -287,5 +287,66 @@ jobs:
             throw new Error('Dispatch Configuration governance and prototype limits are missing from the README.');
           }
 
-                    console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0 and Dispatch Configuration 2.0 integrity checks.');
+                    const reliabilityStart = js.indexOf('function renderReliability(){');
+          const reliabilityEnd = js.indexOf('\nfunction auditTable(', reliabilityStart);
+          const reliabilityView = reliabilityStart >= 0 && reliabilityEnd > reliabilityStart ? js.slice(reliabilityStart, reliabilityEnd) : '';
+          for (const text of ['RELIABILITY CENTRE 2.0','SYNTHETIC INVESTIGATION DATA · READ ONLY','Runtime health','Not observable','Exception investigation ledger','Recovery review queue','Duplicate and write-integrity signals','Production boundary']) {
+            if (!reliabilityView.includes(text)) throw new Error('Reliability Centre 2.0 section or safety disclosure missing: ' + text);
+          }
+          for (const forbidden of ['data-action="retry"','data-action="restore"','data-action="assign"','Assignment engine\",\"Healthy','Tracker connector\",\"Connected']) {
+            if (reliabilityView.includes(forbidden)) throw new Error('Reliability Centre must not present an operational control or unverified live health claim: ' + forbidden);
+          }
+          for (const text of ['.reliability-demo-strip','.reliability-component-list','.reliability-filter-toolbar','.reliability-case-panel','.reliability-recovery-list','.reliability-integrity-grid','.reliability-final-note']) {
+            if (!css.includes(text)) throw new Error('Reliability Centre styling missing: ' + text);
+          }
+          for (const helper of ['reliabilityBaseEvents','reliabilityFilteredEvents','reliabilityDetailMarkup','reliabilityTypeBreakdown','reliabilityComponentReadiness','reliabilityRecoveryPanel','reliabilityIntegrityPanel','exportReliability']) {
+            if (helper === "reliabilityDetailMarkup" && !js.includes("No retry, restore, reopen or assignment action")) throw new Error("Case detail must remain read-only with no assignment or recovery controls.");
+            if (!js.includes('function ' + helper + '(')) throw new Error('Reliability Centre helper missing: ' + helper);
+          }
+          for (const text of ['data-reliability-search','data-reliability-filter','data-reliability-event','dispatcher-sample-reliability-investigation.csv','if(action==="export-reliability"){exportReliability();return;}','if(action==="reset-reliability-filters")']) {
+            if (!js.includes(text)) throw new Error('Reliability Centre interaction or export is not wired: ' + text);
+          }
+          const reliabilityDataStart = js.indexOf('const RELIABILITY_EVENTS = [');
+          const reliabilityDataEnd = js.indexOf('\n];', reliabilityDataStart) + 3;
+          const reliabilityData = reliabilityDataStart >= 0 && reliabilityDataEnd > reliabilityDataStart ? js.slice(reliabilityDataStart, reliabilityDataEnd) : '';
+          const reliabilityHelpersStart = js.indexOf('function reliabilityBaseEvents(){');
+          const reliabilityHelpersEnd = js.indexOf('\nfunction reliabilitySeverityPill(', reliabilityHelpersStart);
+          const reliabilityHelpers = reliabilityHelpersStart >= 0 && reliabilityHelpersEnd > reliabilityHelpersStart ? js.slice(reliabilityHelpersStart, reliabilityHelpersEnd) : '';
+          if (!reliabilityData || !reliabilityHelpers) throw new Error('Reliability sample case data or filter logic is missing.');
+          const reliabilityResult = vm.runInNewContext(
+            'const state={folder:"all",reliabilitySearch:"",reliabilityType:"all",reliabilityStatus:"all",reliabilitySeverity:"all"};' +
+            reliabilityData + reliabilityHelpers +
+            '; const all=reliabilityFilteredEvents();' +
+            'const totals={records:RELIABILITY_EVENTS.length,unique:new Set(RELIABILITY_EVENTS.map(e=>e.id)).size,' +
+            'writeFailure:RELIABILITY_EVENTS.filter(e=>e.kind==="write_failure").length,' +
+            'writeUnknown:RELIABILITY_EVENTS.filter(e=>e.kind==="write_unknown").length,' +
+            'recoveries:RELIABILITY_EVENTS.filter(e=>e.kind==="recovery").length,' +
+            'pendingRecoveries:RELIABILITY_EVENTS.filter(e=>e.kind==="recovery"&&e.status==="Awaiting review").length,' +
+            'duplicates:RELIABILITY_EVENTS.filter(e=>e.kind==="duplicate_delivery").length,' +
+            'multiAttempt:RELIABILITY_EVENTS.filter(e=>e.attempts>1).length};' +
+            'state.folder="agency";const agency=reliabilityFilteredEvents();' +
+            'state.folder="all";state.reliabilityType="recovery";const recoveries=reliabilityFilteredEvents();' +
+            'state.reliabilityType="all";state.reliabilitySeverity="critical";const critical=reliabilityFilteredEvents();' +
+            'state.reliabilitySeverity="all";state.reliabilitySearch="SAMPLE-ASSIGN-10482-V4";const byKey=reliabilityFilteredEvents();' +
+            '({totals,allCount:all.length,agencyCount:agency.length,recoveryCount:recoveries.length,criticalCount:critical.length,searchCount:byKey.length,searchCase:byKey[0]?.id})'
+          );
+          if (reliabilityResult.totals.records !== 10 || reliabilityResult.totals.unique !== 10 ||
+              reliabilityResult.totals.writeFailure !== 1 || reliabilityResult.totals.writeUnknown !== 1 ||
+              reliabilityResult.totals.recoveries !== 3 || reliabilityResult.totals.pendingRecoveries !== 2 ||
+              reliabilityResult.totals.duplicates !== 2 || reliabilityResult.totals.multiAttempt !== 6) {
+            throw new Error('Reliability sample records do not reconcile to their expected case-level counts.');
+          }
+          if (reliabilityResult.allCount !== 10 || reliabilityResult.agencyCount !== 2 ||
+              reliabilityResult.recoveryCount !== 3 || reliabilityResult.criticalCount !== 2 ||
+              reliabilityResult.searchCount !== 1 || reliabilityResult.searchCase !== "EXC-2108") {
+            throw new Error('Reliability inbox, category, severity or idempotency-reference filtering is incorrect.');
+          }
+          if (!readme.includes('### Reliability Centre 2.0') ||
+              !readme.includes('A **rejected write**') ||
+              !readme.includes('An **unknown write outcome**') ||
+              !readme.includes('no retry, restore, assign or queue-control action')) {
+            throw new Error('Reliability Centre investigation definitions and production limitations are missing from README.');
+          }
+
+                    console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0 Dispatch Configuration 2.0 and Reliability Centre 2.0 integrity checks.');
           NODE
