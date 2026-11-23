@@ -2,18 +2,18 @@
  * All records are synthetic. This prototype has no live data or operational integration.
  */
 const FOLDERS = [
-  { id: "agency", name: "Agency Detags", short: "Agency", received: 230, assigned: 218, resolved: 165, open: 50, color: "#d49a68" },
-  { id: "detags", name: "Detags", short: "Detags", received: 470, assigned: 445, resolved: 318, open: 180, color: "#8fb39a" },
-  { id: "transfers", name: "Transfers", short: "Transfers", received: 300, assigned: 280, resolved: 205, open: 94, color: "#a88bb8" },
-  { id: "unadopts", name: "Unadopts", short: "Unadopts", received: 194, assigned: 176, resolved: 124, open: 58, color: "#dda66c" }
+  { id: "agency", name: "Agency Detags", short: "Agency", received: 230, assigned: 218, resolved: 165, open: 50, color: "#ff5c91" },
+  { id: "detags", name: "Detags", short: "Detags", received: 470, assigned: 445, resolved: 318, open: 180, color: "#76e7ce" },
+  { id: "transfers", name: "Transfers", short: "Transfers", received: 300, assigned: 280, resolved: 205, open: 94, color: "#c2a0ff" },
+  { id: "unadopts", name: "Unadopts", short: "Unadopts", received: 194, assigned: 176, resolved: 124, open: 58, color: "#ffbd68" }
 ];
 const BRANDS = [
-  { id: "vw", name: "Volkswagen", count: 362, color: "#d49a68", short: "VW" },
-  { id: "audi", name: "Audi", count: 286, color: "#a88bb8", short: "AUDI" },
-  { id: "skoda", name: "Škoda", count: 196, color: "#8fb39a", short: "ŠKODA" },
-  { id: "seat", name: "SEAT", count: 118, color: "#dda66c", short: "SEAT" },
-  { id: "cupra", name: "CUPRA", count: 101, color: "#b77b66", short: "CUPRA" },
-  { id: "vwcv", name: "Volkswagen Commercial Vehicles", count: 91, color: "#9aa4a8", short: "VWCV" },
+  { id: "vw", name: "Volkswagen", count: 362, color: "#ff5c91", short: "VW" },
+  { id: "audi", name: "Audi", count: 286, color: "#c2a0ff", short: "AUDI" },
+  { id: "skoda", name: "Škoda", count: 196, color: "#76e7ce", short: "ŠKODA" },
+  { id: "seat", name: "SEAT", count: 118, color: "#ffbd68", short: "SEAT" },
+  { id: "cupra", name: "CUPRA", count: 101, color: "#ff7698", short: "CUPRA" },
+  { id: "vwcv", name: "Volkswagen Commercial Vehicles", count: 91, color: "#a9a1b8", short: "VWCV" },
   { id: "other", name: "Other / unclassified", count: 40, color: "#b6bdc8", short: "OTHER" }
 ];
 const BRAND_MIX = {
@@ -147,7 +147,7 @@ function kpi(label,value,note,symbol,trend,tone){
 function kpiGrid(items){return '<div class="kpi-grid">'+items.join("")+'</div>';}
 function barRows(rows,options){
   const max=Math.max(1,...rows.map(r=>r.value));
-  return '<div class="bar-list">'+rows.map(r=>'<div class="bar-row"><div class="bar-label">'+(r.color?'<span class="legend-dot" style="background:'+r.color+'"></span>':'')+esc(r.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.max(1,r.value/max*100)+'%;background:'+(r.color||"#d49a68")+'"></div></div><div class="bar-value">'+fmt(r.value)+(options&&options.percent?'<small>'+r.share+'%</small>':'')+'</div></div>').join("")+'</div>';
+  return '<div class="bar-list">'+rows.map(r=>'<div class="bar-row"><div class="bar-label">'+(r.color?'<span class="legend-dot" style="background:'+r.color+'"></span>':'')+esc(r.label)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.max(1,r.value/max*100)+'%;background:'+(r.color||"#ff5c91")+'"></div></div><div class="bar-value">'+fmt(r.value)+(options&&options.percent?'<small>'+r.share+'%</small>':'')+'</div></div>').join("")+'</div>';
 }
 function brandBarList(list){
   const total=list.reduce((a,b)=>a+b.value,0);
@@ -422,8 +422,8 @@ function renderTickets(){
       kpi("Still outstanding",fmt(t.open),"Open at snapshot time","◷")
     ])+
     '<div class="grid-two">'+
-      panel("Ticket volume trend","Received vs resolved · sample daily series",'<div class="dual-bars">'+chartPair([76,88,94,83,108,102,121,115,96,130,118,125],[61,78,82,91,94,99,106,110,94,116,120,127],["Mon","Tue","Wed","Thu","Fri","Sat","Sun","Mon","Tue","Wed","Thu","Fri"])+'</div>',horizontalLegend([{label:"Received",color:"#f1846f"},{label:"Resolved",color:"#8fb39a"}]))+
-      panel("Resolution time distribution","Elapsed time from receipt to resolution",barRows([{label:"Under 1 hour",value:18,color:"#8fb39a"},{label:"1–4 hours",value:42,color:"#a88bb8"},{label:"4–8 hours",value:22,color:"#d49a68"},{label:"8–24 hours",value:13,color:"#dda66c"},{label:"Over 24 hours",value:5,color:"#ef8887"}],{percent:true}),'<span class="subtle-tag">SAMPLE PROFILE</span>')+
+      panel("Ticket volume trend","Received vs resolved · sample daily series",'<div class="dual-bars">'+chartPair([76,88,94,83,108,102,121,115,96,130,118,125],[61,78,82,91,94,99,106,110,94,116,120,127],["Mon","Tue","Wed","Thu","Fri","Sat","Sun","Mon","Tue","Wed","Thu","Fri"])+'</div>',horizontalLegend([{label:"Received",color:"#f1846f"},{label:"Resolved",color:"#76e7ce"}]))+
+      panel("Resolution time distribution","Elapsed time from receipt to resolution",barRows([{label:"Under 1 hour",value:18,color:"#76e7ce"},{label:"1–4 hours",value:42,color:"#c2a0ff"},{label:"4–8 hours",value:22,color:"#ff5c91"},{label:"8–24 hours",value:13,color:"#ffbd68"},{label:"Over 24 hours",value:5,color:"#ef8887"}],{percent:true}),'<span class="subtle-tag">SAMPLE PROFILE</span>')+
     '</div>'+
     '<div class="grid-equal">'+
       metricPanel("Assignment delay","12m","Average receipt-to-first-assignment","Median 7m")+
@@ -475,8 +475,8 @@ function renderWorkflow(){
       kpi("Recovery events","27","25 unique tickets affected","↺")
     ])+
     '<div class="grid-two">'+
-      panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#d49a68"},{label:"Manual",value:4.6,color:"#dda66c"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>')+
-      panel("Workflow events","Recorded event volume in the sample",barRows([{label:"Handover",value:128,color:"#d49a68"},{label:"Flag",value:88,color:"#dda66c"},{label:"Manual assignment",value:55,color:"#a88bb8"},{label:"Recovery",value:27,color:"#8fb39a"},{label:"Reassignment",value:42,color:"#f1846f"}]),'')+
+      panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>')+
+      panel("Workflow events","Recorded event volume in the sample",barRows([{label:"Handover",value:128,color:"#ff5c91"},{label:"Flag",value:88,color:"#ffbd68"},{label:"Manual assignment",value:55,color:"#c2a0ff"},{label:"Recovery",value:27,color:"#76e7ce"},{label:"Reassignment",value:42,color:"#f1846f"}]),'')+
     '</div>'+
     panel("Metric definitions","What each ratio means",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],[
       '<tr><td>Handover</td><td>96</td><td>128</td><td>8.6% of assigned tickets</td></tr>',
@@ -535,7 +535,7 @@ function agentDetail(id){
   const row=allocationMatrix().find(x=>x.id===id);
   return '<section class="panel agent-detail"><div class="panel-heading"><div><div class="eyebrow">MEMBER PROFILE</div><h2 class="panel-title">'+a.name+' · '+a.shift+' shift</h2><p class="panel-subtitle">Illustrative metrics only — not an assessment of a real colleague.</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
     '<div class="metric-row">'+metricPanel("Initial allocations",fmt(row.total),"First-assignment volume","Current filter")+metricPanel("Open tickets",fmt(a.open),"Current outstanding sample","Snapshot")+metricPanel("First response","'+a.response+'m","Average sample response","Illustrative")+metricPanel("Elapsed resolution",duration(a.resolution),"Average sample elapsed","Illustrative")+'</div>'+
-    '<div class="grid-two"><div><h3 class="mini-heading">Allocation by folder</h3>'+barRows(FOLDERS.map((f,i)=>({label:f.name,value:row.cells[i],color:f.color})))+'</div><div><h3 class="mini-heading">Workflow activity</h3>'+barRows([{label:"Handovers",value:a.handovers,color:"#d49a68"},{label:"Flags",value:a.flags,color:"#dda66c"}])+'</div></div></section>';
+    '<div class="grid-two"><div><h3 class="mini-heading">Allocation by folder</h3>'+barRows(FOLDERS.map((f,i)=>({label:f.name,value:row.cells[i],color:f.color})))+'</div><div><h3 class="mini-heading">Workflow activity</h3>'+barRows([{label:"Handovers",value:a.handovers,color:"#ff5c91"},{label:"Flags",value:a.flags,color:"#ffbd68"}])+'</div></div></section>';
 }
 function duration(minutes){return Math.floor(minutes/60)+"h "+String(minutes%60).padStart(2,"0")+"m";}
 function renderMy(){
@@ -550,7 +550,7 @@ function renderMy(){
     ])+
     '<div class="grid-two">'+
       panel("Your allocation mix","Initial allocation count by folder",barRows(FOLDERS.map((f,i)=>({label:f.name,value:r.cells[i],color:f.color}))),"")+
-      panel("Your workflow activity","Events recorded in the sample period",barRows([{label:"Handovers",value:a.handovers,color:"#d49a68"},{label:"Flags",value:a.flags,color:"#dda66c"}]),"")+
+      panel("Your workflow activity","Events recorded in the sample period",barRows([{label:"Handovers",value:a.handovers,color:"#ff5c91"},{label:"Flags",value:a.flags,color:"#ffbd68"}]),"")+
     '</div>'+
     panel("Personal performance guidance","What a future personal profile will show",'<div class="feature-list"><div><strong>Resolution quality</strong><span>Elapsed time, active handling time and reopen rates.</span></div><div><strong>Workload context</strong><span>Open tickets, folder mix, scheduled hours and shift comparisons.</span></div><div><strong>Workflow history</strong><span>Your handovers, flags, manual allocations and completed work.</span></div><div><strong>Targets</strong><span>Clear progress against agreed team service targets.</span></div></div>');
 }
@@ -595,7 +595,7 @@ function renderReliability(){
     ])+
     '<div class="grid-two">'+
       panel("Component status","Illustrative service health",'<div class="health-list">'+healthRow("Dispatch service","Healthy","good","Last check 10:42:18")+healthRow("Tracker connector","Connected","good","Prototype state")+healthRow("Event processor","Healthy","good","Queue depth 0")+healthRow("Recovery worker","Attention","warning","2 pending sample events")+healthRow("Audit persistence","Healthy","good","Sample storage only")+'</div>',"")+
-      panel("Reliability trend","Simulated exceptions over the last 12 intervals",smallChart([3,2,4,1,2,1,3,2,1,0,1,0],["01","02","03","04","05","06","07","08","09","10","11","12"],"#dda66c"),'<span class="subtle-tag">SAMPLE EVENTS</span>')+
+      panel("Reliability trend","Simulated exceptions over the last 12 intervals",smallChart([3,2,4,1,2,1,3,2,1,0,1,0],["01","02","03","04","05","06","07","08","09","10","11","12"],"#ffbd68"),'<span class="subtle-tag">SAMPLE EVENTS</span>')+
     '</div>'+
     panel("Recent exceptions","Sample reliability and recovery events",dataTable(["Time","Event","Component","Impact","Status"],[
       '<tr><td>10:38:12</td><td>Assignment recovery queued</td><td>Recovery worker</td><td>One ticket held for review</td><td>'+statusPill("Pending")+'</td></tr>',
