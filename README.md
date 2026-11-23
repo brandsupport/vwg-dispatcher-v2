@@ -2,7 +2,7 @@
 
 A standalone operations intelligence and management platform for the VWG Brand Support ticket operation.
 
-> **Current status: prototype / demonstration data only.** The dashboard does not connect to Outlook, the Excel dispatch tracker, or any production ticket source. All figures and member labels are synthetic. No operational controls execute actions.
+> **Current status: public dashboard demo plus an undeployed backend foundation.** The dashboard remains synthetic-data-only and has no live Outlook or Excel connection. Backend Worker code and a D1 schema exist under backend/, but no production Worker, D1 database, Cloudflare Access application, secrets or real data are configured. No operational write route is implemented.
 
 ## Product direction
 
@@ -38,6 +38,20 @@ The complete UI foundation now includes fourteen navigable areas:
 Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal and CSV exports work with synthetic data. The Dispatch Configuration scenario preview recalculates a local illustrative priority order only; it does not persist settings, create assignments or contact an operational service.
 
 All member names remain anonymised (Agent 01–Agent 14). Do not replace them with real team names until authentication, role permissions and the live data connection are ready.
+
+## Backend & Database Foundation 1.0
+
+The repository now includes a separate, **not-yet-deployed** Cloudflare Worker API and D1 migration foundation under backend/. It is intentionally separate from the public GitHub Pages frontend.
+
+The initial API is read-only and exposes a liveness endpoint, authenticated identity/permission summary, the four inbox definitions, database schema readiness and an authorised audit read. Cloudflare Access is required for protected API routes. The Worker resolves one approved IdP group to one role, denies missing or overlapping role mappings, and ignores identity headers supplied by clients.
+
+The first D1 migration creates pseudonymized principals, ticket current state, separate assignment and workflow history, roster shifts, inbox eligibility, versioned dispatch proposals, idempotency records, a reference-only outbox and append-only audit rows. It does not store mailbox subjects, message bodies, customer addresses, attachments or credentials. Current ticket state is kept separately from historical assignment events; initial assignment is unique per ticket.
+
+The backend has automated tests for unauthenticated access, role separation, exact CORS origins, pseudonymized audit writes, the four inboxes, schema constraints, one-initial-assignment enforcement and audit update/delete guards.
+
+**Nothing has been deployed to Cloudflare.** No D1 database has been created, no remote migration has run, no Access application or IdP groups have been configured, and no secret has been provisioned. The local Access identity is a development simulation only. Production deployment is gated on company security approval and the instructions in backend/README.md.
+
+D1 is single-threaded per database. Query duration, write contention, storage growth and recovery requirements must be measured before implementing live assignment writes. The audit triggers are an application-level append-only guard, not a cryptographic or externally immutable ledger.
 
 ## Metric definitions to preserve
 
