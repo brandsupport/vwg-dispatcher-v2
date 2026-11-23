@@ -827,10 +827,12 @@ function teamWorkloadPanel(rows){
   '<p class="team-panel-note">Open counts are a static current-workload sample. They are not period-scaled, inbox-scoped or adjusted for scheduled hours, eligibility or ticket complexity.</p>';
 }
 function teamEventLedger(){
-  return dataTable(["Event type","Events recorded","Unique tickets affected","Interpretation"],WORKFLOW_EVENT_SUMMARY.map(event=>
-    '<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+event.rate+' · sample ratio only</td></tr>'
-  ))+
-  '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>';
+  return '<div class="team-event-ledger">'+
+    dataTable(["Event type","Events recorded","Unique tickets affected","Interpretation"],WORKFLOW_EVENT_SUMMARY.map(event=>
+      '<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+event.rate+' · sample ratio only</td></tr>'
+    ))+
+    '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
+  '</div>';
 }
 function teamEvidencePanel(){
   const items=[
