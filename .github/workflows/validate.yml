@@ -348,5 +348,56 @@ jobs:
             throw new Error('Reliability Centre investigation definitions and production limitations are missing from README.');
           }
 
-                    console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0 Dispatch Configuration 2.0 and Reliability Centre 2.0 integrity checks.');
+
+          const auditStart = js.indexOf('function renderAudit(){');
+          const auditEnd = js.indexOf('\nfunction renderReports(){', auditStart);
+          const auditView = auditStart >= 0 && auditEnd > auditStart ? js.slice(auditStart, auditEnd) : '';
+          for (const text of ['AUDIT HISTORY 2.0','SYNTHETIC AUDIT DATA · READ ONLY','Event ledger','Event investigation','Related ticket and correlation timeline','Production audit contract','Persistent audit store','Not configured','Event integrity','Not verified']) {
+            if (!auditView.includes(text)) throw new Error('Audit History 2.0 section or safety disclosure missing: ' + text);
+          }
+          for (const forbidden of ['100%','8,426','Audit completeness','data-action="apply-audit"','data-action="approve-audit"','data-action="delete-audit"']) {
+            if (auditView.includes(forbidden)) throw new Error('Audit History must not claim completeness or expose a non-existent operational action: ' + forbidden);
+          }
+          for (const selector of ['.audit-demo-strip','.audit-filter-toolbar','.audit-workspace','.audit-detail-facts','.audit-diff-grid','.audit-timeline-list','.audit-contract-grid','.audit-final-note']) {
+            if (!css.includes(selector)) throw new Error('Audit History styling is missing: ' + selector);
+          }
+          for (const helper of ['auditBaseEvents','auditFilteredEvents','auditStats','auditEventRows','auditDetailMarkup','auditRelatedEvents','auditTimelineMarkup','refreshAuditPanels','exportAuditHistory']) {
+            if (!js.includes('function ' + helper + '(')) throw new Error('Audit History helper missing: ' + helper);
+          }
+          for (const text of ['data-audit-search','data-audit-filter','data-audit-event','dispatcher-sample-audit-history.csv','if(action==="reset-audit-filters")','if(action==="export-audit"){exportAuditHistory();return;}']) {
+            if (!js.includes(text)) throw new Error('Audit History interaction or export is not wired: ' + text);
+          }
+          const auditDataStart = js.indexOf('const AUDIT_LEDGER = [');
+          const auditDataEnd = js.indexOf('\n];', auditDataStart) + 3;
+          const auditData = auditDataStart >= 0 && auditDataEnd > auditDataStart ? js.slice(auditDataStart, auditDataEnd) : '';
+          const auditHelpersStart = js.indexOf('function auditBaseEvents(){');
+          const auditHelpersEnd = js.indexOf('\nfunction auditSelectOptions(', auditHelpersStart);
+          const auditHelpers = auditHelpersStart >= 0 && auditHelpersEnd > auditHelpersStart ? js.slice(auditHelpersStart, auditHelpersEnd) : '';
+          if (!auditData || !auditHelpers) throw new Error('Audit sample event data or filter helpers are missing.');
+          const auditCheck = vm.runInNewContext(
+            'const state={folder:"all",auditSearch:"",auditCategory:"all",auditOutcome:"all",auditActor:"all"};' +
+            auditData + auditHelpers +
+            '; const all=auditFilteredEvents();' +
+            'const stats=auditStats(auditBaseEvents());' +
+            'state.folder="agency";const agency=auditFilteredEvents();' +
+            'state.folder="all";state.auditCategory="Exception";const exceptions=auditFilteredEvents();' +
+            'state.auditCategory="all";state.auditActor="Agent 01";const actor=auditFilteredEvents();' +
+            'state.auditActor="all";state.auditSearch="CORR-CFG-ALLOC-02";const byCorrelation=auditFilteredEvents();' +
+            '({count:all.length,ids:new Set(all.map(e=>e.id)).size,stats,agencyCount:agency.length,exceptionCount:exceptions.length,actorCount:actor.length,correlationCount:byCorrelation.length,hasBeforeAfter:all.every(e=>e.before&&e.after),hasActor:all.every(e=>e.actor&&e.role),hasCorrelation:all.every(e=>e.correlation)})'
+          );
+          if (auditCheck.count !== 20 || auditCheck.ids !== 20 || auditCheck.stats.eventCount !== 20 ||
+              auditCheck.stats.ticketCount !== 4 || auditCheck.stats.configurationCount !== 3 ||
+              auditCheck.stats.exceptionCount !== 4 || auditCheck.agencyCount !== 4 ||
+              auditCheck.exceptionCount !== 4 || auditCheck.actorCount !== 3 || auditCheck.correlationCount !== 3 ||
+              !auditCheck.hasBeforeAfter || !auditCheck.hasActor || !auditCheck.hasCorrelation) {
+            throw new Error('Audit sample ledger counts, inbox scope, filters or evidence fields failed reconciliation: ' + JSON.stringify(auditCheck));
+          }
+          if (!readme.includes('### Audit History 2.0') ||
+              !readme.includes('The screen deliberately does not show an audit-completeness percentage') ||
+              !readme.includes('cryptographic integrity chain') ||
+              !readme.includes('Corrective events')) {
+            throw new Error('Audit History governance and data-integrity limitations are missing from README.');
+          }
+
+          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0, Dispatch Configuration 2.0, Reliability Centre 2.0 and Audit History 2.0 integrity checks.');
           NODE
