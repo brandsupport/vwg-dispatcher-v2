@@ -1627,7 +1627,11 @@ function refreshAuditPanels(){
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
 function renderAudit(){
-  const base=auditBaseEvents(),filtered=auditFilteredEvents(),stats=auditStats(base);
+  const base=auditBaseEvents();
+  for(const [key,field] of [["auditCategory","category"],["auditOutcome","outcome"],["auditActor","actor"]]){
+    if(state[key]!=="all"&&!base.some(event=>event[field]===state[key]))state[key]="all";
+  }
+  const filtered=auditFilteredEvents(),stats=auditStats(base);
   if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
   const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
   pageContent.innerHTML=heading("AUDIT HISTORY 2.0","Trace every change, decision and outcome.","Investigate sample ticket events, manager approvals, configuration history and exception evidence. This is a read-only demonstration ledger, not a production audit source.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export filtered ledger</button>')+
