@@ -314,6 +314,123 @@ const RELIABILITY_EVENTS = [
   }
 ];
 
+
+/* Administration & Security 2.0 — proposed controls and synthetic review examples */
+const ADMIN_ROLE_PROFILES = [
+  {
+    id:"platform_admin",title:"Platform administrator",level:"Privileged",scope:"Platform-wide configuration and security administration.",
+    purpose:"Own platform configuration, identity lifecycle, integration registration and security-policy administration.",
+    boundaries:"Cannot use an elevated identity for routine ticket handling. Secrets are managed in a server-side vault and are never displayed in the dashboard.",
+    permissions:["dashboard_read","queue_read_all","ticket_assign","ticket_reassign","ticket_manage_all","roster_read","roster_manage","config_draft","config_approve","report_read_all","report_export_all","audit_read","audit_export","access_request_submit","access_review","user_manage","security_manage","integration_manage","retention_manage"]
+  },
+  {
+    id:"operations_manager",title:"Operations manager",level:"Operational",scope:"Operational queues, workforce planning and approved reporting.",
+    purpose:"Review queue activity, manage authorised ticket workflow, prepare roster and dispatch proposals, and review operational audit history.",
+    boundaries:"Cannot administer platform identities, security settings, integration secrets or retention policy. Critical configuration approval remains separate from proposal preparation.",
+    permissions:["dashboard_read","queue_read_all","ticket_assign","ticket_reassign","ticket_manage_all","roster_read","roster_manage","config_draft","report_read_all","report_export_all","audit_read","access_request_submit"]
+  },
+  {
+    id:"team_agent",title:"Team agent",level:"Standard",scope:"Assigned operational work and personal information.",
+    purpose:"Work tickets assigned to the agent, record permitted ticket updates, hand over work and view personal operational information.",
+    boundaries:"No access to other agents' private performance, platform settings, full audit exports, identity administration or dispatch configuration.",
+    permissions:["dashboard_read","ticket_read_own","ticket_update_assigned","handover_own","flag_own","personal_report_read","access_request_submit"]
+  },
+  {
+    id:"auditor",title:"Read-only auditor",level:"Restricted",scope:"Approved audit and reporting evidence.",
+    purpose:"Review authorised audit records and evidence without changing tickets, workforce settings or platform configuration.",
+    boundaries:"Read-only scope. No assignment, handover, roster changes, access administration, configuration approval or integration management.",
+    permissions:["dashboard_read","report_read_all","audit_read","audit_export"]
+  }
+];
+const ADMIN_PERMISSION_CATALOG = [
+  {code:"dashboard_read",group:"Platform visibility",label:"View dashboard shell and permitted summaries"},
+  {code:"queue_read_all",group:"Ticket operations",label:"View all operational queue records"},
+  {code:"ticket_read_own",group:"Ticket operations",label:"View tickets assigned to the current user"},
+  {code:"ticket_update_assigned",group:"Ticket operations",label:"Update permitted fields on assigned tickets"},
+  {code:"ticket_assign",group:"Ticket operations",label:"Assign unowned tickets within eligible inboxes"},
+  {code:"ticket_reassign",group:"Ticket operations",label:"Reassign tickets with reason and audit evidence"},
+  {code:"ticket_manage_all",group:"Ticket operations",label:"Manage permitted ticket lifecycle actions across queues"},
+  {code:"handover_own",group:"Ticket operations",label:"Hand over work owned by the current user"},
+  {code:"flag_own",group:"Ticket operations",label:"Flag assigned work for review"},
+  {code:"roster_read",group:"Workforce",label:"View approved roster and coverage information"},
+  {code:"roster_manage",group:"Workforce",label:"Prepare and manage roster proposals"},
+  {code:"personal_report_read",group:"Reporting",label:"View personal workload and activity summary"},
+  {code:"report_read_all",group:"Reporting",label:"View approved team and operational reports"},
+  {code:"report_export_all",group:"Reporting",label:"Export approved team-level reports"},
+  {code:"audit_read",group:"Audit & governance",label:"Read permitted audit events and evidence"},
+  {code:"audit_export",group:"Audit & governance",label:"Export authorised audit evidence"},
+  {code:"access_request_submit",group:"Identity & security",label:"Submit an access request for review"},
+  {code:"access_review",group:"Identity & security",label:"Review access requests as an authorised independent reviewer"},
+  {code:"user_manage",group:"Identity & security",label:"Create, suspend and manage user identities and role assignments"},
+  {code:"security_manage",group:"Identity & security",label:"Manage authentication, session and security policy"},
+  {code:"integration_manage",group:"Integrations",label:"Manage connector registration and secret-vault references"},
+  {code:"retention_manage",group:"Data governance",label:"Manage approved retention and deletion schedules"},
+  {code:"config_draft",group:"Dispatch governance",label:"Prepare dispatch and eligibility configuration proposals"},
+  {code:"config_approve",group:"Dispatch governance",label:"Approve critical configuration changes independently"}
+];
+const ADMIN_ACCESS_REQUESTS = [
+  {
+    id:"ACCESS-SAMPLE-004",submittedAt:"2026-11-23 10:18 UK",requester:"Sample Agent 06",currentRole:"Team agent",requestedRole:"Operations manager",
+    scope:"Roster & coverage · read and proposal access",status:"Awaiting independent review (sample)",risk:"High",
+    reason:"Temporary supervisor cover is requested, but the example does not include a verified rota-owner approval or defined end date.",
+    reviewer:"Not assigned",approval:"No approval recorded",evidence:"Illustrative request only. The requester identity, shift assignment and manager approval have not been verified.",
+    outcome:"Not applied — sample",next:"Verify employment identity, approved cover dates, business owner and least-privilege scope. A reviewer independent of the requester must decide."
+  },
+  {
+    id:"ACCESS-SAMPLE-003",submittedAt:"2026-11-23 09:52 UK",requester:"Sample Team Agent 03",currentRole:"Team agent",requestedRole:"Read-only auditor",
+    scope:"Audit history · export access",status:"Declined (sample)",risk:"High",
+    reason:"The request is not linked to an approved audit assignment, and the requested export scope exceeds the sample agent role.",
+    reviewer:"Sample Platform Administrator",approval:"Declined in sample record",evidence:"Example decision record demonstrates least-privilege review; it is not a real access decision.",
+    outcome:"No access change — sample",next:"A business sponsor and defined audit scope would be required before a new request could be considered."
+  },
+  {
+    id:"ACCESS-SAMPLE-002",submittedAt:"2026-11-22 16:40 UK",requester:"Sample Operations Manager 01",currentRole:"Operations manager",requestedRole:"Platform administrator",
+    scope:"User administration · integration and security settings",status:"Returned for clarification (sample)",risk:"Critical",
+    reason:"The justification combines unrelated duties and does not establish a need for permanent platform-wide privilege.",
+    reviewer:"Sample Security Reviewer",approval:"Returned; no approval",evidence:"Example separation-of-duties control. No privilege was elevated.",
+    outcome:"Not applied — sample",next:"Split the requested duties, identify a time-bound task and request the minimum additional permission through an independently reviewed process."
+  },
+  {
+    id:"ACCESS-SAMPLE-001",submittedAt:"2026-11-21 11:06 UK",requester:"Sample Auditor 01",currentRole:"Read-only auditor",requestedRole:"Read-only auditor",
+    scope:"Audit history · read-only export",status:"Approved in sample",risk:"Low",
+    reason:"The sample request includes a defined audit scope and a separate business sponsor.",
+    reviewer:"Sample Platform Administrator",approval:"Approved in sample record",evidence:"A sample decision only; no account, role or permission was created or changed.",
+    outcome:"No live access change — sample",next:"Production must confirm identity, role scope, approval authority and server-side policy before issuing access."
+  }
+];
+const ADMIN_SECURITY_CONTROLS = [
+  {id:"identity",area:"Identity provider",status:"Not connected",risk:"Critical",detail:"No trusted identity issuer or authenticated principal is connected to this public prototype.",requirement:"Choose an approved identity provider; validate issuer, audience, token signature, expiry and account lifecycle server-side."},
+  {id:"mfa",area:"Multi-factor authentication",status:"Not configured",risk:"High",detail:"No MFA policy or challenge flow is active.",requirement:"Require MFA for privileged roles and define recovery and step-up authentication policy."},
+  {id:"rbac",area:"Server-side role authorisation",status:"Not configured",risk:"Critical",detail:"The role matrix on this page is a proposal, not an access-control mechanism.",requirement:"Enforce deny-by-default permissions on every API and data operation; test object-level and role-level access."},
+  {id:"session",area:"Session lifecycle",status:"Not configured",risk:"High",detail:"No server-issued session, revocation or idle-timeout service exists.",requirement:"Use secure, HttpOnly, SameSite cookies; define idle and absolute expiry, rotation, logout and revocation."},
+  {id:"csrf",area:"Request protection",status:"Not configured",risk:"High",detail:"There is no authenticated API to protect yet.",requirement:"Use CSRF protections for cookie-authenticated writes, strict CORS, content security policy and input validation."},
+  {id:"rate",area:"Abuse and rate controls",status:"Not configured",risk:"Medium",detail:"No API gateway, throttling or abuse detection is connected.",requirement:"Apply server-side rate limits and alert on suspicious authentication, export and privileged-action patterns."},
+  {id:"audit",area:"Security audit telemetry",status:"Not connected",risk:"Critical",detail:"The audit page uses synthetic browser-side records only.",requirement:"Write authenticated, append-only security events to a protected store and verify delivery and integrity."},
+  {id:"secrets",area:"Secrets management",status:"Not connected",risk:"Critical",detail:"No secret vault or protected runtime configuration is connected.",requirement:"Store connector credentials only in a server-side secret manager; rotate and scope credentials; never expose secret values to browser code."},
+  {id:"encryption",area:"Encryption and transport",status:"Not verified",risk:"High",detail:"The static demo does not establish production storage or API encryption controls.",requirement:"Verify TLS, encryption at rest, key ownership, rotation, backup protection and data-flow boundaries."},
+  {id:"backup",area:"Backup and recovery",status:"Not configured",risk:"High",detail:"No production database, backup schedule or restore test exists.",requirement:"Set protected backups, recovery objectives, restore tests and documented incident ownership."}
+];
+const ADMIN_RETENTION_POLICIES = [
+  {data:"Ticket content and attachments",purpose:"Customer support and operational case history",period:"Not agreed",owner:"Operations + Data Protection",disposal:"Deletion / anonymisation method not defined"},
+  {data:"Assignment and workflow events",purpose:"Operational traceability and dispute investigation",period:"Not agreed",owner:"Operations + Compliance",disposal:"Append-only correction and retention rules to approve"},
+  {data:"Security and access events",purpose:"Identity, privileged access and incident investigation",period:"Not agreed",owner:"Security",disposal:"Restricted deletion with documented approval"},
+  {data:"Audit exports and reports",purpose:"Approved management, audit and regulatory evidence",period:"Not agreed",owner:"Data Governance",disposal:"Controlled storage, expiry and download governance"},
+  {data:"Backups and recovery copies",purpose:"Business continuity and restoration",period:"Not agreed",owner:"Platform Operations",disposal:"Expiry and cryptographic erasure process to define"}
+];
+const ADMIN_TIME_BOUNDARIES = [
+  {domain:"Mailbox and ticket event timestamps",zone:"Europe/London",storage:"Store UTC; display in the Europe/London zone.",status:"Design requirement",note:"Use IANA timezone rules for UK daylight-saving transitions; never persist an ambiguous local-time string as the canonical event time."},
+  {domain:"Roster and shift schedules",zone:"Africa/Cairo",storage:"Store the UTC instant plus the original local schedule and IANA zone.",status:"Design requirement",note:"Keep Egypt-local shift interpretation separate from UK mailbox event timestamps."},
+  {domain:"Cross-system event correlation",zone:"UTC",storage:"Use timezone-aware UTC instants and stable correlation IDs.",status:"Required",note:"Use IDs and UTC instants for ordering; timezone labels are for human display only."},
+  {domain:"Reporting cutoffs and calendars",zone:"Not defined",storage:"Owner approval required.",status:"Not agreed",note:"Define reporting week/month boundaries, late-arriving event treatment and public-holiday calendars before production."}
+];
+const ADMIN_INTEGRATIONS = [
+  {name:"Outlook shared mailboxes",boundary:"Mailbox event and category adapter",status:"Not connected",secret:"No credential configured",gate:"Approved app registration, delegated/application permissions, mailbox scope and server-side token storage."},
+  {name:"Excel dispatch tracker",boundary:"Tracker read/write adapter",status:"Not connected",secret:"No credential configured",gate:"Documented workbook schema, controlled service identity, atomic write strategy and verified reconciliation."},
+  {name:"Identity provider",boundary:"Sign-in and lifecycle",status:"Not connected",secret:"No issuer configured",gate:"Approved issuer, MFA, lifecycle events, group/claim mapping and emergency-access design."},
+  {name:"Database and audit store",boundary:"Authoritative records and append-only events",status:"Not configured",secret:"No connection string configured",gate:"Private database, server-side authorisation, immutable audit design, backup and restore tests."},
+  {name:"Secret manager",boundary:"Connector credential storage",status:"Not connected",secret:"No vault reference configured",gate:"Server-side vault, scoped service identities, rotation, access logging and incident revocation."}
+];
+
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   selectedAgent:null, paused:false, pausedFolders:{}, modal:null,
@@ -322,7 +439,8 @@ const state = {
   rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null,
   configPreviewFolder:"agency", configPreviewWeight:50,
   reliabilitySearch:"", reliabilityType:"all", reliabilityStatus:"all", reliabilitySeverity:"all", selectedReliabilityEvent:"EXC-2108",
-  auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020"
+  auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020",
+  adminRole:"operations_manager", adminRequestSearch:"", adminRequestStatus:"all", selectedAdminRequest:"ACCESS-SAMPLE-004"
 };
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
@@ -1667,18 +1785,128 @@ function renderReports(){
 function reportCard(title,copy,tag,foot){
   return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="export-summary">Export ↗</button></div></article>';
 }
+function adminRoleById(id){
+  return ADMIN_ROLE_PROFILES.find(role=>role.id===id)||ADMIN_ROLE_PROFILES[0];
+}
+function adminRoleCards(){
+  return '<div class="admin-role-cards">'+ADMIN_ROLE_PROFILES.map(role=>
+    '<button type="button" class="admin-role-card'+(role.id===state.adminRole?' selected':'')+'" data-admin-role="'+esc(role.id)+'" aria-pressed="'+(role.id===state.adminRole?'true':'false')+'">'+
+      '<span class="admin-role-level">'+esc(role.level)+'</span><strong>'+esc(role.title)+'</strong><small>'+esc(role.scope)+'</small><span class="admin-role-count">'+role.permissions.length+' proposed permissions</span>'+
+    '</button>'
+  ).join("")+'</div>';
+}
+function adminRoleDetail(){
+  const role=adminRoleById(state.adminRole);
+  const grouped=[...new Set(ADMIN_PERMISSION_CATALOG.map(item=>item.group))];
+  return '<div class="admin-role-detail-head"><div><span class="admin-overline">PROPOSED ROLE PROFILE · '+esc(role.level.toUpperCase())+'</span><h3>'+esc(role.title)+'</h3><p>'+esc(role.scope)+'</p></div>'+statusPill("Design only")+'</div>'+
+    '<div class="admin-role-purpose"><strong>Intended responsibilities</strong><p>'+esc(role.purpose)+'</p></div>'+
+    '<div class="admin-role-purpose restricted"><strong>Privilege boundary</strong><p>'+esc(role.boundaries)+'</p></div>'+
+    '<div class="admin-permission-groups">'+grouped.map(group=>{
+      const permissions=ADMIN_PERMISSION_CATALOG.filter(item=>item.group===group);
+      return '<section><h4>'+esc(group)+'</h4>'+permissions.map(item=>
+        '<div class="admin-permission-line"><span>'+esc(item.label)+'</span><strong class="'+(role.permissions.includes(item.code)?'proposed-yes':'proposed-no')+'">'+(role.permissions.includes(item.code)?'Proposed':'Not proposed')+'</strong></div>'
+      ).join("")+'</section>';
+    }).join("")+'</div>';
+}
+function adminPermissionMatrix(){
+  return dataTable(["Capability",...ADMIN_ROLE_PROFILES.map(role=>role.title)],ADMIN_PERMISSION_CATALOG.map(permission=>
+    '<tr><td><strong class="admin-capability-name">'+esc(permission.label)+'</strong><small class="admin-capability-group">'+esc(permission.group)+'</small></td>'+
+    ADMIN_ROLE_PROFILES.map(role=>'<td><span class="'+(role.permissions.includes(permission.code)?'admin-matrix-yes':'admin-matrix-no')+'">'+(role.permissions.includes(permission.code)?'Proposed':'—')+'</span></td>').join("")+
+    '</tr>'
+  ));
+}
+function adminRequestsFiltered(){
+  const query=state.adminRequestSearch.trim().toLowerCase();
+  return ADMIN_ACCESS_REQUESTS.filter(request=>{
+    const statusMatch=state.adminRequestStatus==="all"||request.status===state.adminRequestStatus;
+    const haystack=[request.id,request.requester,request.currentRole,request.requestedRole,request.scope,request.status,request.risk,request.reason,request.reviewer,request.evidence].join(" ").toLowerCase();
+    return statusMatch&&(!query||haystack.includes(query));
+  });
+}
+function adminRequestRows(){
+  const requests=adminRequestsFiltered();
+  if(!requests.length)return '<div class="admin-empty"><strong>No matching sample requests</strong><span>Change the search or status filter to inspect another example.</span></div>';
+  return dataTable(["Submitted","Request / requester","Requested access","Risk","Decision"],requests.map(request=>
+    '<tr><td class="mono">'+esc(request.submittedAt)+'</td>'+
+    '<td><button type="button" class="admin-request-select" data-admin-request="'+esc(request.id)+'" aria-pressed="'+(request.id===state.selectedAdminRequest?'true':'false')+'"><strong>'+esc(request.id)+'</strong><small>'+esc(request.requester)+'</small></button></td>'+
+    '<td><strong class="admin-capability-name">'+esc(request.requestedRole)+'</strong><small class="admin-capability-group">'+esc(request.scope)+'</small></td>'+
+    '<td>'+statusPill(request.risk)+'</td><td>'+statusPill(request.status)+'</td></tr>'
+  ));
+}
+function adminRequestDetail(){
+  const request=adminRequestsFiltered().find(item=>item.id===state.selectedAdminRequest);
+  if(!request)return '<div class="admin-empty"><strong>No request selected</strong><span>Select one of the sample requests to inspect the business case, review evidence and next step.</span></div>';
+  return '<div class="admin-request-detail-head"><div><span class="admin-overline">'+esc(request.id)+' · SAMPLE REQUEST</span><h3>'+esc(request.requestedRole)+'</h3><p>'+esc(request.requester)+' · Current role: '+esc(request.currentRole)+'</p></div>'+statusPill(request.status)+'</div>'+
+    '<div class="admin-request-facts"><div><span>Submitted</span><strong>'+esc(request.submittedAt)+'</strong></div><div><span>Risk label</span><strong>'+esc(request.risk)+'</strong></div><div><span>Reviewer</span><strong>'+esc(request.reviewer)+'</strong></div><div><span>Outcome</span><strong>'+esc(request.outcome)+'</strong></div></div>'+
+    '<div class="admin-request-context"><span>Requested scope</span><p>'+esc(request.scope)+'</p></div>'+
+    '<div class="admin-request-context"><span>Business reason</span><p>'+esc(request.reason)+'</p></div>'+
+    '<div class="admin-request-context"><span>Approval evidence</span><p>'+esc(request.approval)+' · '+esc(request.evidence)+'</p></div>'+
+    '<div class="admin-request-next"><strong>Required next step</strong><p>'+esc(request.next)+'</p></div>'+
+    '<div class="admin-readonly-note">Read-only example. No approve, deny, grant, revoke or role-change action is available in this public prototype.</div>';
+}
+function refreshAdminRequestPanels(){
+  const filtered=adminRequestsFiltered();
+  if(!filtered.some(item=>item.id===state.selectedAdminRequest))state.selectedAdminRequest=filtered[0]?.id||null;
+  const count=document.getElementById("adminRequestCount");
+  const rows=document.getElementById("adminRequestRows");
+  const detail=document.getElementById("adminRequestDetail");
+  if(count)count.textContent="Showing "+filtered.length+" of "+ADMIN_ACCESS_REQUESTS.length+" synthetic access requests";
+  if(rows)rows.innerHTML=adminRequestRows();
+  if(detail)detail.innerHTML=adminRequestDetail();
+}
+function adminSecurityControlsMarkup(){
+  return '<div class="admin-control-grid">'+ADMIN_SECURITY_CONTROLS.map(control=>
+    '<article class="admin-control-card"><div class="admin-control-card-top"><span>'+esc(control.area)+'</span>'+statusPill(control.status)+'</div>'+
+    '<div class="admin-risk-line"><span>Control priority</span>'+statusPill(control.risk)+'</div>'+
+    '<p>'+esc(control.detail)+'</p><div class="admin-control-required"><strong>Production requirement</strong><span>'+esc(control.requirement)+'</span></div></article>'
+  ).join("")+'</div>';
+}
+function adminRetentionMarkup(){
+  return dataTable(["Data class","Purpose","Retention period","Policy owner","Disposition"],ADMIN_RETENTION_POLICIES.map(policy=>
+    '<tr><td><strong class="admin-capability-name">'+esc(policy.data)+'</strong></td><td>'+esc(policy.purpose)+'</td><td>'+statusPill(policy.period)+'</td><td>'+esc(policy.owner)+'</td><td>'+esc(policy.disposal)+'</td></tr>'
+  ));
+}
+function adminIntegrationMarkup(){
+  return dataTable(["System boundary","Intended use","Connection state","Secret status","Readiness gate"],ADMIN_INTEGRATIONS.map(item=>
+    '<tr><td><strong class="admin-capability-name">'+esc(item.name)+'</strong></td><td>'+esc(item.boundary)+'</td><td>'+statusPill(item.status)+'</td><td>'+statusPill(item.secret)+'</td><td>'+esc(item.gate)+'</td></tr>'
+  ));
+}
+function adminTimeBoundaryMarkup(){
+  return dataTable(["Time domain","IANA zone","Storage / display rule","Readiness","Implementation note"],ADMIN_TIME_BOUNDARIES.map(item=>
+    '<tr><td><strong class="admin-capability-name">'+esc(item.domain)+'</strong></td><td><strong class="mono">'+esc(item.zone)+'</strong></td><td>'+esc(item.storage)+'</td><td>'+statusPill(item.status)+'</td><td>'+esc(item.note)+'</td></tr>'
+  ));
+}
 function renderAdmin(){
-  pageContent.innerHTML=heading("PLATFORM ADMINISTRATION","Manage the platform foundation","Accounts, role permissions, security, application settings and future integrations.")+
-    '<div class="prototype-warning"><strong>Administration is not active.</strong> User accounts and access controls have not yet been implemented. Do not use this prototype to store real colleague or ticket information.</div>'+
-    '<div class="control-grid">'+
-      configCard("Users & roles","Create administrator, manager and agent identities and apply least-privilege access.","Role model","Admin · Manager · Agent","Not configured")+
-      configCard("Access security","Session management, secure cookies, rate limits and server-enforced permissions.","Protection","Authentication required","Not configured")+
-      configCard("Data retention","Define audit retention, event immutability and backup policy.","Retention","Policy to be agreed","Draft")+
-      configCard("Integration settings","Configure Excel, Outlook and approved service connections using protected secrets.","Connectors","Not connected","Disabled")+
-      configCard("Notifications","Configure operational alerts, manager notifications and service warnings.","Channels","To be designed","Disabled")+
-      configCard("Application preferences","Timezones, reporting cutoffs, working calendars and display defaults.","Timezone","UK inbox · Egypt shifts","Draft")+
-    '</div>'+
-    panel("Environment information","Current standalone prototype state",'<div class="environment-grid"><div><span>Application</span><strong>VWG Dispatch Intelligence</strong></div><div><span>Version</span><strong>UI Foundation 0.2</strong></div><div><span>Data source</span><strong>Synthetic sample records</strong></div><div><span>Database</span><strong>Not configured</strong></div><div><span>Authentication</span><strong>Not configured</strong></div><div><span>Excel / Outlook</span><strong>Not connected</strong></div></div>');
+  const pending=ADMIN_ACCESS_REQUESTS.filter(item=>/Awaiting|Returned/.test(item.status)).length;
+  const notReady=ADMIN_SECURITY_CONTROLS.filter(item=>item.status!=="Configured").length;
+  const roleCount=ADMIN_ROLE_PROFILES.length;
+  const retentionPending=ADMIN_RETENTION_POLICIES.filter(item=>item.period==="Not agreed").length;
+  if(!ADMIN_ROLE_PROFILES.some(role=>role.id===state.adminRole))state.adminRole="operations_manager";
+  const filtered=adminRequestsFiltered();
+  if(!filtered.some(item=>item.id===state.selectedAdminRequest))state.selectedAdminRequest=filtered[0]?.id||null;
+  pageContent.innerHTML=heading("ADMINISTRATION & SECURITY 2.0","Design access deliberately. Enforce it on the server.","A manager-facing governance workspace for roles, access reviews, security controls, data retention and integration boundaries. Everything on this page is a proposal or synthetic example.",'<button class="btn btn-secondary" data-action="reset-admin-review">Reset review filters</button><button class="btn btn-primary" data-action="export-admin-security">↓ Export security blueprint</button>')+
+    '<div class="admin-demo-strip"><span><i></i> DESIGN CATALOGUE · SYNTHETIC REVIEW CASES · READ ONLY</span><span>Authentication <b>Not configured</b></span><span>Server-side permissions <b>Not configured</b></span><span>Production changes <b>Unavailable</b></span></div>'+
+    kpiGrid([
+      kpi("Proposed role profiles",String(roleCount),"Role templates for policy review","♙"),
+      kpi("Access requests for review",String(pending),"Synthetic pending / returned examples","◎"),
+      kpi("Security controls not ready",String(notReady),"No control is verified as configured","◇"),
+      kpi("Retention policies to agree",String(retentionPending),"No retention period has been approved","◷")
+    ])+
+    panel("Role profile explorer","Select a role to inspect its proposed purpose, scope and least-privilege permissions",adminRoleCards()+'<div id="adminRoleDetail">'+adminRoleDetail()+'</div>','<span class="subtle-tag">PROPOSED RBAC · NOT ENFORCED</span>')+
+    panel("Permission comparison matrix","Proposed capability coverage by role. Blank means not proposed; every row requires security and business-owner approval.",'<div class="admin-matrix-wrap">'+adminPermissionMatrix()+'</div>','<span class="subtle-tag">POLICY DESIGN ONLY</span>')+
+    panel("Access request review queue","Inspect synthetic requests and their evidence. These are not real colleague access requests.",'<div class="admin-request-filter"><label><span>SEARCH REQUESTS</span><input type="search" data-admin-request-search placeholder="Request ID, requester, scope or reason…" value="'+esc(state.adminRequestSearch)+'"></label><label><span>REVIEW STATUS</span><select data-admin-request-filter>'+auditSelectOptions([...new Set(ADMIN_ACCESS_REQUESTS.map(item=>item.status))],state.adminRequestStatus,"All sample statuses")+'</select></label></div><div class="admin-result-count" id="adminRequestCount">Showing '+filtered.length+' of '+ADMIN_ACCESS_REQUESTS.length+' synthetic access requests</div><div class="admin-request-layout"><div class="admin-request-ledger" id="adminRequestRows">'+adminRequestRows()+'</div><div class="admin-request-inspector" id="adminRequestDetail">'+adminRequestDetail()+'</div></div>','<span class="subtle-tag">NO GRANT / REVOKE CONTROLS</span>')+
+    panel("Security control baseline","The controls required before any real customer, ticket or employee data is loaded",adminSecurityControlsMarkup(),'<span class="subtle-tag">ALL CONTROLS UNVERIFIED</span>')+
+    panel("Data retention and disposal","Retention periods require approved business, legal and data-protection decisions. No period is assumed here.",'<div class="admin-retention-note">Do not store real customer or employee data in this public demo. Define separate rules for active records, audit evidence, exports, backups and legal holds before production.</div>'+adminRetentionMarkup())+
+    panel("Integration and secret boundaries","Connector credentials must stay in a protected server-side secret manager; the browser must never receive secret values.",adminIntegrationMarkup())+
+    panel("Operational timezone boundaries","Store canonical event instants in UTC. Keep UK mailbox display and Egypt-local roster interpretation explicit.",adminTimeBoundaryMarkup())+
+    panel("Secure access lifecycle","Proposed production request path — the public prototype cannot execute any of these steps.",'<div class="admin-lifecycle">'+[
+      ["01","Request","User identity and business reason captured"],
+      ["02","Verify","Identity, employment status and scope checked"],
+      ["03","Review","Independent owner approves or declines"],
+      ["04","Enforce","Server validates role on every protected operation"],
+      ["05","Audit","Decision, actor, before/after and result appended"]
+    ].map((item,index)=>'<div><b>'+item[0]+'</b><strong>'+item[1]+'</strong><span>'+item[2]+'</span></div>'+(index<4?'<i>→</i>':'')).join("")+'</div>')+
+    '<div class="admin-final-note"><strong>Production boundary:</strong> this static public page does not authenticate users, enforce roles, create accounts, approve requests, issue sessions, store secrets, connect Outlook or Excel, or define legally approved retention periods. Hiding controls in browser code is not security. Production access must be enforced by a trusted server with identity verification, least-privilege authorisation, protected storage and auditable outcomes.</div>';
 }
 function render(){
   document.getElementById("topbarPage").textContent=VIEW_TITLES[state.view]||"Overview";
@@ -1819,6 +2047,17 @@ function exportAuditHistory(){
   ];
   csvDownload("dispatcher-sample-audit-history.csv",rows);
 }
+function exportAdminSecurityBlueprint(){
+  const rows=[["Section","Name","Scope / detail","Status / permission","Evidence / notes"]];
+  ADMIN_ROLE_PROFILES.forEach(role=>rows.push(["Role",role.title,role.scope,role.permissions.join("; "),role.boundaries]));
+  ADMIN_PERMISSION_CATALOG.forEach(permission=>rows.push(["Permission",permission.label,permission.group,permission.code,"Role mapping is a proposal only"]));
+  ADMIN_ACCESS_REQUESTS.forEach(request=>rows.push(["Synthetic access request",request.id,request.requester+" · "+request.requestedRole,request.status,request.reason+" | "+request.approval+" | "+request.outcome]));
+  ADMIN_SECURITY_CONTROLS.forEach(control=>rows.push(["Security control",control.area,control.detail,control.status,control.requirement]));
+  ADMIN_RETENTION_POLICIES.forEach(policy=>rows.push(["Retention",policy.data,policy.purpose,policy.period,policy.owner+" | "+policy.disposal]));
+  ADMIN_INTEGRATIONS.forEach(item=>rows.push(["Integration",item.name,item.boundary,item.status,item.secret+" | "+item.gate]));
+  ADMIN_TIME_BOUNDARIES.forEach(item=>rows.push(["Time boundary",item.domain,item.zone,item.status,item.storage+" | "+item.note]));
+  csvDownload("dispatcher-proposed-admin-security-blueprint.csv",rows);
+}
 function exportSummary(){
   const t=totals();
   csvDownload("dispatcher-sample-management-summary.csv",[["Metric","Value"],["Period",PERIODS[state.period].label],["Inbox",scopeName()],["Received",t.received],["Initially assigned",t.assigned],["Resolved",t.resolved],["Outstanding",t.open],["Unassigned",t.unassigned]]);
@@ -1854,6 +2093,8 @@ function handleAction(action){
   if(action==="export-roster"){exportRoster();return;}
   if(action==="export-audit"){exportAuditHistory();return;}
   if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.selectedAuditEvent=null;renderAudit();return;}
+  if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}
+  if(action==="reset-admin-review"){state.adminRequestSearch="";state.adminRequestStatus="all";state.adminRole="operations_manager";state.selectedAdminRequest="ACCESS-SAMPLE-004";renderAdmin();return;}
   if(action==="export-summary"){exportSummary();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
@@ -1898,8 +2139,19 @@ document.addEventListener("change",event=>{
     state[auditFilter.dataset.auditFilter]=auditFilter.value;
     renderAudit();
   }
+  const adminRequestFilter=event.target.closest("[data-admin-request-filter]");
+  if(adminRequestFilter){
+    state.adminRequestStatus=adminRequestFilter.value;
+    renderAdmin();
+  }
 });
 document.addEventListener("input",event=>{
+  const adminSearch=event.target.closest("[data-admin-request-search]");
+  if(adminSearch){
+    state.adminRequestSearch=adminSearch.value;
+    refreshAdminRequestPanels();
+    return;
+  }
   const auditSearch=event.target.closest("[data-audit-search]");
   if(auditSearch){
     state.auditSearch=auditSearch.value;
@@ -1969,9 +2221,13 @@ document.addEventListener("click",event=>{
   const liveFolder=event.target.closest("[data-live-folder]");
   const reliabilityEvent=event.target.closest("[data-reliability-event]");
   const auditEvent=event.target.closest("[data-audit-event]");
+  const adminRole=event.target.closest("[data-admin-role]");
+  const adminRequest=event.target.closest("[data-admin-request]");
   if(action)handleAction(action.dataset.action);
   if(reliabilityEvent){state.selectedReliabilityEvent=reliabilityEvent.dataset.reliabilityEvent;renderReliability();}
   if(auditEvent){state.selectedAuditEvent=auditEvent.dataset.auditEvent;refreshAuditPanels();}
+  if(adminRole){state.adminRole=adminRole.dataset.adminRole;renderAdmin();}
+  if(adminRequest){state.selectedAdminRequest=adminRequest.dataset.adminRequest;refreshAdminRequestPanels();}
   if(go)navigate(go.dataset.go);
   if(ticket)openTicket(ticket.dataset.ticket);
   if(ticketStatus){state.ticketStatus=ticketStatus.dataset.ticketStatus;render();}

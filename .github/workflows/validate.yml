@@ -399,5 +399,88 @@ jobs:
             throw new Error('Audit History governance and data-integrity limitations are missing from README.');
           }
 
-          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0, Dispatch Configuration 2.0, Reliability Centre 2.0 and Audit History 2.0 integrity checks.');
+
+          const adminStart = js.indexOf('function renderAdmin(){');
+          const adminEnd = js.indexOf('\nfunction render(){', adminStart);
+          const adminView = adminStart >= 0 && adminEnd > adminStart ? js.slice(adminStart, adminEnd) : '';
+          for (const text of ['ADMINISTRATION & SECURITY 2.0','DESIGN CATALOGUE · SYNTHETIC REVIEW CASES · READ ONLY','Role profile explorer','Permission comparison matrix','Access request review queue','Security control baseline','Data retention and disposal','Integration and secret boundaries','Operational timezone boundaries','Secure access lifecycle','Authentication','Not configured','Production boundary']) {
+            if (!adminView.includes(text)) throw new Error('Administration & Security 2.0 section or safety disclosure missing: ' + text);
+          }
+          for (const forbidden of ['data-action="grant"','data-action="revoke"','data-action="approve-access"','data-action="create-user"','data-action="save-security"','data-action="apply-policy"']) {
+            if (adminView.includes(forbidden)) throw new Error('Administration must not expose a fake account, access or security control: ' + forbidden);
+          }
+          for (const selector of ['.admin-demo-strip','.admin-role-cards','.admin-permission-groups','.admin-matrix-wrap','.admin-request-layout','.admin-control-grid','.admin-lifecycle','.admin-final-note']) {
+            if (!css.includes(selector)) throw new Error('Administration & Security styling missing: ' + selector);
+          }
+          for (const helper of ['adminRoleById','adminRoleCards','adminRoleDetail','adminPermissionMatrix','adminRequestsFiltered','adminRequestRows','adminRequestDetail','refreshAdminRequestPanels','adminSecurityControlsMarkup','adminRetentionMarkup','adminIntegrationMarkup','exportAdminSecurityBlueprint']) {
+            if (!js.includes('function ' + helper + '(')) throw new Error('Administration helper missing: ' + helper);
+          }
+          for (const text of ['data-admin-role','data-admin-request','data-admin-request-search','data-admin-request-filter','dispatcher-proposed-admin-security-blueprint.csv','if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}','if(action==="reset-admin-review")']) {
+            if (!js.includes(text)) throw new Error('Administration interaction or export is not wired: ' + text);
+          }
+          const adminRolesStart = js.indexOf('const ADMIN_ROLE_PROFILES = [');
+          const adminRolesEnd = js.indexOf('\n];', adminRolesStart) + 3;
+          const adminPermissionsStart = js.indexOf('const ADMIN_PERMISSION_CATALOG = [');
+          const adminPermissionsEnd = js.indexOf('\n];', adminPermissionsStart) + 3;
+          const adminRequestsStart = js.indexOf('const ADMIN_ACCESS_REQUESTS = [');
+          const adminRequestsEnd = js.indexOf('\n];', adminRequestsStart) + 3;
+          const adminControlsStart = js.indexOf('const ADMIN_SECURITY_CONTROLS = [');
+          const adminControlsEnd = js.indexOf('\n];', adminControlsStart) + 3;
+          const adminRetentionStart = js.indexOf('const ADMIN_RETENTION_POLICIES = [');
+          const adminRetentionEnd = js.indexOf('\n];', adminRetentionStart) + 3;
+          const adminIntegrationsStart = js.indexOf('const ADMIN_INTEGRATIONS = [');
+          const adminIntegrationsEnd = js.indexOf('\n];', adminIntegrationsStart) + 3;
+          const adminTimeStart = js.indexOf('const ADMIN_TIME_BOUNDARIES = [');
+          const adminTimeEnd = js.indexOf('\n];', adminTimeStart) + 3;
+          const adminData = [
+            js.slice(adminRolesStart,adminRolesEnd),js.slice(adminPermissionsStart,adminPermissionsEnd),
+            js.slice(adminRequestsStart,adminRequestsEnd),js.slice(adminControlsStart,adminControlsEnd),
+            js.slice(adminRetentionStart,adminRetentionEnd),js.slice(adminIntegrationsStart,adminIntegrationsEnd),
+            js.slice(adminTimeStart,adminTimeEnd)
+          ];
+          if (adminData.some((source,index)=>!source||source.startsWith('const ' )===false)) throw new Error('Administration catalogues are missing or malformed.');
+          const adminResult = vm.runInNewContext(adminData.join('\n') + 
+            '; ({roles:ADMIN_ROLE_PROFILES,permissions:ADMIN_PERMISSION_CATALOG,requests:ADMIN_ACCESS_REQUESTS,controls:ADMIN_SECURITY_CONTROLS,retention:ADMIN_RETENTION_POLICIES,integrations:ADMIN_INTEGRATIONS,time:ADMIN_TIME_BOUNDARIES})');
+          const roles=adminResult.roles, permissionCodes=new Set(adminResult.permissions.map(item=>item.code));
+          const roleById=Object.fromEntries(roles.map(role=>[role.id,role]));
+          const requestIds=new Set(adminResult.requests.map(request=>request.id));
+          const everyPermissionValid=roles.every(role=>role.permissions.every(code=>permissionCodes.has(code)));
+          const controlsUnverified=adminResult.controls.every(control=>control.status!=="Configured"&&control.status!=="Connected");
+          const retentionUnagreed=adminResult.retention.every(policy=>policy.period==="Not agreed");
+          const noSecrets=adminResult.integrations.every(item=>item.secret&&!/token|password|secret\\s*[:=]\\s*[^N]/i.test(item.secret));
+          if (roles.length!==4 || new Set(roles.map(role=>role.id)).size!==4 || !everyPermissionValid ||
+              !roleById.platform_admin.permissions.includes("user_manage") ||
+              !roleById.platform_admin.permissions.includes("security_manage") ||
+              !roleById.operations_manager.permissions.includes("ticket_assign") ||
+              roleById.operations_manager.permissions.includes("user_manage") ||
+              roleById.operations_manager.permissions.includes("security_manage") ||
+              roleById.operations_manager.permissions.includes("integration_manage") ||
+              roleById.operations_manager.permissions.includes("config_approve") ||
+              !roleById.team_agent.permissions.includes("ticket_read_own") ||
+              roleById.team_agent.permissions.includes("queue_read_all") ||
+              roleById.team_agent.permissions.includes("audit_export") ||
+              roleById.team_agent.permissions.includes("user_manage") ||
+              !roleById.auditor.permissions.includes("audit_read") ||
+              roleById.auditor.permissions.includes("ticket_assign") ||
+              roleById.auditor.permissions.includes("user_manage")) {
+            throw new Error('Proposed role permissions violate expected least-privilege or separation-of-duties boundaries.');
+          }
+          if (adminResult.requests.length!==4 || requestIds.size!==4 ||
+              !adminResult.requests.every(item=>item.reason&&item.reviewer&&item.approval&&item.evidence&&item.outcome) ||
+              !controlsUnverified || adminResult.controls.length!==10 ||
+              adminResult.retention.length!==5 || !retentionUnagreed ||
+              adminResult.integrations.length!==5 || !noSecrets || adminResult.time.length!==4 ||
+              !adminResult.time.some(item=>item.zone==='Europe/London') ||
+              !adminResult.time.some(item=>item.zone==='Africa/Cairo')) {
+            throw new Error('Administration access review, readiness, retention or secret-boundary data failed integrity checks.');
+          }
+          if (!readme.includes('### Administration & Security 2.0') ||
+              !readme.includes('Hiding a button or filtering a menu is not an authorisation control') ||
+              !readme.includes('No retention period is selected or implied') ||
+              !readme.includes('No connector is connected and no credential is held in the browser') ||
+              !readme.includes('Europe/London') || !readme.includes('Africa/Cairo')) {
+            throw new Error('Administration production security boundaries are missing from README.');
+          }
+
+          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0, Dispatch Configuration 2.0, Reliability Centre 2.0, Audit History 2.0 and Administration & Security 2.0 integrity checks.');
           NODE
