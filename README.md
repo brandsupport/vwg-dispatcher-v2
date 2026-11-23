@@ -136,7 +136,10 @@ The security baseline reports identity provider, MFA, server-side authorisation,
 
 No retention period is selected or implied. Ticket content, workflow events, security events, exports, reports and backups each require a separately approved purpose, owner, retention rule, legal-hold process and defensible deletion or anonymisation method. The prototype cannot make a legal retention decision.
 
-The integration register distinguishes Outlook mailbox events, the Excel tracker, identity provider, database/audit store and secret manager. No connector is connected and no credential is held in the browser. Production secrets must live in a protected server-side vault and be accessed through scoped service identities with rotation, access logging and revocation. The CSV is a proposed design blueprint only and is not an executable configuration file.
+The integration register distinguishes Outlook mailbox events, the Excel tracker, identity provider, database/audit store and secret manager. No connector is connected and no credential is held in the browser. Production secrets must live in a protected server-side vault and be accessed through scoped service identities with rotation, access logging and revocation. The CSV is a proposed design blueprint only and is not an executable configuration file. 
+
+Timezone governance is explicit: persist canonical timezone-aware UTC instants, display mailbox/ticket timestamps in **Europe/London**, and interpret roster and shift schedules in **Africa/Cairo**. Do not compare local wall-clock strings or apply a fixed offset across daylight-saving changes. Reporting cutoffs, late-arriving event treatment and holiday calendars remain unapproved until an owner defines them.
+
 
 ## Planned application areas
 
