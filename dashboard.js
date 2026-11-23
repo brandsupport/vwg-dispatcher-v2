@@ -266,7 +266,7 @@ function overviewRiskPanel(summary,tickets){
     '<div><strong>'+summary.unassigned+'</strong><span>Unassigned</span></div>'+
     '<div><strong>'+summary.agedFourPlus+'</strong><span>Aged 4h+</span></div>'+
   '</div>'+
-  '<div class="overview-risk-caption">Age bands and status flags are illustrative sample indicators, not approved SLA thresholds. '+tickets.length+' sample records in scope.</div>'+
+  '<div class="overview-risk-caption">Static sample queue, not scaled by the reporting period. Age bands and status flags are illustrative indicators, not approved SLA thresholds. '+tickets.length+' records in selected inbox scope.</div>'+
   ticketRows;
 }
 function overviewTeamPanel(){
@@ -288,7 +288,7 @@ function overviewTeamPanel(){
       '<strong>'+fmt(agent.open)+'</strong>'+
     '</div>'
   ).join("")+'</div>'+
-  '<p class="overview-panel-foot">'+AGENTS.length+' anonymised sample profiles · '+other+' other status · Capacity and scheduled hours are not connected.</p>';
+  '<p class="overview-panel-foot">'+AGENTS.length+' anonymised sample profiles · '+other+' other status · Roster figures are independent of period and inbox filters; capacity and scheduled hours are not connected.</p>';
 }
 function overviewAllocationSummary(rows){
   const folders=scopeFolders();
@@ -330,8 +330,7 @@ function renderOverview(){
   const trend=overviewTrendData(t.received,t.resolved);
   const allocationRate=t.received?t.assigned/t.received*100:0;
   const resolutionRate=t.received?t.resolved/t.received*100:0;
-  const brandTotal=brands.reduce((sum,brand)=>sum+brand.value,0);
-  pageContent.innerHTML=
+    pageContent.innerHTML=
     heading("MANAGEMENT COMMAND CENTRE","One operation. Four inboxes. Full visibility.","A decision-focused view of ticket flow, inbox pressure, team workload and platform readiness.",'<button class="btn btn-secondary" data-go="live">Open live operations ↗</button>')+
     '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All figures are synthetic and illustrative</span><span>Outlook <b>Not connected</b></span><span>Excel <b>Not connected</b></span></div>'+
     kpiGrid([
