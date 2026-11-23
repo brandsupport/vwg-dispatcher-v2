@@ -54,8 +54,8 @@ jobs:
             if (!js.includes(text)) throw new Error('Missing dashboard category: ' + text);
           }
           if (!readme.toLowerCase().includes('first assignment') || !readme.toLowerCase().includes('first assigned to member')) throw new Error('Initial allocation-share definition is missing.');
-          if (!js.includes('Simulation only') || !js.includes('No live system affected')) {
-            throw new Error('Operational controls must remain explicitly simulated.');
+          if (!js.includes('DEMONSTRATION DATA') || !js.includes('READ ONLY') || !js.includes('Not connected')) {
+            throw new Error('Live Operations must clearly identify synthetic data and unavailable integrations.');
           }
           for (const text of ['liveFilteredTickets','liveInboxCards','liveStatusTabs','data-live-search','data-live-filter','data-live-status','data-live-folder','exportLiveQueue']) {
             if (!js.includes(text)) throw new Error('Live Operations feature missing: ' + text);
