@@ -77,15 +77,147 @@ const TICKETS = [
   {ref:"DSP-10466",brand:"Audi",folder:"Detags",member:"Unassigned",subject:"Brand identification requires confirmation",age:"22m",status:"Unassigned",received:"10:01",last:"Awaiting initial allocation"},
   {ref:"DSP-10465",brand:"Volkswagen",folder:"Detags",member:"Agent 02",subject:"Retailer confirmation received",age:"36m",status:"Resolved",received:"09:47",last:"Resolution recorded"}
 ];
-const AUDIT_EVENTS = [
-  ["10:42:18","Assignment restored","Agent 03","Detags","Recovery"],
-  ["10:36:04","Manual assignment","Agent 08","Transfers","Manual"],
-  ["10:21:55","Flag raised","Agent 04","Detags","Flag"],
-  ["10:12:31","Ticket assigned","Agent 02","Agency Detags","Automatic"],
-  ["09:58:07","Handover recorded","Agent 11 → Agent 06","Unadopts","Handover"],
-  ["09:41:22","Ticket received","System","Transfers","Received"],
-  ["09:22:10","Assignment exception","System","Detags","Exception"],
-  ["09:08:45","Ticket resolved","Agent 01","Agency Detags","Resolved"]
+const AUDIT_LEDGER = [
+  {
+    id:"AUD-20261123-020",occurredAt:"2026-11-23 10:42:18 UK",category:"Recovery",event:"Recovery review opened",
+    actor:"Agent 03",role:"Operations manager",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Held for review",reason:"The interrupted workflow needs a fresh comparison of the mailbox category and tracker row before ownership can be confirmed.",
+    approver:"Not recorded",approval:"Pending review — sample",before:{owner:"Agent 02",assignmentState:"Assigned"},after:{owner:"Agent 02",assignmentState:"Hold for reconciliation"},
+    source:"Sample recovery review queue",evidence:"Original owner is retained in the example. Current mailbox and tracker state are not available in this prototype."
+  },
+  {
+    id:"AUD-20261123-019",occurredAt:"2026-11-23 10:40:52 UK",category:"Recovery",event:"Recovery request submitted",
+    actor:"Agent 03",role:"Operations manager",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Submitted (sample)",reason:"A review was requested after an interrupted assignment workflow was identified.",
+    approver:"Not recorded",approval:"Awaiting review — sample",before:{recoveryState:"Not requested",originalOwner:"Agent 02"},after:{recoveryState:"Review requested",originalOwner:"Agent 02"},
+    source:"Sample recovery queue",evidence:"Illustrative request reference REC-SAMPLE-10482-02. No live recovery request was created."
+  },
+  {
+    id:"AUD-20261123-018",occurredAt:"2026-11-23 10:38:12 UK",category:"Exception",event:"Tracker write outcome unknown",
+    actor:"Sample tracker adapter",role:"Service identity (sample)",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Unknown outcome",reason:"The illustrative write attempt timed out without a confirmed acknowledgement. A timeout does not prove that the underlying write failed.",
+    approver:"Not applicable",approval:"Not applicable",before:{trackerWrite:"Pending",acknowledgement:"Awaiting response"},after:{trackerWrite:"Outcome unknown",acknowledgement:"Not received"},
+    source:"Synthetic exception record",evidence:"Sample response: timeout · acknowledgement unavailable · reconcile canonical mailbox and tracker state before another attempt."
+  },
+  {
+    id:"AUD-20261123-017",occurredAt:"2026-11-23 10:36:04 UK",category:"Assignment",event:"Initial assignment recorded",
+    actor:"Sample dispatcher",role:"Automation (sample)",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Recorded (sample)",reason:"Illustrative first allocation using the sample eligibility and workload snapshot.",
+    approver:"Not applicable",approval:"Not required in this example",before:{owner:"Unassigned",assignmentState:"Received"},after:{owner:"Agent 02",assignmentState:"Assigned"},
+    source:"Synthetic dispatch event",evidence:"Assignment reference ASSIGN-SAMPLE-10482-01. No Outlook category or Excel row was written."
+  },
+  {
+    id:"AUD-20261123-016",occurredAt:"2026-11-23 10:31:42 UK",category:"Ticket lifecycle",event:"Ticket received",
+    actor:"Sample mailbox adapter",role:"Service identity (sample)",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Recorded (sample)",reason:"A synthetic inbound ticket was added to the demonstration lifecycle.",
+    approver:"Not applicable",approval:"Not applicable",before:{ticketState:"Not present"},after:{ticketState:"Received",inbox:"Detags"},
+    source:"Synthetic ticket event",evidence:"Generated reference only. No live shared mailbox was read."
+  },
+  {
+    id:"AUD-20261123-015",occurredAt:"2026-11-23 10:21:55 UK",category:"Governance",event:"Ticket flagged for supervisor attention",
+    actor:"Agent 04",role:"Agent (sample)",entity:"Ticket DSP-10481",folder:"agency",ticket:"DSP-10481",correlation:"CORR-DSP-10481",
+    outcome:"Recorded (sample)",reason:"The example record requires a second review of the agency approval evidence.",
+    approver:"Agent 01",approval:"Supervisor review requested — sample",before:{flag:"Not flagged",reason:"—"},after:{flag:"Flagged",reason:"Approval evidence review"},
+    source:"Synthetic workflow event",evidence:"Sample flag note. This does not represent a real colleague action."
+  },
+  {
+    id:"AUD-20261123-014",occurredAt:"2026-11-23 10:18:07 UK",category:"Handover",event:"Ticket handed over",
+    actor:"Agent 11 → Agent 06",role:"Agents (sample)",entity:"Ticket DSP-10481",folder:"agency",ticket:"DSP-10481",correlation:"CORR-DSP-10481",
+    outcome:"Recorded (sample)",reason:"Illustrative handover after a shift boundary; the event is separate from the original allocation count.",
+    approver:"Not recorded",approval:"No approval captured in this example",before:{owner:"Agent 11",workState:"In progress"},after:{owner:"Agent 06",workState:"In progress"},
+    source:"Synthetic handover event",evidence:"Handover reference HANDOVER-SAMPLE-10481-01. No live assignment category was changed."
+  },
+  {
+    id:"AUD-20261123-013",occurredAt:"2026-11-23 10:12:31 UK",category:"Assignment",event:"Initial assignment recorded",
+    actor:"Sample dispatcher",role:"Automation (sample)",entity:"Ticket DSP-10481",folder:"agency",ticket:"DSP-10481",correlation:"CORR-DSP-10481",
+    outcome:"Recorded (sample)",reason:"Illustrative first allocation to an eligible sample agent.",
+    approver:"Not applicable",approval:"Not required in this example",before:{owner:"Unassigned",assignmentState:"Received"},after:{owner:"Agent 11",assignmentState:"Assigned"},
+    source:"Synthetic dispatch event",evidence:"Assignment reference ASSIGN-SAMPLE-10481-01."
+  },
+  {
+    id:"AUD-20261123-012",occurredAt:"2026-11-23 10:08:14 UK",category:"Ticket lifecycle",event:"Ticket received",
+    actor:"Sample mailbox adapter",role:"Service identity (sample)",entity:"Ticket DSP-10481",folder:"agency",ticket:"DSP-10481",correlation:"CORR-DSP-10481",
+    outcome:"Recorded (sample)",reason:"A synthetic inbound agency request entered the demonstration queue.",
+    approver:"Not applicable",approval:"Not applicable",before:{ticketState:"Not present"},after:{ticketState:"Received",inbox:"Agency Detags"},
+    source:"Synthetic ticket event",evidence:"Generated reference only. No live mailbox event was ingested."
+  },
+  {
+    id:"AUD-20261123-011",occurredAt:"2026-11-23 10:02:44 UK",category:"Exception",event:"Duplicate delivery reviewed",
+    actor:"Sample event processor",role:"Service identity (sample)",entity:"Ticket DSP-10480",folder:"transfers",ticket:"DSP-10480",correlation:"CORR-DSP-10480",
+    outcome:"Suppressed (sample)",reason:"The repeated delivery matched the example event identity already associated with this ticket.",
+    approver:"Not applicable",approval:"Not applicable",before:{deliveryCount:"1 observed",canonicalEvent:"EVT-SAMPLE-10480"},after:{deliveryCount:"2 observed",canonicalEvent:"EVT-SAMPLE-10480",duplicate:"Suppressed (sample)"},
+    source:"Synthetic deduplication event",evidence:"Both delivery observations are represented in the sample record. No production side effect was inspected."
+  },
+  {
+    id:"AUD-20261123-010",occurredAt:"2026-11-23 09:58:07 UK",category:"Assignment",event:"Initial assignment recorded",
+    actor:"Sample dispatcher",role:"Automation (sample)",entity:"Ticket DSP-10480",folder:"transfers",ticket:"DSP-10480",correlation:"CORR-DSP-10480",
+    outcome:"Recorded (sample)",reason:"Illustrative first allocation from the synthetic Transfers queue.",
+    approver:"Not applicable",approval:"Not required in this example",before:{owner:"Unassigned",assignmentState:"Received"},after:{owner:"Agent 08",assignmentState:"Assigned"},
+    source:"Synthetic dispatch event",evidence:"Assignment reference ASSIGN-SAMPLE-10480-01."
+  },
+  {
+    id:"AUD-20261123-009",occurredAt:"2026-11-23 09:54:26 UK",category:"Ticket lifecycle",event:"Ticket received",
+    actor:"Sample mailbox adapter",role:"Service identity (sample)",entity:"Ticket DSP-10480",folder:"transfers",ticket:"DSP-10480",correlation:"CORR-DSP-10480",
+    outcome:"Recorded (sample)",reason:"A synthetic transfer request entered the demonstration queue.",
+    approver:"Not applicable",approval:"Not applicable",before:{ticketState:"Not present"},after:{ticketState:"Received",inbox:"Transfers"},
+    source:"Synthetic ticket event",evidence:"Generated reference only. No live shared mailbox was read."
+  },
+  {
+    id:"AUD-20261123-008",occurredAt:"2026-11-23 09:48:19 UK",category:"Governance",event:"Manual assignment approval recorded",
+    actor:"Agent 01",role:"Operations manager",entity:"Ticket DSP-10479",folder:"unadopts",ticket:"DSP-10479",correlation:"CORR-DSP-10479",
+    outcome:"Approved (sample)",reason:"The example manual assignment includes a recorded business reason and a second-person review.",
+    approver:"Agent 01",approval:"Approved in sample record",before:{approval:"Pending",requestedOwner:"Agent 08"},after:{approval:"Approved (sample)",requestedOwner:"Agent 08"},
+    source:"Synthetic approval event",evidence:"Approval reference APPROVAL-SAMPLE-10479-01. No production approval was issued."
+  },
+  {
+    id:"AUD-20261123-007",occurredAt:"2026-11-23 09:45:06 UK",category:"Assignment",event:"Manual assignment requested",
+    actor:"Agent 08",role:"Agent (sample)",entity:"Ticket DSP-10479",folder:"unadopts",ticket:"DSP-10479",correlation:"CORR-DSP-10479",
+    outcome:"Awaiting approval (sample)",reason:"A manual allocation was requested with a reason; the example requires manager review.",
+    approver:"Agent 01",approval:"Pending — sample",before:{owner:"Unassigned",requestState:"None"},after:{owner:"Agent 08",requestState:"Awaiting approval"},
+    source:"Synthetic manual-action event",evidence:"Request reference MANUAL-SAMPLE-10479-01. No mailbox or tracker change was made."
+  },
+  {
+    id:"AUD-20261123-006",occurredAt:"2026-11-23 09:43:51 UK",category:"Exception",event:"Stale assignment request blocked",
+    actor:"Sample assignment writer",role:"Service identity (sample)",entity:"Ticket DSP-10479",folder:"unadopts",ticket:"DSP-10479",correlation:"CORR-DSP-10479",
+    outcome:"Blocked (sample)",reason:"The sample source version was older than the current record version, so the illustrative request was rejected.",
+    approver:"Not applicable",approval:"Not applicable",before:{sourceVersion:"8",currentVersion:"9",writeState:"Not started"},after:{sourceVersion:"8",currentVersion:"9",writeState:"Blocked (sample)"},
+    source:"Synthetic integrity-guard event",evidence:"Version mismatch example only. It does not prove that a live writer has this protection."
+  },
+  {
+    id:"AUD-20261123-005",occurredAt:"2026-11-23 09:35:20 UK",category:"Configuration",event:"Allocation policy draft saved",
+    actor:"Agent 01",role:"Operations manager",entity:"Global allocation policy v2",folder:"",ticket:"",correlation:"CORR-CFG-ALLOC-02",
+    outcome:"Draft saved (sample)",reason:"A proposed increase in the illustrative open-work influence was saved for review.",
+    approver:"Agent 02",approval:"Pending — sample",before:{openWorkInfluence:"50%",policyVersion:"Draft 1"},after:{openWorkInfluence:"60%",policyVersion:"Draft 2"},
+    source:"Synthetic configuration history",evidence:"Proposal reference CFG-SAMPLE-ALLOC-02. The public prototype cannot persist or apply configuration."
+  },
+  {
+    id:"AUD-20261123-004",occurredAt:"2026-11-23 09:32:11 UK",category:"Configuration",event:"Allocation policy review approved",
+    actor:"Agent 02",role:"Operations manager",entity:"Global allocation policy v2",folder:"",ticket:"",correlation:"CORR-CFG-ALLOC-02",
+    outcome:"Approved (sample)",reason:"The illustrative draft passed a sample policy review; approval is not an operational activation.",
+    approver:"Agent 02",approval:"Approved in sample record",before:{reviewState:"Pending",policyVersion:"Draft 2"},after:{reviewState:"Approved (sample)",policyVersion:"Draft 2"},
+    source:"Synthetic configuration history",evidence:"Review reference REVIEW-SAMPLE-ALLOC-02. No authenticated approver identity exists in this prototype."
+  },
+  {
+    id:"AUD-20261123-003",occurredAt:"2026-11-23 09:30:42 UK",category:"Configuration",event:"Configuration apply blocked",
+    actor:"Prototype policy guard",role:"System (sample)",entity:"Global allocation policy v2",folder:"",ticket:"",correlation:"CORR-CFG-ALLOC-02",
+    outcome:"Blocked — no backend",reason:"Application is unavailable because there is no authenticated production configuration service or verified write path.",
+    approver:"Not applicable",approval:"Sample approval does not authorise a production change",before:{policyState:"Approved (sample)",applicationState:"Not attempted"},after:{policyState:"Draft example only",applicationState:"Blocked — no backend"},
+    source:"Synthetic governance guard",evidence:"This record demonstrates a blocked lifecycle stage. No configuration was deployed."
+  },
+  {
+    id:"AUD-20261123-002",occurredAt:"2026-11-23 09:18:03 UK",category:"Access",event:"Role change request denied",
+    actor:"Sample access reviewer",role:"Administrator (sample)",entity:"Agent 12 access profile",folder:"",ticket:"",correlation:"CORR-ACCESS-AGENT12",
+    outcome:"Denied (sample)",reason:"The example request did not include the required second-person approval evidence.",
+    approver:"Not recorded",approval:"Not approved — sample",before:{role:"Agent",requestedRole:"Manager"},after:{role:"Agent",requestedRole:"Manager",accessChange:"Not applied"},
+    source:"Synthetic access-governance record",evidence:"No real identity, account or permission was changed."
+  },
+  {
+    id:"AUD-20261123-001",occurredAt:"2026-11-23 09:02:12 UK",category:"Governance",event:"Corrective note appended",
+    actor:"Agent 01",role:"Operations manager",entity:"Ticket DSP-10482",folder:"detags",ticket:"DSP-10482",correlation:"CORR-DSP-10482",
+    outcome:"Appended (sample)",reason:"A correction should be appended as a new event rather than silently editing an earlier record.",
+    approver:"Not applicable",approval:"Not required in this example",before:{priorRecord:"AUD-SAMPLE-000",priorValue:"Original owner was not stated"},after:{correction:"Original owner recorded as Agent 02",supersedes:"AUD-SAMPLE-000"},
+    source:"Synthetic append-only design example",evidence:"This illustrates an audit pattern only; the prototype does not provide an immutable or tamper-evident store."
+  }
 ];
 
 /* Reliability Centre 2.0 — synthetic investigation records only */
@@ -189,7 +321,8 @@ const state = {
   ticketStatus:"all", ticketBrand:"all", ticketOwner:"all", ticketSort:"oldest", ticketSearch:"",
   rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null,
   configPreviewFolder:"agency", configPreviewWeight:50,
-  reliabilitySearch:"", reliabilityType:"all", reliabilityStatus:"all", reliabilitySeverity:"all", selectedReliabilityEvent:"EXC-2108"
+  reliabilitySearch:"", reliabilityType:"all", reliabilityStatus:"all", reliabilitySeverity:"all", selectedReliabilityEvent:"EXC-2108",
+  auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020"
 };
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
@@ -1390,19 +1523,130 @@ function exportReliability(){
   csvDownload("dispatcher-sample-reliability-investigation.csv",rows);
 }
 
-function auditTable(events){
-  return dataTable(["Time","Event","Actor","Inbox","Type"],events.map(e=>'<tr><td class="mono">'+e[0]+'</td><td>'+e[1]+'</td><td>'+e[2]+'</td><td>'+e[3]+'</td><td>'+statusPill(e[4])+'</td></tr>'));
+function auditBaseEvents(){
+  return AUDIT_LEDGER.filter(event=>state.folder==="all"||event.folder===state.folder);
+}
+function auditFilteredEvents(){
+  let events=auditBaseEvents();
+  if(state.auditCategory!=="all")events=events.filter(event=>event.category===state.auditCategory);
+  if(state.auditOutcome!=="all")events=events.filter(event=>event.outcome===state.auditOutcome);
+  if(state.auditActor!=="all")events=events.filter(event=>event.actor===state.auditActor);
+  const term=state.auditSearch.trim().toLowerCase();
+  if(term)events=events.filter(event=>[
+    event.id,event.occurredAt,event.category,event.event,event.actor,event.role,event.entity,event.folder,event.ticket,
+    event.correlation,event.outcome,event.reason,event.approver,event.approval,event.source,event.evidence,
+    JSON.stringify(event.before),JSON.stringify(event.after)
+  ].join(" ").toLowerCase().includes(term));
+  return events;
+}
+function auditStats(events){
+  return {
+    eventCount:events.length,
+    ticketCount:new Set(events.map(event=>event.ticket).filter(Boolean)).size,
+    configurationCount:events.filter(event=>event.category==="Configuration").length,
+    exceptionCount:events.filter(event=>event.category==="Exception"||event.outcome==="Held for review"||event.outcome==="Blocked — no backend").length
+  };
+}
+function auditSelectOptions(values,selected,label){
+  return '<option value="all">'+label+'</option>'+values.map(value=>'<option value="'+esc(value)+'"'+(value===selected?' selected':'')+'>'+esc(value)+'</option>').join("");
+}
+function auditFilterToolbar(){
+  const base=auditBaseEvents();
+  const categories=[...new Set(base.map(event=>event.category))].sort();
+  const outcomes=[...new Set(base.map(event=>event.outcome))].sort();
+  const actors=[...new Set(base.map(event=>event.actor))].sort();
+  return '<div class="audit-filter-toolbar">'+
+    '<label class="live-queue-search"><span>SEARCH THE AUDIT LEDGER</span><input type="search" data-audit-search placeholder="Event ID, ticket, actor, reason or correlation…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+    '<label class="filter-control"><span>CATEGORY</span><select data-audit-filter="auditCategory">'+auditSelectOptions(categories,state.auditCategory,"All categories")+'</select></label>'+
+    '<label class="filter-control"><span>OUTCOME</span><select data-audit-filter="auditOutcome">'+auditSelectOptions(outcomes,state.auditOutcome,"All outcomes")+'</select></label>'+
+    '<label class="filter-control"><span>ACTOR</span><select data-audit-filter="auditActor">'+auditSelectOptions(actors,state.auditActor,"All actors")+'</select></label>'+
+  '</div>';
+}
+function auditEventRows(){
+  return dataTable(["Recorded (UK)","Event / reference","Actor","Affected entity","Outcome"],auditFilteredEvents().map(event=>
+    '<tr class="audit-ledger-row'+(event.id===state.selectedAuditEvent?' selected':'')+'">'+
+      '<td class="mono audit-time-cell">'+esc(event.occurredAt)+'</td>'+
+      '<td><button type="button" class="audit-select-event" data-audit-event="'+esc(event.id)+'"><strong>'+esc(event.event)+'</strong><small>'+esc(event.id)+' · '+esc(event.category)+'</small></button></td>'+
+      '<td><strong class="audit-actor-name">'+esc(event.actor)+'</strong><small class="audit-actor-role">'+esc(event.role)+'</small></td>'+
+      '<td><strong class="audit-entity-name">'+esc(event.entity)+'</strong><small class="audit-entity-scope">'+(event.folder?esc(FOLDERS.find(folder=>folder.id===event.folder)?.name||event.folder):'Platform scope')+'</small></td>'+
+      '<td>'+statusPill(event.outcome)+'</td>'+
+    '</tr>'
+  ),"No sample audit records match the current search and filters.");
+}
+function auditValueRows(values){
+  if(!values||typeof values!=="object"||!Object.keys(values).length)return '<div class="audit-value-empty">Not recorded in this sample event</div>';
+  return Object.entries(values).map(([key,value])=>'<div class="audit-value-row"><span>'+esc(key.replace(/([A-Z])/g," $1").replace(/^./,ch=>ch.toUpperCase()))+'</span><strong>'+esc(value)+'</strong></div>').join("");
+}
+function auditDetailMarkup(event){
+  if(!event)return '<div class="audit-empty"><strong>No event selected</strong><span>Change the filters or clear the search to inspect a sample record.</span></div>';
+  return '<div class="audit-detail-head"><div><span class="audit-overline">'+esc(event.id)+' · '+esc(event.category)+'</span><h3>'+esc(event.event)+'</h3></div>'+statusPill(event.outcome)+'</div>'+
+    '<div class="audit-detail-facts">'+
+      '<div><span>Recorded time</span><strong>'+esc(event.occurredAt)+'</strong></div>'+
+      '<div><span>Actor</span><strong>'+esc(event.actor)+'</strong><small>'+esc(event.role)+'</small></div>'+
+      '<div><span>Affected record</span><strong>'+esc(event.entity)+'</strong></div>'+
+      '<div><span>Correlation ID</span><strong class="mono">'+esc(event.correlation)+'</strong></div>'+
+    '</div>'+
+    '<div class="audit-diff-heading"><strong>Before and after</strong><span>Values carried by this sample event</span></div>'+
+    '<div class="audit-diff-grid"><article><h4>BEFORE</h4>'+auditValueRows(event.before)+'</article><article><h4>AFTER</h4>'+auditValueRows(event.after)+'</article></div>'+
+    '<div class="audit-detail-meta">'+
+      '<div><span>Reason / context</span><p>'+esc(event.reason)+'</p></div>'+
+      '<div><span>Approval record</span><p>'+esc(event.approval)+' · Approver: '+esc(event.approver)+'</p></div>'+
+      '<div><span>Source</span><p>'+esc(event.source)+'</p></div>'+
+      '<div><span>Evidence / reconciliation note</span><p>'+esc(event.evidence)+'</p></div>'+
+    '</div>'+
+    '<div class="audit-detail-disclaimer">Synthetic event record. Actor labels, timestamps, approval states and evidence are examples only; none were ingested from Outlook, Excel or a production audit service.</div>';
+}
+function auditRelatedEvents(event){
+  if(!event)return [];
+  const related=event.ticket?AUDIT_LEDGER.filter(item=>item.ticket===event.ticket):AUDIT_LEDGER.filter(item=>item.correlation===event.correlation);
+  return related.slice().sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt));
+}
+function auditTimelineMarkup(event){
+  if(!event)return '<div class="audit-empty"><strong>No related timeline</strong><span>Select an event to see its ticket or correlation sequence.</span></div>';
+  const related=auditRelatedEvents(event);
+  const heading=event.ticket?"Ticket timeline · "+event.ticket:"Configuration / entity timeline · "+event.entity;
+  return '<div class="audit-timeline-heading"><strong>'+esc(heading)+'</strong><span>'+related.length+' linked sample events</span></div>'+
+    '<div class="audit-timeline-list">'+related.map(item=>
+      '<button type="button" class="audit-timeline-event'+(item.id===event.id?' selected':'')+'" data-audit-event="'+esc(item.id)+'">'+
+        '<span class="audit-timeline-marker"></span><span class="audit-timeline-copy"><strong>'+esc(item.event)+'</strong><small>'+esc(item.occurredAt)+' · '+esc(item.actor)+'</small></span>'+
+        '<span class="audit-timeline-outcome">'+esc(item.outcome)+'</span>'+
+      '</button>'
+    ).join("")+'</div>';
+}
+function refreshAuditPanels(){
+  const filtered=auditFilteredEvents();
+  if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
+  const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
+  const count=document.getElementById("auditLedgerCount");
+  const rows=document.getElementById("auditLedgerRows");
+  const detail=document.getElementById("auditEventDetail");
+  const timeline=document.getElementById("auditRelatedTimeline");
+  if(count)count.textContent="Showing "+filtered.length+" of "+auditBaseEvents().length+" sample events · "+(state.folder==="all"?"All four inboxes":scopeName());
+  if(rows)rows.innerHTML=auditEventRows();
+  if(detail)detail.innerHTML=auditDetailMarkup(selected);
+  if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
 function renderAudit(){
-  pageContent.innerHTML=heading("AUDIT & GOVERNANCE","A complete operational record","Searchable history for ticket events, manager actions, configuration changes and exceptions.",'<button class="btn btn-secondary" data-action="export-audit">↓ Export audit</button>')+
+  const base=auditBaseEvents(),filtered=auditFilteredEvents(),stats=auditStats(base);
+  if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
+  const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
+  pageContent.innerHTML=heading("AUDIT HISTORY 2.0","Trace every change, decision and outcome.","Investigate sample ticket events, manager approvals, configuration history and exception evidence. This is a read-only demonstration ledger, not a production audit source.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export filtered ledger</button>')+
+    '<div class="audit-demo-strip"><span><i></i> SYNTHETIC AUDIT DATA · READ ONLY</span><span>Persistent audit store <b>Not configured</b></span><span>Verified actor identity <b>Not available</b></span><span>Event integrity <b>Not verified</b></span></div>'+
     kpiGrid([
-      kpi("Events recorded","8,426","Synthetic historical events","◷"),
-      kpi("Manager actions","146","Sample configuration and overrides","⚙"),
-      kpi("Exceptions","23","Sample exceptions logged","!"),
-      kpi("Audit completeness","100%","Demonstration record set","✓")
+      kpi("Sample audit events",fmt(stats.eventCount),"Unique event records in this inbox scope","◷"),
+      kpi("Ticket timelines",fmt(stats.ticketCount),"Distinct ticket references represented","▤"),
+      kpi("Configuration records",fmt(stats.configurationCount),"Draft, review and blocked examples","⚙"),
+      kpi("Exceptions / holds",fmt(stats.exceptionCount),"Exception, hold or blocked outcomes","!")
     ])+
-    panel("Activity timeline","Latest system and ticket activity",auditTable(AUDIT_EVENTS),'<span class="subtle-tag">LATEST 8 EVENTS</span>')+
-    panel("Audit principles","What the production audit record must preserve",'<div class="feature-list"><div><strong>Actor identity</strong><span>Who performed or initiated the action.</span></div><div><strong>Before and after values</strong><span>For every configuration and assignment change.</span></div><div><strong>Reason and approval</strong><span>Mandatory reason for critical and manual operations.</span></div><div><strong>Execution outcome</strong><span>Requested, approved, executed, verified or failed.</span></div><div><strong>Immutable history</strong><span>Corrections are appended, never silently overwritten.</span></div></div>');
+    '<div class="audit-filter-wrap">'+auditFilterToolbar()+'<div class="audit-result-count" id="auditLedgerCount">Showing '+filtered.length+' of '+base.length+' sample events · '+(state.folder==="all"?"All four inboxes":esc(scopeName()))+'</div></div>'+
+    '<div class="audit-workspace"><div class="audit-ledger-column">'+
+      panel("Event ledger","Every row is one synthetic event record; repeated attempts are retained inside the record where relevant.",'<div id="auditLedgerRows">'+auditEventRows()+'</div>','<span class="subtle-tag">APPEND-ONLY MODEL · NOT PERSISTED</span>')+
+    '</div><div class="audit-detail-column">'+
+      panel("Event investigation","Actor, context, approval and value changes",'<div id="auditEventDetail">'+auditDetailMarkup(selected)+'</div>','<span class="subtle-tag">READ ONLY</span>')+
+    '</div></div>'+
+    panel("Related ticket and correlation timeline","Follow the sequence for the selected ticket, or the correlation chain for a configuration or access record.",'<div id="auditRelatedTimeline">'+auditTimelineMarkup(selected)+'</div>')+
+    panel("Production audit contract","The fields the future authenticated audit service must preserve",'<div class="audit-contract-grid"><div><strong>Stable event identity</strong><span>Unique event ID, source ID and idempotency reference.</span></div><div><strong>Trusted actor attribution</strong><span>Authenticated principal, role, initiator and approver.</span></div><div><strong>Timezone-aware time</strong><span>UTC timestamp plus explicit UK mailbox or Egypt shift context.</span></div><div><strong>Change evidence</strong><span>Before / after values, reason, approval and source reference.</span></div><div><strong>Verified outcome</strong><span>Requested, approved, applied, acknowledged, reconciled or failed.</span></div><div><strong>Append-only corrections</strong><span>Corrections create linked events; earlier records are never silently overwritten.</span></div></div>','<span class="subtle-tag">DESIGN REQUIREMENTS</span>')+
+    '<div class="audit-final-note"><strong>Prototype boundary:</strong> this page does not provide a tamper-evident ledger, authenticated actor identity, persistent audit storage, real approval workflow or production event ingestion. The “append-only” label describes the model being demonstrated, not a guarantee enforced by this static public site.</div>';
 }
 function renderReports(){
   pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<button class="btn btn-primary" data-action="export-summary">↓ Export current summary</button>')+
@@ -1559,8 +1803,17 @@ function exportRoster(){
   ];
   csvDownload("dispatcher-sample-roster-coverage.csv",rows);
 }
-function exportAudit(){
-  csvDownload("dispatcher-sample-audit.csv",[["Time","Event","Actor","Inbox","Type"],...AUDIT_EVENTS]);
+function exportAuditHistory(){
+  const rows=[
+    ["Event ID","Recorded time (UK sample)","Category","Event","Actor","Actor role","Affected entity","Inbox","Ticket","Correlation ID","Outcome","Reason","Approver","Approval","Before","After","Source","Evidence"],
+    ...auditFilteredEvents().map(event=>[
+      event.id,event.occurredAt,event.category,event.event,event.actor,event.role,event.entity,
+      event.folder?FOLDERS.find(folder=>folder.id===event.folder)?.name||event.folder:"Platform scope",
+      event.ticket,event.correlation,event.outcome,event.reason,event.approver,event.approval,
+      JSON.stringify(event.before),JSON.stringify(event.after),event.source,event.evidence
+    ])
+  ];
+  csvDownload("dispatcher-sample-audit-history.csv",rows);
 }
 function exportSummary(){
   const t=totals();
@@ -1595,7 +1848,8 @@ function handleAction(action){
   if(action==="export-folders"){exportFolders();return;}
   if(action==="export-team"){exportTeam();return;}
   if(action==="export-roster"){exportRoster();return;}
-  if(action==="export-audit"){exportAudit();return;}
+  if(action==="export-audit"){exportAuditHistory();return;}
+  if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.selectedAuditEvent=null;renderAudit();return;}
   if(action==="export-summary"){exportSummary();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
@@ -1635,8 +1889,19 @@ document.addEventListener("change",event=>{
     state[reliabilityFilter.dataset.reliabilityFilter]=reliabilityFilter.value;
     renderReliability();
   }
+  const auditFilter=event.target.closest("[data-audit-filter]");
+  if(auditFilter){
+    state[auditFilter.dataset.auditFilter]=auditFilter.value;
+    renderAudit();
+  }
 });
 document.addEventListener("input",event=>{
+  const auditSearch=event.target.closest("[data-audit-search]");
+  if(auditSearch){
+    state.auditSearch=auditSearch.value;
+    refreshAuditPanels();
+    return;
+  }
   const reliabilitySearch=event.target.closest("[data-reliability-search]");
   if(reliabilitySearch){
     state.reliabilitySearch=reliabilitySearch.value;
@@ -1699,8 +1964,10 @@ document.addEventListener("click",event=>{
   const ticketStatus=event.target.closest("[data-ticket-status]");
   const liveFolder=event.target.closest("[data-live-folder]");
   const reliabilityEvent=event.target.closest("[data-reliability-event]");
+  const auditEvent=event.target.closest("[data-audit-event]");
   if(action)handleAction(action.dataset.action);
   if(reliabilityEvent){state.selectedReliabilityEvent=reliabilityEvent.dataset.reliabilityEvent;renderReliability();}
+  if(auditEvent){state.selectedAuditEvent=auditEvent.dataset.auditEvent;refreshAuditPanels();}
   if(go)navigate(go.dataset.go);
   if(ticket)openTicket(ticket.dataset.ticket);
   if(ticketStatus){state.ticketStatus=ticketStatus.dataset.ticketStatus;render();}
