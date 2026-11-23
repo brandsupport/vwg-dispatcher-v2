@@ -213,35 +213,156 @@ function ticketRows(){
 function insightCard(icon,title,copy,kind){
   return '<article class="insight-card '+(kind||"")+'"><span class="insight-icon">'+icon+'</span><div><strong>'+title+'</strong><p>'+copy+'</p></div></article>';
 }
-function renderOverview(){
-  const t=totals(),brands=brandRows(),brandTotal=brands.reduce((a,b)=>a+b.value,0),rows=allocationMatrix();
-  pageContent.innerHTML=heading("MANAGEMENT OVERVIEW","Good morning. Here’s your operation.","A live-style snapshot of ticket flow, brand mix, team allocation and operational health — populated with demonstration data.",'<button class="btn btn-secondary" data-action="refresh">↻ Refresh preview</button>')+
-    kpiGrid([
-      kpi("Tickets received",fmt(t.received),"Distinct tickets in selected scope","▤","+8.4%","positive"),
-      kpi("Initially assigned",fmt(t.assigned),t.received?((t.assigned/t.received)*100).toFixed(1)+"% of received volume":"—","↗","+5.2%","positive"),
-      kpi("Tickets resolved",fmt(t.resolved),"Recorded completed tickets","✓","+11.6%","positive"),
-      kpi("Outstanding workload",fmt(t.open),"Open at reporting snapshot","◷","42 aged over 24h","warning")
-    ])+
-    '<div class="grid-two">'+
-      panel("Ticket activity","Received and resolved · daily trend",smallChart([64,82,76,94,88,108,96,115,102,120,111,129],["1","3","5","7","9","11","13","15","17","19","21","23"],"#f1846f"),'<span class="subtle-tag">LAST 30 DAYS</span>')+
-      panel("Brand mix","Unique tickets by identified brand",brandBarList(brands.slice(0,6)),'<button class="panel-action" data-go="brands">Explore brands ↗</button>')+
-    '</div>'+
-    '<div class="grid-two">'+
-      panel("Inbox distribution","Volume and open workload by folder",folderCards(),'<button class="panel-action" data-go="live">Open live operations ↗</button>')+
-      panel("Operational health","Illustrative system status",'<div class="health-list">'+
-        healthRow("Dispatcher engine","Running","good","Last heartbeat 10:42:18")+
-        healthRow("Assignment tracker","Connected","good","Sample status only")+
-        healthRow("Recovery queue","2 pending","warning","Awaiting review")+
-        healthRow("Failed assignment writes","0 today","good","No simulated failures")+
-      '</div>','<button class="panel-action" data-go="reliability">Reliability centre ↗</button>')+
-    '</div>'+
-    panel("Member share by folder","Initial allocation count and share within each folder",shareMatrix(rows,false),'<button class="panel-action" data-go="folders">Open full matrix ↗</button>')+
-    '<div class="insight-grid">'+
-      insightCard("↗","Brand demand insight","Audi and Volkswagen account for the largest share of the sample ticket volume.","blue")+
-      insightCard("◷","Ageing work","42 sample tickets are in the over-24-hour ageing band.","amber")+
-      insightCard("♧","Allocation coverage","All four inboxes have an initial-allocation share recorded in the sample matrix.","")+
-    '</div>';
+function overviewTrendData(received,resolved){
+  const receivedWeights=[64,82,76,94,88,108,96,115,102,120,111,129];
+  const resolvedWeights=[61,78,82,91,94,99,106,110,94,116,120,127];
+  return {
+    labels:Array.from({length:12},(_,index)=>String(index+1).padStart(2,"0")),
+    received:distribute(Math.max(0,received),receivedWeights),
+    resolved:distribute(Math.max(0,resolved),resolvedWeights)
+  };
 }
+function overviewRiskSummary(tickets){
+  const open=tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status));
+  const attention=open.filter(ticket=>
+    ["Unassigned","Flagged","Overdue"].includes(ticket.status)||liveSla(ticket).tone!=="good"
+  ).sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a));
+  return {
+    open:open.length,
+    attention,
+    unassigned:open.filter(ticket=>ticket.status==="Unassigned").length,
+    overdue:open.filter(ticket=>ticket.status==="Overdue").length,
+    flagged:open.filter(ticket=>ticket.status==="Flagged").length,
+    agedFourPlus:open.filter(ticket=>liveAgeMinutes(ticket)>=240).length,
+    oldest:open.slice().sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a))[0]||null
+  };
+}
+function overviewInboxSnapshot(inboxes){
+  if(!inboxes.length)return '<div class="empty-state">No inboxes match the selected scope.</div>';
+  return '<div class="overview-inbox-grid">'+inboxes.map(folder=>{
+    const allocationRate=folder.received?folder.assigned/folder.received*100:0;
+    const outstandingRate=folder.received?folder.open/folder.received*100:0;
+    return '<article class="overview-inbox-card">'+
+      '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
+      '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>RECEIVED</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+fmt(folder.assigned)+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
+      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of received volume"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
+      '<div class="overview-inbox-foot"><span>'+allocationRate.toFixed(1)+'% initially allocated</span><span>'+outstandingRate.toFixed(1)+'% open / received</span></div>'+
+    '</article>';
+  }).join("")+'</div>';
+}
+function overviewRiskPanel(summary,tickets){
+  const rows=(summary.attention.length?summary.attention: tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status)).sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a))).slice(0,4);
+  const ticketRows=rows.length?'<div class="overview-risk-list">'+rows.map(ticket=>{
+    const sla=liveSla(ticket);
+    return '<button class="overview-risk-ticket" type="button" data-ticket="'+esc(ticket.ref)+'">'+
+      '<span class="overview-risk-ref">'+esc(ticket.ref)+'<small>'+esc(ticket.folder)+' · '+esc(ticket.brand)+'</small></span>'+
+      '<span class="overview-risk-age">'+esc(ticket.age)+'</span>'+
+      '<span class="sla-pill '+sla.tone+'">'+esc(sla.label)+'</span>'+
+    '</button>';
+  }).join("")+'</div>':'<div class="empty-state">No unresolved sample tickets in this scope.</div>';
+  return '<div class="overview-risk-stats">'+
+    '<div><strong>'+summary.attention.length+'</strong><span>Needs attention</span></div>'+
+    '<div><strong>'+summary.unassigned+'</strong><span>Unassigned</span></div>'+
+    '<div><strong>'+summary.agedFourPlus+'</strong><span>Aged 4h+</span></div>'+
+  '</div>'+
+  '<div class="overview-risk-caption">Age bands and status flags are illustrative sample indicators, not approved SLA thresholds. '+tickets.length+' sample records in scope.</div>'+
+  ticketRows;
+}
+function overviewTeamPanel(){
+  const available=AGENTS.filter(agent=>agent.availability==="Available").length;
+  const onBreak=AGENTS.filter(agent=>agent.availability==="Break").length;
+  const other=AGENTS.length-available-onBreak;
+  const totalOpen=AGENTS.reduce((sum,agent)=>sum+agent.open,0);
+  const maxOpen=Math.max(1,...AGENTS.map(agent=>agent.open));
+  const busiest=AGENTS.slice().sort((a,b)=>b.open-a.open).slice(0,5);
+  return '<div class="overview-team-summary">'+
+    '<div><strong>'+available+'</strong><span>Available</span></div>'+
+    '<div><strong>'+onBreak+'</strong><span>On break</span></div>'+
+    '<div><strong>'+fmt(totalOpen)+'</strong><span>Sample open workload</span></div>'+
+  '</div>'+
+  '<div class="overview-team-list">'+busiest.map(agent=>
+    '<div class="overview-team-row">'+
+      '<div class="overview-team-person">'+memberCell(agent.name,agent.shift+" sample shift")+'</div>'+
+      '<div class="overview-team-bar"><span style="width:'+(agent.open/maxOpen*100).toFixed(1)+'%"></span></div>'+
+      '<strong>'+fmt(agent.open)+'</strong>'+
+    '</div>'
+  ).join("")+'</div>'+
+  '<p class="overview-panel-foot">'+AGENTS.length+' anonymised sample profiles · '+other+' other status · Capacity and scheduled hours are not connected.</p>';
+}
+function overviewAllocationSummary(rows){
+  const folders=scopeFolders();
+  const totalsByFolder=folders.map(folder=>{
+    const fi=FOLDERS.findIndex(item=>item.id===folder.id);
+    return {name:folder.name,count:rows.reduce((sum,row)=>sum+row.cells[fi],0)};
+  });
+  const total=totalsByFolder.reduce((sum,item)=>sum+item.count,0);
+  const values=rows.map(row=>row.total).filter(Number.isFinite);
+  const low=values.length?Math.min(...values):0;
+  const high=values.length?Math.max(...values):0;
+  return '<div class="overview-allocation-summary">'+
+    '<div><strong>'+fmt(total)+'</strong><span>Initial allocations in sample matrix</span></div>'+
+    '<div><strong>'+fmt(low)+'–'+fmt(high)+'</strong><span>Member allocation range</span></div>'+
+    '<div><strong>'+folders.length+'</strong><span>Inboxes in selected scope</span></div>'+
+  '</div>'+
+  '<div class="overview-allocation-bars">'+totalsByFolder.map(item=>{
+    const share=total?item.count/total*100:0;
+    return '<div><span>'+esc(item.name)+'</span><b>'+fmt(item.count)+'</b><i><em style="width:'+share.toFixed(1)+'%"></em></i></div>';
+  }).join("")+'</div>'+
+  '<p class="overview-panel-foot">Initial allocation is separate from handovers, reassignments and recoveries. Sample matrix only; no conclusion about fairness is possible without verified hours, eligibility and workload complexity.</p>';
+}
+function overviewIntegrationPanel(){
+  return '<div class="overview-integration-list">'+
+    healthRow("Outlook shared mailboxes","Not connected","warning","No mailbox messages are being read")+
+    healthRow("Excel dispatch tracker","Not connected","warning","No assignment records are being read or written")+
+    healthRow("Production data service","Not configured","warning","No live ticket database is connected")+
+    healthRow("Authentication and roles","Not configured","warning","This public preview is not a protected production application")+
+    healthRow("Demonstration dataset","Loaded","neutral","Synthetic records only · no operational side effects")+
+  '</div>';
+}
+function renderOverview(){
+  const t=totals();
+  const brands=brandRows();
+  const rows=allocationMatrix();
+  const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
+  const tickets=liveBaseTickets();
+  const risk=overviewRiskSummary(tickets);
+  const trend=overviewTrendData(t.received,t.resolved);
+  const allocationRate=t.received?t.assigned/t.received*100:0;
+  const resolutionRate=t.received?t.resolved/t.received*100:0;
+  const brandTotal=brands.reduce((sum,brand)=>sum+brand.value,0);
+  pageContent.innerHTML=
+    heading("MANAGEMENT COMMAND CENTRE","One operation. Four inboxes. Full visibility.","A decision-focused view of ticket flow, inbox pressure, team workload and platform readiness.",'<button class="btn btn-secondary" data-go="live">Open live operations ↗</button>')+
+    '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All figures are synthetic and illustrative</span><span>Outlook <b>Not connected</b></span><span>Excel <b>Not connected</b></span></div>'+
+    kpiGrid([
+      kpi("Tickets received",fmt(t.received),"Distinct tickets in selected reporting scope","▤"),
+      kpi("Initially assigned",fmt(t.assigned),"Distinct tickets with a first allocation","↗"),
+      kpi("Tickets resolved",fmt(t.resolved),"Recorded completed tickets in sample totals","✓"),
+      kpi("Outstanding workload",fmt(t.open),"Illustrative open snapshot for selected scope","◷",null,"warning")
+    ])+
+    '<div class="overview-metric-strip">'+
+      '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRate.toFixed(1)+'%</strong><small>First-assigned ÷ received</small></div>'+
+      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRate.toFixed(1)+'%</strong><small>Resolved ÷ received · not a cohort closure rate</small></div>'+
+      '<div class="overview-metric-tile"><span>NOT INITIALLY ALLOCATED</span><strong>'+fmt(t.unassigned)+'</strong><small>Received less first-assigned total</small></div>'+
+      '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
+    '</div>'+
+    '<div class="grid-two overview-primary-grid">'+
+      panel("Ticket flow pattern","12 illustrative intervals · distributed from the selected totals",'<div class="dual-bars">'+chartPair(trend.received,trend.resolved,trend.labels)+'</div><div class="overview-chart-note">The intervals are a generated distribution of the sample totals, not timestamped daily source records.</div>',horizontalLegend([{label:"Received",color:"#ff174f"},{label:"Resolved",color:"#ff85aa"}]))+
+      panel("Risk radar","A quick view of unresolved sample records",overviewRiskPanel(risk,tickets),'<button class="panel-action" data-go="live">Inspect working queue ↗</button>')+
+    '</div>'+
+    '<div class="section-heading overview-section-heading"><div><h2>Inbox pressure</h2><p>Received, first-assigned, resolved and outstanding sample totals. Select an inbox using the global filter above.</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
+    overviewInboxSnapshot(inboxes)+
+    '<div class="grid-two overview-secondary-grid">'+
+      panel("Team coverage & workload","Anonymised roster snapshot · illustrative availability",overviewTeamPanel(),'<button class="panel-action" data-go="team">Team performance ↗</button>')+
+      panel("Brand demand","Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
+    '</div>'+
+    '<div class="grid-two overview-secondary-grid">'+
+      panel("Initial allocation distribution","First assignment only · separate from handovers and recoveries",overviewAllocationSummary(rows),'<button class="panel-action" data-go="folders">Open folder share matrix ↗</button>')+
+      panel("Source & platform readiness","What this preview is — and is not — connected to",overviewIntegrationPanel(),'<button class="panel-action" data-go="reliability">Reliability centre ↗</button>')+
+    '</div>'+
+    '<div class="overview-final-note"><strong>Management interpretation:</strong> volume and allocation ratios are synthetic sample aggregates. Reopened tickets, active handling time, approved SLA performance, live coverage and production system health require validated event data before they can be reported.</div>';
+}
+
 function healthRow(label,value,type,note){
   return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
 }
