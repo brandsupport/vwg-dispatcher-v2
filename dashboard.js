@@ -417,6 +417,12 @@ const ADMIN_RETENTION_POLICIES = [
   {data:"Audit exports and reports",purpose:"Approved management, audit and regulatory evidence",period:"Not agreed",owner:"Data Governance",disposal:"Controlled storage, expiry and download governance"},
   {data:"Backups and recovery copies",purpose:"Business continuity and restoration",period:"Not agreed",owner:"Platform Operations",disposal:"Expiry and cryptographic erasure process to define"}
 ];
+const ADMIN_TIME_BOUNDARIES = [
+  {domain:"Mailbox and ticket event timestamps",zone:"Europe/London",storage:"Store UTC; display in the Europe/London zone.",status:"Design requirement",note:"Use IANA timezone rules for UK daylight-saving transitions; never persist an ambiguous local-time string as the canonical event time."},
+  {domain:"Roster and shift schedules",zone:"Africa/Cairo",storage:"Store the UTC instant plus the original local schedule and IANA zone.",status:"Design requirement",note:"Keep Egypt-local shift interpretation separate from UK mailbox event timestamps."},
+  {domain:"Cross-system event correlation",zone:"UTC",storage:"Use timezone-aware UTC instants and stable correlation IDs.",status:"Required",note:"Use IDs and UTC instants for ordering; timezone labels are for human display only."},
+  {domain:"Reporting cutoffs and calendars",zone:"Not defined",storage:"Owner approval required.",status:"Not agreed",note:"Define reporting week/month boundaries, late-arriving event treatment and public-holiday calendars before production."}
+];
 const ADMIN_INTEGRATIONS = [
   {name:"Outlook shared mailboxes",boundary:"Mailbox event and category adapter",status:"Not connected",secret:"No credential configured",gate:"Approved app registration, delegated/application permissions, mailbox scope and server-side token storage."},
   {name:"Excel dispatch tracker",boundary:"Tracker read/write adapter",status:"Not connected",secret:"No credential configured",gate:"Documented workbook schema, controlled service identity, atomic write strategy and verified reconciliation."},
@@ -1865,12 +1871,17 @@ function adminIntegrationMarkup(){
     '<tr><td><strong class="admin-capability-name">'+esc(item.name)+'</strong></td><td>'+esc(item.boundary)+'</td><td>'+statusPill(item.status)+'</td><td>'+statusPill(item.secret)+'</td><td>'+esc(item.gate)+'</td></tr>'
   ));
 }
+function adminTimeBoundaryMarkup(){
+  return dataTable(["Time domain","IANA zone","Storage / display rule","Readiness","Implementation note"],ADMIN_TIME_BOUNDARIES.map(item=>
+    '<tr><td><strong class="admin-capability-name">'+esc(item.domain)+'</strong></td><td><strong class="mono">'+esc(item.zone)+'</strong></td><td>'+esc(item.storage)+'</td><td>'+statusPill(item.status)+'</td><td>'+esc(item.note)+'</td></tr>'
+  ));
+}
 function renderAdmin(){
   const pending=ADMIN_ACCESS_REQUESTS.filter(item=>/Awaiting|Returned/.test(item.status)).length;
   const notReady=ADMIN_SECURITY_CONTROLS.filter(item=>item.status!=="Configured").length;
   const roleCount=ADMIN_ROLE_PROFILES.length;
   const retentionPending=ADMIN_RETENTION_POLICIES.filter(item=>item.period==="Not agreed").length;
-  if(!adminRoleById(state.adminRole))state.adminRole="operations_manager";
+  if(!ADMIN_ROLE_PROFILES.some(role=>role.id===state.adminRole))state.adminRole="operations_manager";
   const filtered=adminRequestsFiltered();
   if(!filtered.some(item=>item.id===state.selectedAdminRequest))state.selectedAdminRequest=filtered[0]?.id||null;
   pageContent.innerHTML=heading("ADMINISTRATION & SECURITY 2.0","Design access deliberately. Enforce it on the server.","A manager-facing governance workspace for roles, access reviews, security controls, data retention and integration boundaries. Everything on this page is a proposal or synthetic example.",'<button class="btn btn-secondary" data-action="reset-admin-review">Reset review filters</button><button class="btn btn-primary" data-action="export-admin-security">↓ Export security blueprint</button>')+
@@ -1887,6 +1898,7 @@ function renderAdmin(){
     panel("Security control baseline","The controls required before any real customer, ticket or employee data is loaded",adminSecurityControlsMarkup(),'<span class="subtle-tag">ALL CONTROLS UNVERIFIED</span>')+
     panel("Data retention and disposal","Retention periods require approved business, legal and data-protection decisions. No period is assumed here.",'<div class="admin-retention-note">Do not store real customer or employee data in this public demo. Define separate rules for active records, audit evidence, exports, backups and legal holds before production.</div>'+adminRetentionMarkup())+
     panel("Integration and secret boundaries","Connector credentials must stay in a protected server-side secret manager; the browser must never receive secret values.",adminIntegrationMarkup())+
+    panel("Operational timezone boundaries","Store canonical event instants in UTC. Keep UK mailbox display and Egypt-local roster interpretation explicit.",adminTimeBoundaryMarkup())+
     panel("Secure access lifecycle","Proposed production request path — the public prototype cannot execute any of these steps.",'<div class="admin-lifecycle">'+[
       ["01","Request","User identity and business reason captured"],
       ["02","Verify","Identity, employment status and scope checked"],
@@ -2043,6 +2055,7 @@ function exportAdminSecurityBlueprint(){
   ADMIN_SECURITY_CONTROLS.forEach(control=>rows.push(["Security control",control.area,control.detail,control.status,control.requirement]));
   ADMIN_RETENTION_POLICIES.forEach(policy=>rows.push(["Retention",policy.data,policy.purpose,policy.period,policy.owner+" | "+policy.disposal]));
   ADMIN_INTEGRATIONS.forEach(item=>rows.push(["Integration",item.name,item.boundary,item.status,item.secret+" | "+item.gate]));
+  ADMIN_TIME_BOUNDARIES.forEach(item=>rows.push(["Time boundary",item.domain,item.zone,item.status,item.storage+" | "+item.note]));
   csvDownload("dispatcher-proposed-admin-security-blueprint.csv",rows);
 }
 function exportSummary(){
