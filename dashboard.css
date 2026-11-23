@@ -1730,3 +1730,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media(max-width:900px){.roster-filter-toolbar{grid-template-columns:1fr 1fr}.roster-filter-toolbar .live-queue-search{grid-column:1/-1}}
 @media(max-width:560px){.roster-demo-strip{align-items:flex-start;flex-direction:column;gap:7px}.roster-filter-toolbar{grid-template-columns:1fr}.roster-filter-toolbar .live-queue-search{grid-column:auto}.roster-agent-metrics{grid-template-columns:1fr}.roster-coverage-legend>div{grid-template-columns:9px minmax(0,1fr) 72px 66px;gap:5px}.roster-coverage-legend strong{font-size:7px}.roster-coverage-legend span:not(.roster-coverage-dot){font-size:6px}.roster-coverage-legend b{font-size:7px}}
 @media(prefers-reduced-motion:reduce){.roster-member-button{transition:none}}
+
+.roster-coverage-segment.gap{background:repeating-linear-gradient(135deg,rgba(255,189,104,.22),rgba(255,189,104,.22) 7px,rgba(255,189,104,.07) 7px,rgba(255,189,104,.07) 14px);color:#ffe0ae}
+.roster-coverage-dot.gap{background:#ffbd68}
