@@ -131,7 +131,7 @@ jobs:
           const ticketAgeingEnd = js.indexOf('\nfunction ', ticketAgeingStart + 10);
           const ticketAgeingFunction = ticketAgeingStart >= 0 && ticketAgeingEnd > ticketAgeingStart ? js.slice(ticketAgeingStart, ticketAgeingEnd) : '';
           if (!ticketAgeingFunction) throw new Error('Ticket age-band calculation is missing.');
-          const ticketAgeingResult = vm.runInNewContext(ageFunction + '\\n' + ticketAgeingFunction + '; ticketAgeingSummary([{status:"Assigned",age:"30m"},{status:"Waiting",age:"2h"},{status:"Overdue",age:"5h"},{status:"Unassigned",age:"8h 15m"},{status:"Resolved",age:"9h"}])');
+          const ticketAgeingResult = vm.runInNewContext(ageFunction + String.fromCharCode(10) + ticketAgeingFunction + '; ticketAgeingSummary([{status:"Assigned",age:"30m"},{status:"Waiting",age:"2h"},{status:"Overdue",age:"5h"},{status:"Unassigned",age:"8h 15m"},{status:"Resolved",age:"9h"}])');
           if (ticketAgeingResult.under1h !== 1 || ticketAgeingResult.oneToFour !== 1 || ticketAgeingResult.fourToEight !== 1 || ticketAgeingResult.overEight !== 1 || ticketAgeingResult.total !== 4) {
             throw new Error('Ticket ageing bands did not correctly classify the unresolved sample records.');
           }
