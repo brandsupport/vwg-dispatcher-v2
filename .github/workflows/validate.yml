@@ -403,7 +403,7 @@ jobs:
           const adminStart = js.indexOf('function renderAdmin(){');
           const adminEnd = js.indexOf('\nfunction render(){', adminStart);
           const adminView = adminStart >= 0 && adminEnd > adminStart ? js.slice(adminStart, adminEnd) : '';
-          for (const text of ['ADMINISTRATION & SECURITY 2.0','DESIGN CATALOGUE · SYNTHETIC REVIEW CASES · READ ONLY','Role profile explorer','Permission comparison matrix','Access request review queue','Security control baseline','Data retention and disposal','Integration and secret boundaries','Secure access lifecycle','Authentication','Not configured','Production boundary']) {
+          for (const text of ['ADMINISTRATION & SECURITY 2.0','DESIGN CATALOGUE · SYNTHETIC REVIEW CASES · READ ONLY','Role profile explorer','Permission comparison matrix','Access request review queue','Security control baseline','Data retention and disposal','Integration and secret boundaries','Operational timezone boundaries','Secure access lifecycle','Authentication','Not configured','Production boundary']) {
             if (!adminView.includes(text)) throw new Error('Administration & Security 2.0 section or safety disclosure missing: ' + text);
           }
           for (const forbidden of ['data-action="grant"','data-action="revoke"','data-action="approve-access"','data-action="create-user"','data-action="save-security"','data-action="apply-policy"']) {
@@ -430,6 +430,8 @@ jobs:
           const adminRetentionEnd = js.indexOf('\n];', adminRetentionStart) + 3;
           const adminIntegrationsStart = js.indexOf('const ADMIN_INTEGRATIONS = [');
           const adminIntegrationsEnd = js.indexOf('\n];', adminIntegrationsStart) + 3;
+          const adminTimeStart = js.indexOf('const ADMIN_TIME_BOUNDARIES = [');
+          const adminTimeEnd = js.indexOf('\n];', adminTimeStart) + 3;
           const adminData = [
             js.slice(adminRolesStart,adminRolesEnd),js.slice(adminPermissionsStart,adminPermissionsEnd),
             js.slice(adminRequestsStart,adminRequestsEnd),js.slice(adminControlsStart,adminControlsEnd),
@@ -437,7 +439,7 @@ jobs:
           ];
           if (adminData.some((source,index)=>!source||source.startsWith('const ' )===false)) throw new Error('Administration catalogues are missing or malformed.');
           const adminResult = vm.runInNewContext(adminData.join('\n') + 
-            '; ({roles:ADMIN_ROLE_PROFILES,permissions:ADMIN_PERMISSION_CATALOG,requests:ADMIN_ACCESS_REQUESTS,controls:ADMIN_SECURITY_CONTROLS,retention:ADMIN_RETENTION_POLICIES,integrations:ADMIN_INTEGRATIONS})');
+            '; ({roles:ADMIN_ROLE_PROFILES,permissions:ADMIN_PERMISSION_CATALOG,requests:ADMIN_ACCESS_REQUESTS,controls:ADMIN_SECURITY_CONTROLS,retention:ADMIN_RETENTION_POLICIES,integrations:ADMIN_INTEGRATIONS,time:ADMIN_TIME_BOUNDARIES})');
           const roles=adminResult.roles, permissionCodes=new Set(adminResult.permissions.map(item=>item.code));
           const roleById=Object.fromEntries(roles.map(role=>[role.id,role]));
           const requestIds=new Set(adminResult.requests.map(request=>request.id));
@@ -466,13 +468,16 @@ jobs:
               !adminResult.requests.every(item=>item.reason&&item.reviewer&&item.approval&&item.evidence&&item.outcome) ||
               !controlsUnverified || adminResult.controls.length!==10 ||
               adminResult.retention.length!==5 || !retentionUnagreed ||
-              adminResult.integrations.length!==5 || !noSecrets) {
+              adminResult.integrations.length!==5 || !noSecrets || adminResult.time.length!==4 ||
+              !adminResult.time.some(item=>item.zone==='Europe/London') ||
+              !adminResult.time.some(item=>item.zone==='Africa/Cairo')) {
             throw new Error('Administration access review, readiness, retention or secret-boundary data failed integrity checks.');
           }
           if (!readme.includes('### Administration & Security 2.0') ||
               !readme.includes('Hiding a button or filtering a menu is not an authorisation control') ||
               !readme.includes('No retention period is selected or implied') ||
-              !readme.includes('No connector is connected and no credential is held in the browser')) {
+              !readme.includes('No connector is connected and no credential is held in the browser') ||
+              !readme.includes('Europe/London') || !readme.includes('Africa/Cairo')) {
             throw new Error('Administration production security boundaries are missing from README.');
           }
 
