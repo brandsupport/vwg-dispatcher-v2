@@ -1,0 +1,18 @@
+# Staging-only Cloudflare Worker configuration.
+# This file targets the existing vwg-dispatcher-staging D1 database.
+# Database IDs are identifiers, not credentials. Never add API tokens or secret values here.
+# Production must use a separate configuration and database after formal approval.
+
+name = "vwg-dispatcher-api-staging"
+main = "src/index.mjs"
+compatibility_date = "2026-11-23"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vwg-dispatcher-staging"
+database_id = "a634ae1e-e96f-4346-8a7d-864e3e44a581"
+migrations_dir = "migrations"

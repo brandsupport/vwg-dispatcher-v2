@@ -74,6 +74,28 @@ Requirements: Node.js 22+, Python 3.10+ and Wrangler.
 
 The access.dev section simulates a local Cloudflare Access identity for development only. It is not production authentication. Do not expose a local development server to the internet.
 
+## Staging Worker deployment
+
+A dedicated staging-only Wrangler configuration is provided in `wrangler.staging.toml`. It targets the existing D1 database `vwg-dispatcher-staging` and Worker name `vwg-dispatcher-api-staging`. The D1 database ID in that file is an identifier, not an API credential. This configuration does not target production.
+
+To connect the staging Worker through Cloudflare Workers Builds:
+
+1. In Cloudflare, create or select the Worker named exactly `vwg-dispatcher-api-staging`.
+2. Open **Settings → Builds → Connect** and connect `brandsupport/vwg-dispatcher-v2`, branch `main`.
+3. Set **Root directory** to `backend`. Leave the build command empty. Set the deploy command to `npx wrangler deploy --config wrangler.staging.toml`.
+4. Before deploying, configure the runtime variables and secret below, and protect the Worker with Cloudflare Access.
+
+Required runtime configuration in **Settings → Variables & Secrets**:
+
+- Add the four plain-text variables `ACCESS_GROUP_PLATFORM_ADMIN`, `ACCESS_GROUP_OPERATIONS_MANAGER`, `ACCESS_GROUP_TEAM_AGENT`, and `ACCESS_GROUP_AUDITOR`. Each value must be the exact group identifier returned in the Access identity for the approved identity-provider group. Do not use email domains as role identifiers.
+- Configure the identity provider to expose its group membership to the Worker identity. Cloudflare documents that IdP groups are not automatically included in the application token; configure the relevant custom SAML attribute or OIDC claim, then verify the full identity returned by `ctx.access.getIdentity()` contains the matching groups.
+- Add `AUDIT_ACTOR_HASH_KEY` as a **secret**, not a plain-text variable. Generate a unique high-entropy value of at least 32 characters in an approved password manager or secrets manager. Never commit it to Git or send it in chat.
+- Leave `APP_ALLOWED_ORIGINS` unset until an approved authenticated frontend origin exists. Do not allow the public GitHub Pages synthetic demo as a production data origin.
+
+In **Workers & Pages → vwg-dispatcher-api-staging → Access**, protect **all traffic**, including the `workers.dev` hostname, with an allow policy limited to the approved organization and identity provider. Verify that unauthorized requests are blocked before enabling any application use. The Worker also denies API requests when Access context or a unique role mapping is missing.
+
+Workers Builds deploys on commits to the connected production branch. Do not connect this staging Worker to a production database, and do not create a production Worker or production database until the separate production approval gate below is signed off.
+
 ## Production gate — do not skip
 
 Before creating a production D1 database or deploying the Worker:
