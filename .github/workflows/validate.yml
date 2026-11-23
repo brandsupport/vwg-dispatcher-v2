@@ -65,12 +65,12 @@ jobs:
             if (!css.includes(text)) throw new Error('Live Operations styling missing: ' + text);
           }
           const ageStart = js.indexOf('function liveAgeMinutes(ticket){');
-          const ageEnd = js.indexOf('\\n}', ageStart) + 2;
+          const ageEnd = js.indexOf('\n}', ageStart) + 2;
           const ageFunction = ageStart >= 0 && ageEnd > ageStart ? js.slice(ageStart, ageEnd) : '';
           if (!ageFunction) throw new Error('Live Operations age parser is missing.');
-          const ageMinutes = vm.runInNewContext(ageFunction[0] + '; liveAgeMinutes({age: "5h 42m"})');
+          const ageMinutes = vm.runInNewContext(ageFunction + '; liveAgeMinutes({age: "5h 42m"})');
           if (ageMinutes !== 342) throw new Error('Live Operations age parser returned ' + ageMinutes + ' instead of 342.');
-          const shortAge = vm.runInNewContext(ageFunction[0] + '; liveAgeMinutes({age: "18m"})');
+          const shortAge = vm.runInNewContext(ageFunction + '; liveAgeMinutes({age: "18m"})');
           if (shortAge !== 18) throw new Error('Live Operations short age parser returned ' + shortAge + ' instead of 18.');
           if (!css.includes('.sidebar') || !css.includes('@media') || !css.includes('.modal-card')) {
             throw new Error('Responsive layout or ticket detail modal styles are missing.');
