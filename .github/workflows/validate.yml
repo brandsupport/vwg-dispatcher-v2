@@ -271,7 +271,7 @@ jobs:
           const equalPriority = previewCheck[0];
           const weightedPriority = previewCheck[1];
           const folderScoped = previewCheck[2];
-          if (equalPriority.length !== 3 || new Set(equalPriority.map(item=>item.score)).size !== 1) {
+          if (equalPriority.length !== 3 || new Set(equalPriority.map(item=>item.score)).size !== 1 || equalPriority.map(item=>item.id).join(",") !== "a,b,c") {
             throw new Error('Zero open-work influence must give eligible sample agents equal priority.');
           }
           if (weightedPriority.map(item=>item.id).join(",") !== "a,c,b" ||
