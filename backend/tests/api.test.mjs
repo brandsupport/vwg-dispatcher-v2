@@ -24,29 +24,30 @@ class FakeD1 {
 
   prepare(sql) {
     const db = this;
-    return {
+    const statement = {
+      sql,
+      values: [],
       bind(...values) {
-        return {
-          sql,
-          values,
-          async first() {
-            if (sql.includes("sqlite_master")) return { name: "inboxes" };
-            return null;
-          },
-          async all() {
-            if (sql.includes("FROM inboxes")) return { results: db.inboxes };
-            if (sql.includes("FROM audit_events")) {
-              db.lastAuditLimit = values[0];
-              return { results: db.auditEvents.slice(-values[0]).reverse() };
-            }
-            return { results: [] };
-          },
-          async run() {
-            return { success: true, meta: { changes: 1 } };
-          }
-        };
+        this.values = values;
+        return this;
+      },
+      async first() {
+        if (sql.includes("sqlite_master")) return { name: "inboxes" };
+        return null;
+      },
+      async all() {
+        if (sql.includes("FROM inboxes")) return { results: db.inboxes };
+        if (sql.includes("FROM audit_events")) {
+          db.lastAuditLimit = this.values[0];
+          return { results: db.auditEvents.slice(-this.values[0]).reverse() };
+        }
+        return { results: [] };
+      },
+      async run() {
+        return { success: true, meta: { changes: 1 } };
       }
     };
+    return statement;
   }
 
   async batch(statements) {
