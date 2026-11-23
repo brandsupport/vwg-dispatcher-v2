@@ -1084,7 +1084,7 @@ function configurationPreviewRows(folderId,weightPct){
     shift:agent.shift,
     open:Number(agent.open)||0,
     score:spread===0?100:100-(((Number(agent.open)||0)-lowest)/spread)*weight*100
-  })).sort((a,b)=>b.score-a.score||a.open-b.open||a.name.localeCompare(b.name));
+  })).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name));
 }
 function configurationPreviewResults(){
   const folder=FOLDERS.find(item=>item.id===state.configPreviewFolder)||FOLDERS[0];
