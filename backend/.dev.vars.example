@@ -1,0 +1,4 @@
+# Copy to .dev.vars and replace with a unique local-only value.
+# Generate with: openssl rand -hex 32
+# Do not commit .dev.vars and never reuse this value in production.
+AUDIT_ACTOR_HASH_KEY=replace-with-a-local-random-secret-at-least-32-characters

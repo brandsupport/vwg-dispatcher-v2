@@ -1,0 +1,33 @@
+# Copy this file to wrangler.toml for local development.
+# Replace the placeholder database_id after creating a dedicated D1 database.
+# Never add credentials or secret values to this file.
+
+name = "vwg-dispatcher-api-foundation"
+main = "src/index.mjs"
+compatibility_date = "2026-11-23"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+APP_ALLOWED_ORIGINS = "http://localhost:8787"
+ACCESS_GROUP_PLATFORM_ADMIN = "dispatch-platform-admin"
+ACCESS_GROUP_OPERATIONS_MANAGER = "dispatch-operations-manager"
+ACCESS_GROUP_TEAM_AGENT = "dispatch-team-agent"
+ACCESS_GROUP_AUDITOR = "dispatch-auditor"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vwg-dispatcher-foundation"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Local-only identity simulation. Production identity must come from Access.
+[access.dev]
+aud = "local-dispatcher-development"
+
+[access.dev.identity]
+email = "developer@example.invalid"
+user_uuid = "local-development-user"
+groups = ["dispatch-platform-admin"]
