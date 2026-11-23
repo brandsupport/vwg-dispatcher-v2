@@ -92,6 +92,18 @@ The local scenario preview lets a reader choose an inbox and vary the influence 
 
 The proposed change lifecycle is **Draft → Validate → Approve → Apply → Audit**. In the public prototype, only local drafting and scenario exploration are available. Validation and approval are blocked until trusted roster and availability sources plus authentication exist; Apply is blocked because there is no backend write path; persistent Audit is not configured. A button click or local calculation must never be reported as a successful operational change.
 
+### Audit History 2.0
+
+Audit History 2.0 is a **synthetic, read-only event investigation workspace**. The 20 example events are stored in the public front-end source and are not drawn from Outlook, Excel, an employee audit trail or a production service.
+
+The event ledger derives its counts from the same sample records it displays. It separates event count from distinct ticket count, and separates ticket-linked activity from configuration and access-governance examples. Inbox, category, outcome, actor and free-text filters apply to the same event set; the filtered CSV includes the event identity, UK-labelled sample timestamp, actor and role, entity, ticket and correlation IDs, outcome, reason, approval, before/after values, source and evidence note.
+
+Selecting an event opens its details and the related ticket or correlation timeline. The detail view distinguishes the event's before/after values from its reason, approval record, evidence note and source label. The configuration example demonstrates draft, review and blocked-apply stages; an approval shown in a sample record does not activate a real setting. A timeout is represented as an **unknown outcome**, not silently converted into success or failure.
+
+The screen deliberately does not show an audit-completeness percentage. A static sample cannot establish completeness, authenticity, tamper resistance or retention. The “append-only model” wording describes a design requirement only: the public site has no persistent audit store, authenticated actor identity, server-side authorisation, cryptographic integrity chain, production event ingestion or real approval workflow. No event selection or export changes an assignment, permission, configuration or mailbox record.
+
+Before production use, the service must preserve stable event IDs, trusted actor and approver identities, timezone-aware timestamps, correlation and idempotency references, before/after values, reasons, approvals, verified execution outcomes and linked corrective events. Corrections must be appended with explicit references to the earlier record rather than silently overwriting history. Retention, access permissions, integrity verification and audit export controls must be enforced server-side.
+
 ### Reliability Centre 2.0
 
 Reliability Centre 2.0 is a **synthetic exception-investigation workspace**, not a live monitoring console. Its ten anonymised example records demonstrate the structure of write failures, unknown write outcomes, transient retries, recovery holds, duplicate deliveries, concurrency conflicts and stale-write guards.
@@ -121,8 +133,9 @@ The CSV export includes only the currently filtered synthetic case records and l
 9. Roster & Coverage
 10. Dispatch Configuration
 11. Reliability Centre
-12. Audit & Reports
-13. Administration
+12. Audit History
+13. Reports & Exports
+14. Administration
 
 Access model under design:
 
