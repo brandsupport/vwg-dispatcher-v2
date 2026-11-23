@@ -96,6 +96,11 @@ In **Workers & Pages → vwg-dispatcher-api-staging → Access**, protect **all 
 
 Workers Builds deploys on commits to the connected production branch. Do not connect this staging Worker to a production database, and do not create a production Worker or production database until the separate production approval gate below is signed off.
 
+
+### Staging build activation policy
+
+The staging Worker's initial Git-connected build is configured to run `npx wrangler versions upload --config wrangler.staging.toml`, not `wrangler deploy`. This uploads a version for inspection without promoting it to serve traffic. Keep this command until the staging Access application, exact role-group identifiers, and `AUDIT_ACTOR_HASH_KEY` secret have been configured and verified. Promote a version only after those checks; do not use the public GitHub Pages demo as an authenticated client.
+
 ## Production gate — do not skip
 
 Before creating a production D1 database or deploying the Worker:
