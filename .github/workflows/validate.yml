@@ -36,6 +36,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
+          import vm from 'node:vm';
           const html = fs.readFileSync('index.html', 'utf8');
           const js = fs.readFileSync('dashboard.js', 'utf8');
           const css = fs.readFileSync('dashboard.css', 'utf8');
@@ -53,9 +54,24 @@ jobs:
             if (!js.includes(text)) throw new Error('Missing dashboard category: ' + text);
           }
           if (!readme.toLowerCase().includes('first assignment') || !readme.toLowerCase().includes('first assigned to member')) throw new Error('Initial allocation-share definition is missing.');
-          if (!js.includes('Simulation only') || !js.includes('No live system affected')) {
-            throw new Error('Operational controls must remain explicitly simulated.');
+          if (!js.includes('DEMONSTRATION DATA') || !js.includes('READ ONLY') || !js.includes('Not connected')) {
+            throw new Error('Live Operations must clearly identify synthetic data and unavailable integrations.');
           }
+          for (const text of ['liveFilteredTickets','liveInboxCards','liveStatusTabs','data-live-search','data-live-filter','data-live-status','data-live-folder','exportLiveQueue']) {
+            if (!js.includes(text)) throw new Error('Live Operations feature missing: ' + text);
+          }
+          if (js.includes('data-action="toggle-dispatch"')) throw new Error('A simulated dispatch control must not be presented as an operational action.');
+          for (const text of ['.live-queue-layout','.live-inbox-grid','.live-status-tab','.live-coverage-row']) {
+            if (!css.includes(text)) throw new Error('Live Operations styling missing: ' + text);
+          }
+          const ageStart = js.indexOf('function liveAgeMinutes(ticket){');
+          const ageEnd = js.indexOf('\n}', ageStart) + 2;
+          const ageFunction = ageStart >= 0 && ageEnd > ageStart ? js.slice(ageStart, ageEnd) : '';
+          if (!ageFunction) throw new Error('Live Operations age parser is missing.');
+          const ageMinutes = vm.runInNewContext(ageFunction + '; liveAgeMinutes({age: "5h 42m"})');
+          if (ageMinutes !== 342) throw new Error('Live Operations age parser returned ' + ageMinutes + ' instead of 342.');
+          const shortAge = vm.runInNewContext(ageFunction + '; liveAgeMinutes({age: "18m"})');
+          if (shortAge !== 18) throw new Error('Live Operations short age parser returned ' + shortAge + ' instead of 18.');
           if (!css.includes('.sidebar') || !css.includes('@media') || !css.includes('.modal-card')) {
             throw new Error('Responsive layout or ticket detail modal styles are missing.');
           }
