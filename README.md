@@ -28,7 +28,7 @@ The complete UI foundation now includes fourteen navigable areas:
 - Folder share matrix showing each member's initial-allocation count and percentage share within each folder.
 - Team Performance 2.0 with anonymised member profiles, separate open-work snapshots, first-allocation shares by inbox and a team-level workflow event ledger.
 - Private-performance screen layout (placeholder identity in the prototype).
-- Roster and coverage.
+- Roster & Coverage 2.0 with a filterable anonymised directory, derived shift-overlap map, four-inbox eligibility matrix and coverage-readiness guardrails.
 - Dispatch configuration.
 - Reliability centre.
 - Audit history.
@@ -68,6 +68,12 @@ Team Performance keeps three measures separate:
 - **Workflow events:** handover, reassignment, recovery, manual assignment and flag counts are shown separately from unique tickets affected. The prototype does not attribute these aggregate events to individual members.
 
 Response time, elapsed resolution, active handling time, reopen rate and hours-adjusted comparisons remain unavailable until validated event timestamps, approved roster hours and appropriate source records exist. Raw allocation volume is descriptive, not a performance ranking or proof of fairness.
+
+### Roster and coverage interpretation
+
+Roster & Coverage 2.0 uses explicit sample shift windows to derive overlap intervals. The current demo uses anonymised placeholder windows only; it does not represent an approved rota or verified scheduled hours. The sample eligibility policy marks each profile as eligible for all four inboxes, but no live eligibility source is connected.
+
+Availability values are untimestamped snapshots. They must not be subtracted from shift coverage or treated as live break/absence coverage. Minimum staffing targets, fortnightly rotations and coverage sufficiency remain unconfigured until approved operational rules and source data are loaded. Egypt-local shift schedules and UK mailbox timestamps must remain separate.
 
 ## Planned application areas
 

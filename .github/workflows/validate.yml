@@ -190,5 +190,51 @@ jobs:
             throw new Error('Team Performance metric definitions are missing from the README.');
           }
 
-          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance 2.0 integrity checks.');
+
+          const rosterStart = js.indexOf('function renderRoster(){');
+          const rosterEnd = js.indexOf('\nfunction renderRules(', rosterStart);
+          const rosterView = rosterStart >= 0 && rosterEnd > rosterStart ? js.slice(rosterStart, rosterEnd) : '';
+          for (const text of ['ROSTER & COVERAGE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Shift overlap map','Roster data readiness','Roster directory & inbox eligibility','Inbox eligibility matrix','Minimum headcount by interval','NO FALSE GAP ALERTS']) {
+            if (!rosterView.includes(text)) throw new Error('Roster & Coverage 2.0 section or disclosure missing: ' + text);
+          }
+          for (const text of ['.roster-demo-strip','.roster-coverage-track','.roster-filter-toolbar','.roster-directory-panel','.roster-agent-detail','.roster-guardrail-list','.roster-final-note']) {
+            if (!css.includes(text)) throw new Error('Roster & Coverage styling missing: ' + text);
+          }
+          if (!rosterView.includes('data-action="export-roster"') || !js.includes('dispatcher-sample-roster-coverage.csv')) {
+            throw new Error('Roster & Coverage sample export is missing.');
+          }
+          if (rosterView.includes('data-action="roster-preview"') || js.includes('if(action==="roster-preview")')) {
+            throw new Error('Roster preview must not imply that a sample edit can be applied.');
+          }
+          const clockStart = js.indexOf('function rosterClockMinutes(');
+          const coverageEnd = js.indexOf('\nfunction rosterShiftSummary(', clockStart);
+          const coverageCode = clockStart >= 0 && coverageEnd > clockStart ? js.slice(clockStart, coverageEnd) : '';
+          if (!coverageCode.includes('function coverageSegments(')) throw new Error('Roster shift coverage calculation is missing.');
+          const coverageResult = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"08:00",end:"18:00"},{shift:"Late",start:"10:00",end:"20:00"}])');
+          const expectedSegments = [[480,600,1,0,1],[600,1080,1,1,2],[1080,1200,0,1,1]];
+          if (coverageResult.length !== expectedSegments.length || coverageResult.some((segment,index) => {
+            const expected = expectedSegments[index];
+            return segment.start !== expected[0] || segment.end !== expected[1] || segment.early !== expected[2] || segment.late !== expected[3] || segment.headcount !== expected[4];
+          })) {
+            throw new Error('Roster overlap calculation failed for the sample early/late windows.');
+          }
+          const badCoverage = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"18:00",end:"08:00"},{shift:"Late",start:"10:00",end:"20:00"}])');
+          if (badCoverage.length !== 1 || badCoverage[0].start !== 600 || badCoverage[0].end !== 1200) {
+            throw new Error('Roster invalid or overnight shift boundaries were not handled safely.');
+          }
+          const gapCoverage = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"08:00",end:"10:00"},{shift:"Late",start:"11:00",end:"12:00"}])');
+          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No sample shift coverage") {
+            throw new Error('Roster coverage calculation must preserve zero-headcount gap intervals.');
+          }
+          const eligibilityStart = js.indexOf('const AGENTS = AGENT_NAMES.map(');
+          const eligibilityEnd = js.indexOf('\n}));', eligibilityStart) + 5;
+          const agentDeclaration = eligibilityStart >= 0 && eligibilityEnd > eligibilityStart ? js.slice(eligibilityStart, eligibilityEnd) : '';
+          if (!agentDeclaration.includes('eligibleFolders: ["agency","detags","transfers","unadopts"]')) {
+            throw new Error('Sample inbox eligibility must be explicit for all four inboxes.');
+          }
+          for (const text of ['untimestamped snapshots','minimum staffing targets','fortnightly rotations']) {
+            if (!readme.toLowerCase().includes(text.toLowerCase())) throw new Error('Roster data limitation missing from README: ' + text);
+          }
+
+          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance and Roster & Coverage 2.0 integrity checks.');
           NODE
