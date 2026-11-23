@@ -18,6 +18,7 @@ on:
       - "index.html"
       - "README.md"
       - "docs/**"
+      - "backend/**"
       - ".github/workflows/validate.yml"
 
 permissions:
