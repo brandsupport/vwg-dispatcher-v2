@@ -925,10 +925,9 @@ function coverageSegments(agents){
   for(let index=0;index<boundaries.length-1;index++){
     const start=boundaries[index],end=boundaries[index+1];
     const onShift=scheduled.filter(item=>item.start<=start&&item.end>=end).map(item=>item.agent);
-    if(!onShift.length)continue;
     const early=onShift.filter(agent=>agent.shift==="Early").length;
     const late=onShift.filter(agent=>agent.shift==="Late").length;
-    const label=early>0&&late>0?"Cross-shift overlap":early>0?"Early shift only":late>0?"Late shift only":"Other shift coverage";
+    const label=onShift.length===0?"No sample shift coverage":early>0&&late>0?"Cross-shift overlap":early>0?"Early shift only":late>0?"Late shift only":"Other shift coverage";
     segments.push({start,end,early,late,headcount:onShift.length,label,duration:end-start});
   }
   return segments;
@@ -979,22 +978,23 @@ function rosterCoveragePanel(){
   const totalDuration=Math.max(1,last-first);
   const overlapMinutes=segments.filter(segment=>segment.early>0&&segment.late>0).reduce((sum,segment)=>sum+segment.duration,0);
   const breaks=AGENTS.filter(agent=>agent.availability==="Break").length;
+  const gaps=segments.filter(segment=>segment.headcount===0).length;
   return '<div class="roster-coverage-summary">'+
     '<div><span>ILLUSTRATIVE WINDOW</span><strong>'+rosterClockLabel(first)+'–'+rosterClockLabel(last)+'</strong></div>'+
     '<div><span>CROSS-SHIFT OVERLAP</span><strong>'+Math.floor(overlapMinutes/60)+'h '+String(overlapMinutes%60).padStart(2,"0")+'m</strong></div>'+
-    '<div><span>BREAK SNAPSHOTS</span><strong>'+breaks+' flagged</strong></div>'+
+    '<div><span>UNSTAFFED SAMPLE INTERVALS</span><strong>'+gaps+' intervals</strong></div>'+
   '</div>'+
   '<div class="roster-coverage-track" role="img" aria-label="Illustrative sample shift coverage. '+segments.map(segment=>rosterClockLabel(segment.start)+" to "+rosterClockLabel(segment.end)+": "+segment.headcount+" profiles").join("; ")+'.">'+
     segments.map(segment=>{
       const width=segment.duration/totalDuration*100;
-      const kind=segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":"late";
+      const kind=segment.headcount===0?"gap":segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":segment.late>0?"late":"other";
       return '<div class="roster-coverage-segment '+kind+'" style="width:'+width.toFixed(2)+'%"><strong>'+segment.headcount+'</strong><small>'+Math.round(width)+'%</small></div>';
     }).join("")+
   '</div>'+
   '<div class="roster-coverage-legend">'+segments.map(segment=>
     '<div><span class="roster-coverage-dot '+(segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":"late")+'"></span><strong>'+segment.label+'</strong><span>'+rosterClockLabel(segment.start)+'–'+rosterClockLabel(segment.end)+'</span><b>'+segment.headcount+' profiles</b></div>'
   ).join("")+'</div>'+
-  '<p class="roster-panel-note">Headcount is derived from placeholder shift windows only. The availability snapshot has no timestamp, so breaks are shown separately and are not deducted from coverage. This does not establish whether staffing is sufficient.</p>';
+  '<p class="roster-panel-note">Headcount is derived from placeholder shift windows only. '+breaks+' break snapshots have no timestamp, so they are not deducted from coverage. Empty intervals are shown as gaps, but no staffing target exists to assess sufficiency.</p>';
 }
 function rosterReadinessPanel(){
   return '<div class="health-list">'+
@@ -1017,6 +1017,7 @@ function rosterAgentDetail(id){
 }
 function renderRoster(){
   const profiles=rosterFilteredAgents();
+  if(state.selectedRosterAgent&&!profiles.some(agent=>agent.id===state.selectedRosterAgent))state.selectedRosterAgent=null;
   const shifts=rosterShiftSummary(profiles);
   const early=shifts.find(item=>item.shift==="Early");
   const late=shifts.find(item=>item.shift==="Late");
@@ -1050,11 +1051,11 @@ function renderRoster(){
       '<div class="live-queue-meta"><span id="rosterDirectoryCount">Showing '+profiles.length+' of '+AGENTS.length+' sample profiles · '+available+' available snapshots · '+breaks+' break snapshots</span><button type="button" class="text-action" data-action="reset-roster-filters">Reset filters</button></div>'+
       '<div id="rosterDirectoryRows">'+rosterDirectoryRows(profiles)+'</div>'+
     '</section>'+
-    (state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):'')+
+    '<div id="rosterAgentDetail">'+(state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):'')+'</div>'+
     '<div class="grid-two roster-secondary-grid">'+
       panel("Inbox eligibility matrix","Four-inbox sample policy; no per-agent exclusions configured",dataTable(["Inbox","Eligible profiles","Total profiles","Policy state"],FOLDERS.map(folder=>{
-        const count=AGENTS.filter(agent=>(agent.eligibleFolders||[]).includes(folder.id)).length;
-        return '<tr><td>'+folder.name+'</td><td class="total-cell">'+count+'</td><td>'+AGENTS.length+'</td><td>'+statusPill("Illustrative")+'</td></tr>';
+        const count=profiles.filter(agent=>(agent.eligibleFolders||[]).includes(folder.id)).length;
+        return '<tr><td>'+folder.name+'</td><td class="total-cell">'+count+'</td><td>'+profiles.length+'</td><td>'+statusPill("Illustrative")+'</td></tr>';
       })),'<span class="subtle-tag">'+eligibilityPairs+' / '+totalPairs+' ELIGIBLE PAIRS IN VIEW</span>')+
       panel("Coverage guardrails","Checks that cannot be completed without approved operational rules",'<div class="roster-guardrail-list">'+
         '<div><strong>Scheduled hours</strong>'+statusPill("Unverified")+'<small>Sample windows only</small></div>'+
@@ -1332,8 +1333,11 @@ document.addEventListener("input",event=>{
     const profiles=rosterFilteredAgents();
     const rows=document.getElementById("rosterDirectoryRows");
     const count=document.getElementById("rosterDirectoryCount");
+    if(state.selectedRosterAgent&&!profiles.some(agent=>agent.id===state.selectedRosterAgent))state.selectedRosterAgent=null;
     if(rows)rows.innerHTML=rosterDirectoryRows(profiles);
     if(count)count.textContent="Showing "+profiles.length+" of "+AGENTS.length+" sample profiles";
+    const detail=document.getElementById("rosterAgentDetail");
+    if(detail)detail.innerHTML=state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):"";
   }
 });
 document.addEventListener("click",event=>{
