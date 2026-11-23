@@ -1910,6 +1910,7 @@ function renderAdmin(){
 }
 function render(){
   document.getElementById("topbarPage").textContent=VIEW_TITLES[state.view]||"Overview";
+  pageContent.dataset.view=state.view;
   document.querySelectorAll(".nav-item").forEach(btn=>btn.classList.toggle("active",btn.dataset.view===state.view));
   if(state.view==="overview")renderOverview();
   else if(state.view==="live")renderLive();
