@@ -141,5 +141,50 @@ jobs:
           const priorityResult = vm.runInNewContext(ticketPriorityFunction + '; [ticketPriority({status:"Overdue"}),ticketPriority({status:"Waiting"}),ticketPriority({status:"Assigned"})]');
           if (priorityResult.join(",") !== "High,Medium,Normal") throw new Error('Ticket priority mapping is incorrect.');
 
-          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens.');
+
+          const teamStart = js.indexOf('function renderTeam(){');
+          const teamEnd = js.indexOf('\nfunction agentDetail(', teamStart);
+          const teamView = teamStart >= 0 && teamEnd > teamStart ? js.slice(teamStart, teamEnd) : '';
+          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Member snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED','Not available']) {
+            if (!teamView.includes(text)) throw new Error('Team Performance 2.0 section or disclosure missing: ' + text);
+          }
+          for (const text of ['.team-demo-strip','.team-profile-grid','.team-profile-card','.team-workload-row','.team-agent-detail','.team-event-ledger','.team-private-state','.team-evidence-list']) {
+            if (!css.includes(text)) throw new Error('Team Performance styling missing: ' + text);
+          }
+          const agentDetailStart = js.indexOf('function agentDetail(');
+          const personalStart = js.indexOf('\nfunction renderMy(', agentDetailStart);
+          const agentDetail = agentDetailStart >= 0 && personalStart > agentDetailStart ? js.slice(agentDetailStart, personalStart) : '';
+          if (!agentDetail || agentDetail.includes('First response') || agentDetail.includes('Elapsed resolution') || agentDetail.includes('a.response') || agentDetail.includes('a.resolution')) {
+            throw new Error('Member detail must not display unsupported response or resolution timing.');
+          }
+          if (!teamView.includes('shareMatrix(matrix,true,matrix)')) throw new Error('Team allocation shares must use the complete first-assignment denominator.');
+          const allocationShareStart = js.indexOf('function allocationShareData(');
+          const allocationShareEnd = js.indexOf('\nfunction ', allocationShareStart + 10);
+          const allocationShareFunction = allocationShareStart >= 0 && allocationShareEnd > allocationShareStart ? js.slice(allocationShareStart, allocationShareEnd) : '';
+          const allocationShareResult = vm.runInNewContext(allocationShareFunction + '; allocationShareData([{id:"a",name:"A",cells:[10],handovers:99,reassignments:80,recoveries:70},{id:"b",name:"B",cells:[30],handovers:0,reassignments:0,recoveries:0}],0)');
+          if (allocationShareResult.total !== 40 || allocationShareResult.rows[0].share !== 25 || allocationShareResult.rows[1].share !== 75) {
+            throw new Error('Initial allocation share must use first-assigned counts only, not handover/reassignment/recovery events.');
+          }
+          const eventStart = js.indexOf('const WORKFLOW_EVENT_SUMMARY = [');
+          const eventEnd = js.indexOf('];', eventStart) + 2;
+          const eventDeclaration = eventStart >= 0 && eventEnd > eventStart ? js.slice(eventStart, eventEnd) : '';
+          const workflowEvents = vm.runInNewContext(eventDeclaration + '; WORKFLOW_EVENT_SUMMARY');
+          const expectedEvents = {handover:[128,96],flag:[88,72],manual:[55,49],recovery:[27,25],reassignment:[42,34]};
+          if (workflowEvents.length !== 5 || workflowEvents.some(event => !expectedEvents[event.id] || event.events !== expectedEvents[event.id][0] || event.uniqueTickets !== expectedEvents[event.id][1])) {
+            throw new Error('Team and Workflow Analytics must share the same event summary and unique-ticket counts.');
+          }
+          if (!js.includes('if(action==="export-team"){exportTeam();return;}') || !js.includes('dispatcher-sample-team-performance.csv')) {
+            throw new Error('Team Performance sample export is missing.');
+          }
+          const myStart = js.indexOf('function renderMy(){');
+          const myEnd = js.indexOf('\nfunction renderRoster(', myStart);
+          const myView = myStart >= 0 && myEnd > myStart ? js.slice(myStart, myEnd) : '';
+          if (!myView.includes('ACCESS NOT CONFIGURED') || !myView.includes('server-enforced') || myView.includes('Agent 04') || myView.includes('SAMPLE PROFILE')) {
+            throw new Error('My Performance must remain private until authentication and server-side permissions are configured.');
+          }
+          if (!readme.includes('Team workload and event interpretation') || !readme.includes('The share denominator remains the full inbox first-assignment total')) {
+            throw new Error('Team Performance metric definitions are missing from the README.');
+          }
+
+          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance 2.0 integrity checks.');
           NODE
