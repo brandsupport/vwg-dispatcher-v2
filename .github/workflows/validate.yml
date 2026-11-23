@@ -482,5 +482,29 @@ jobs:
             throw new Error('Administration production security boundaries are missing from README.');
           }
 
-          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0, Dispatch Configuration 2.0, Reliability Centre 2.0, Audit History 2.0 and Administration & Security 2.0 integrity checks.');
+
+          const renderStart = js.indexOf('function render(){');
+          const renderEnd = js.indexOf('\nfunction showToast(', renderStart);
+          const renderFunction = renderStart >= 0 && renderEnd > renderStart ? js.slice(renderStart, renderEnd) : '';
+          if (!renderFunction.includes('pageContent.dataset.view=state.view')) {
+            throw new Error('The active page view must be exposed for scoped typography rules.');
+          }
+          for (const view of ['reliability','audit','reports','admin']) {
+            if (!css.includes('.page-content[data-view="' + view + '"]')) {
+              throw new Error('A scoped readability scale is missing for System page: ' + view);
+            }
+          }
+          for (const selector of ['.page-content .heading-copy','.page-content .panel-title','.page-content .panel-subtitle','.page-content .data-table td','.page-content .status-pill']) {
+            if (!css.includes(selector)) throw new Error('Shared dashboard readability rule is missing: ' + selector);
+          }
+          for (const text of ['.reliability-detail-section p{font-size:10px','.audit-detail-meta p{font-size:10px','.report-card p{font-size:11px','.admin-control-card>p{font-size:10px']) {
+            if (!css.includes(text)) throw new Error('System page typography size rule is missing: ' + text);
+          }
+          if (!readme.includes('## Readability and typography') ||
+              !readme.includes('larger scoped type scale') ||
+              !readme.includes('horizontal scrolling for wide tables')) {
+            throw new Error('Readability and responsive typography guidance is missing from the README.');
+          }
+
+          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including System typography readability and responsive table checks.');
           NODE
