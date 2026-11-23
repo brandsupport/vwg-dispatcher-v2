@@ -110,7 +110,7 @@ jobs:
 
 
           const ticketStart = js.indexOf('function renderTickets(){');
-          const ticketEnd = js.indexOf('\\nfunction chartPair(', ticketStart);
+          const ticketEnd = js.indexOf('\nfunction chartPair(', ticketStart);
           const ticketView = ticketStart >= 0 && ticketEnd > ticketStart ? js.slice(ticketStart, ticketEnd) : '';
           for (const helper of ['ticketQueueBase','ticketStatusMatches','ticketPriority','ticketFilteredRows','ticketStatusCounts','ticketAgeingSummary','ticketStatusSummary','ticketLifecycleLedger','ticketTelemetryCard']) {
             if (!js.includes('function ' + helper + '(')) throw new Error('Missing Ticket Analytics component: ' + helper);
