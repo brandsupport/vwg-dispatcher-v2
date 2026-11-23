@@ -435,7 +435,8 @@ jobs:
           const adminData = [
             js.slice(adminRolesStart,adminRolesEnd),js.slice(adminPermissionsStart,adminPermissionsEnd),
             js.slice(adminRequestsStart,adminRequestsEnd),js.slice(adminControlsStart,adminControlsEnd),
-            js.slice(adminRetentionStart,adminRetentionEnd),js.slice(adminIntegrationsStart,adminIntegrationsEnd)
+            js.slice(adminRetentionStart,adminRetentionEnd),js.slice(adminIntegrationsStart,adminIntegrationsEnd),
+            js.slice(adminTimeStart,adminTimeEnd)
           ];
           if (adminData.some((source,index)=>!source||source.startsWith('const ' )===false)) throw new Error('Administration catalogues are missing or malformed.');
           const adminResult = vm.runInNewContext(adminData.join('\n') + 
