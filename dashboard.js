@@ -136,7 +136,7 @@ const RELIABILITY_EVENTS = [
     next:"Production must confirm the mailbox category, tracker state and backend write acknowledgement before recording a recovery as complete."
   },
   {
-    id:"EXC-2103",time:"09:58:07",kind:"write_failure",type:"Write failure",severity:"critical",status:"Retry exhausted",
+    id:"EXC-2103",time:"09:58:07",kind:"write_unknown",type:"Write outcome unknown",severity:"critical",status:"Retry exhausted",
     component:"Excel tracker adapter",folder:"agency",ticket:"DSP-10477",title:"Tracker write timed out on all sample attempts",
     attempts:3,actor:"Sample dispatcher",owner:"Agent 01",idempotency:"SAMPLE-ASSIGN-10477-V2",
     signal:"Three illustrative attempts timed out without a confirmed response. The final state is unknown, not a verified failure or success.",
@@ -1283,6 +1283,7 @@ function reliabilityDetailMarkup(event){
 function reliabilityTypeBreakdown(events){
   const labels=[
     ["write_failure","Write failures"],
+    ["write_unknown","Unknown write outcomes"],
     ["recovery","Recoveries"],
     ["duplicate_delivery","Duplicate deliveries"],
     ["concurrency_conflict","Concurrency conflicts"],
@@ -1327,21 +1328,23 @@ function reliabilityIntegrityPanel(events){
 }
 function renderReliability(){
   const base=reliabilityBaseEvents();
+  if(state.reliabilityType!=="all"&&!base.some(event=>event.kind===state.reliabilityType))state.reliabilityType="all";
+  if(state.reliabilityStatus!=="all"&&!base.some(event=>event.status===state.reliabilityStatus))state.reliabilityStatus="all";
+  if(state.reliabilitySeverity!=="all"&&!base.some(event=>event.severity===state.reliabilitySeverity))state.reliabilitySeverity="all";
   const filtered=reliabilityFilteredEvents();
   if(!filtered.some(event=>event.id===state.selectedReliabilityEvent))state.selectedReliabilityEvent=filtered[0]?.id||null;
   const selected=filtered.find(event=>event.id===state.selectedReliabilityEvent)||null;
-  const failedWrites=base.filter(event=>event.kind==="write_failure").length;
+  const writeIssues=base.filter(event=>["write_failure","write_unknown"].includes(event.kind)).length;
   const pendingRecoveries=base.filter(event=>event.kind==="recovery"&&event.status==="Awaiting review").length;
-  const duplicateSignals=base.filter(event=>event.kind==="duplicate_delivery").length;
   const retryRecords=base.filter(event=>event.attempts>1).length;
   const scopeLabel=state.folder==="all"?"All four inboxes":scopeName();
   pageContent.innerHTML=heading("RELIABILITY CENTRE 2.0","Investigate the exception — not just the status.","Explore synthetic write failures, retries, recovery cases and integrity guards. The screen reports what its sample records contain; it does not observe a live service.",'<button class="btn btn-secondary" data-action="reset-reliability-filters">Reset filters</button><button class="btn btn-primary" data-action="export-reliability">↓ Export incident ledger</button>')+
     '<div class="reliability-demo-strip"><span><i></i> SYNTHETIC INVESTIGATION DATA · READ ONLY</span><span>Runtime health <b>Not observable</b></span><span>Connector telemetry <b>Not connected</b></span><span>Recovery actions <b>Unavailable</b></span></div>'+
     kpiGrid([
       kpi("Sample incident records",String(base.length),"Unique synthetic exception references","◷"),
-      kpi("Write failure records",String(failedWrites),"Sample events marked write failure","×"),
+      kpi("Write issues to verify",String(writeIssues),"Rejected or unconfirmed sample outcomes","×"),
       kpi("Recoveries awaiting review",String(pendingRecoveries),"Ownership held for manual verification","↺",pendingRecoveries?"Review queue":"No sample queue","warning"),
-      kpi("Duplicate delivery signals",String(duplicateSignals),"Suppressed or unresolved sample signals","◇"),
+      kpi("Cases with retry attempts",String(retryRecords),"Case records with more than one attempt","⟳"),
     ])+
     '<div class="reliability-scope-note"><strong>Scope:</strong> '+esc(scopeLabel)+'. All counts below are counts of synthetic incident records in the selected inbox scope, not live tickets, current failures or production service-level indicators. Repeated attempts remain part of one case record.</div>'+
     '<div class="grid-two reliability-overview-grid">'+
@@ -1353,7 +1356,7 @@ function renderReliability(){
       '<div class="reliability-filter-toolbar">'+
         '<label class="live-queue-search"><span>⌕</span><input type="search" data-reliability-search value="'+esc(state.reliabilitySearch)+'" placeholder="Search case, ticket, component or key…" aria-label="Search reliability events" autocomplete="off"></label>'+
         '<label><span class="live-filter-label">CATEGORY</span><select class="live-select" data-reliability-filter="reliabilityType"><option value="all">All categories</option>'+[
-          ["write_failure","Write failure"],["recovery","Recovery"],["duplicate_delivery","Duplicate delivery"],["concurrency_conflict","Concurrency conflict"],["retry","Retry"],["stale_write","Stale write guard"]
+          ["write_failure","Write failure"],["write_unknown","Write outcome unknown"],["recovery","Recovery"],["duplicate_delivery","Duplicate delivery"],["concurrency_conflict","Concurrency conflict"],["retry","Retry"],["stale_write","Stale write guard"]
         ].map(([value,label])=>'<option value="'+value+'" '+(state.reliabilityType===value?"selected":"")+'>'+label+'</option>').join("")+'</select></label>'+
         '<label><span class="live-filter-label">SEVERITY</span><select class="live-select" data-reliability-filter="reliabilitySeverity"><option value="all">All severities</option>'+["critical","warning","info"].map(value=>'<option value="'+value+'" '+(state.reliabilitySeverity===value?"selected":"")+'>'+value.toUpperCase()+'</option>').join("")+'</select></label>'+
         '<label><span class="live-filter-label">OUTCOME</span><select class="live-select" data-reliability-filter="reliabilityStatus"><option value="all">All outcomes</option>'+[...new Set(base.map(event=>event.status))].map(value=>'<option value="'+esc(value)+'" '+(state.reliabilityStatus===value?"selected":"")+'>'+esc(value)+'</option>').join("")+'</select></label>'+
