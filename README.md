@@ -26,7 +26,7 @@ The complete UI foundation now includes fourteen navigable areas:
 - Brand insights for Volkswagen, Audi, Škoda, SEAT, CUPRA, Volkswagen Commercial Vehicles and Other / unclassified.
 - Workflow analytics for handovers, flags, manual allocation, recoveries, reassignments and exceptions.
 - Folder share matrix showing each member's initial-allocation count and percentage share within each folder.
-- Team performance with selectable member profiles.
+- Team Performance 2.0 with anonymised member profiles, separate open-work snapshots, first-allocation shares by inbox and a team-level workflow event ledger.
 - Private-performance screen layout (placeholder identity in the prototype).
 - Roster and coverage.
 - Dispatch configuration.
@@ -58,6 +58,16 @@ This gives a fair view of the dispatcher’s original allocation distribution. I
 Show handover, reassignment and recovery events separately. A future secondary "handled/touched tickets" view can show every agent who worked on a ticket, but those member percentages may overlap and should be labelled accordingly.
 
 Outstanding workload is a separate current-state snapshot. It must not be conflated with historical allocation share.
+
+### Team workload and event interpretation
+
+Team Performance keeps three measures separate:
+
+- **Initial allocation:** distinct tickets first assigned to a member in each inbox. The share denominator remains the full inbox first-assignment total, even when member rows are searched or filtered.
+- **Current open workload:** a current-state snapshot. It is not scaled by the reporting period and must not be treated as historical allocation volume.
+- **Workflow events:** handover, reassignment, recovery, manual assignment and flag counts are shown separately from unique tickets affected. The prototype does not attribute these aggregate events to individual members.
+
+Response time, elapsed resolution, active handling time, reopen rate and hours-adjusted comparisons remain unavailable until validated event timestamps, approved roster hours and appropriate source records exist. Raw allocation volume is descriptive, not a performance ranking or proof of fairness.
 
 ## Planned application areas
 

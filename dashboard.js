@@ -34,15 +34,21 @@ const AGENTS = AGENT_NAMES.map((name,index) => ({
   availability: index === 12 ? "Break" : "Available",
   assigned: 0,
   open: [11,15,13,16,12,14,10,15,12,13,11,16,9,14][index],
-  response: [22,28,26,31,24,29,21,34,25,27,30,23,32,26][index],
-  resolution: [178,205,192,224,181,213,169,231,190,198,219,184,226,195][index],
-  handovers: [5,8,6,9,4,7,5,10,6,7,8,5,9,6][index],
-  flags: [3,4,5,6,2,4,3,5,4,3,6,2,4,3][index]
 }));
 const MATRIX_WEIGHTS = [
   [12,30,18,10],[11,28,17,9],[10,32,20,9],[9,26,16,8],[10,29,18,9],[12,31,19,10],[10,27,16,8],
   [9,25,15,7],[11,30,18,9],[10,28,17,8],[9,26,16,7],[10,27,17,8],[8,24,15,7],[9,27,18,9]
 ];
+const WORKFLOW_EVENT_SUMMARY = [
+  { id:"handover", label:"Handover", events:128, uniqueTickets:96, rate:"8.6%", color:"#ff5c91" },
+  { id:"flag", label:"Flagged", events:88, uniqueTickets:72, rate:"6.4%", color:"#ffbd68" },
+  { id:"manual", label:"Manual assignment", events:55, uniqueTickets:49, rate:"4.6%", color:"#c2a0ff" },
+  { id:"recovery", label:"Recovery", events:27, uniqueTickets:25, rate:"2.2%", color:"#76e7ce" },
+  { id:"reassignment", label:"Reassignment", events:42, uniqueTickets:34, rate:"3.0%", color:"#f1846f" }
+];
+function workflowEvent(id){
+  return WORKFLOW_EVENT_SUMMARY.find(event=>event.id===id)||{events:0,uniqueTickets:0};
+}
 const PERIODS = {
   today:{label:"Today",factor:.055,days:1},
   week:{label:"Last 7 days",factor:.235,days:7},
@@ -157,24 +163,36 @@ function brandBarList(list){
 function folderCards(){
   return '<div class="folder-card-grid">'+folderAssignedRows().filter(f=>state.folder==="all"||f.id===state.folder).map(f=>'<article class="folder-card"><div class="folder-card-top"><span class="folder-icon" style="--folder-color:'+f.color+'">▤</span><span class="status-pill '+(state.pausedFolders[f.id]?"warning":"good")+'">'+(state.pausedFolders[f.id]?"Paused":"Active")+'</span></div><h3>'+f.name+'</h3><div class="folder-card-value">'+fmt(f.open)+'</div><div class="folder-card-caption">Outstanding tickets</div><div class="folder-card-meta"><span>'+fmt(f.received)+' received</span><span>'+fmt(f.assigned)+' assigned</span></div></article>').join("")+'</div>';
 }
-function shareMatrix(rows,full){
+function allocationShareData(rows,folderIndex){
+  const total=rows.reduce((sum,row)=>sum+(row.cells[folderIndex]||0),0);
+  return {
+    total,
+    rows:rows.map(row=>{
+      const count=row.cells[folderIndex]||0;
+      return {id:row.id,name:row.name,count,share:total?count/total*100:0};
+    })
+  };
+}
+function shareMatrix(rows,full,denominatorRows){
   const folders=scopeFolders();
-  const totalsByFolder=folders.map(f=>{
-    const fi=FOLDERS.findIndex(x=>x.id===f.id);
-    return rows.reduce((sum,r)=>sum+r.cells[fi],0);
-  });
-  const totalVisible=totalsByFolder.reduce((a,b)=>a+b,0);
-  const visibleRows=rows.filter(r=>activeSearch(r.name)&&(!state.memberSearch||r.name.toLowerCase().includes(state.memberSearch.toLowerCase())));
+  const denominator=denominatorRows||rows;
+  const shareData=folders.map(folder=>allocationShareData(denominator,FOLDERS.findIndex(item=>item.id===folder.id)));
+  const totalsByFolder=shareData.map(item=>item.total);
+  const totalVisible=totalsByFolder.reduce((sum,value)=>sum+value,0);
+  const visibleRows=rows.filter(row=>activeSearch(row.name)&&(!state.memberSearch||row.name.toLowerCase().includes(state.memberSearch.toLowerCase())));
   if(!visibleRows.length)return '<div class="empty-state">No members match this search.</div>';
-  const header='<thead><tr><th>Team member</th>'+folders.map(f=>'<th>'+f.short+' · count / share</th>').join("")+'<th>Total allocated</th>'+(full?'<th>Overall share</th><th>Open work</th>':'')+'</tr></thead>';
-  const body='<tbody>'+visibleRows.map(r=>{
-    const cells=folders.map((f,idx)=>{
-      const fi=FOLDERS.findIndex(x=>x.id===f.id),count=r.cells[fi],share=totalsByFolder[idx]?count/totalsByFolder[idx]*100:0;
+  const header='<thead><tr><th>Team member</th>'+folders.map(folder=>'<th>'+folder.short+' · count / share</th>').join("")+'<th>Total allocated</th>'+(full?'<th>Scope share</th><th>Open work snapshot</th>':'')+'</tr></thead>';
+  const body='<tbody>'+visibleRows.map(row=>{
+    const cells=folders.map((folder,index)=>{
+      const fi=FOLDERS.findIndex(item=>item.id===folder.id);
+      const count=row.cells[fi]||0;
+      const allocation=shareData[index].rows.find(item=>item.id===row.id);
+      const share=allocation?allocation.share:0;
       return '<td class="matrix-cell"><span class="matrix-count">'+fmt(count)+'</span><span class="matrix-share"><span class="share-mini-track"><span class="share-mini-fill" style="width:'+share+'%"></span></span>'+share.toFixed(1)+'%</span></td>';
     }).join("");
-    const visibleTotal=folders.reduce((sum,f)=>sum+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0);
+    const visibleTotal=folders.reduce((sum,folder)=>sum+(row.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0);
     const overall=totalVisible?visibleTotal/totalVisible*100:0;
-    return '<tr><td>'+memberCell(r.name,r.shift)+'</td>'+cells+'<td class="total-cell">'+fmt(visibleTotal)+'</td>'+(full?'<td class="total-cell">'+overall.toFixed(1)+'%</td><td>'+fmt(r.open)+'</td>':'')+'</tr>';
+    return '<tr><td>'+memberCell(row.name,row.shift)+'</td>'+cells+'<td class="total-cell">'+fmt(visibleTotal)+'</td>'+(full?'<td class="total-cell">'+overall.toFixed(1)+'%</td><td>'+fmt(row.open)+'</td>':'')+'</tr>';
   }).join("")+'</tbody>';
   return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>';
 }
@@ -744,25 +762,22 @@ function brandFolderTable(){
   }));
 }
 function renderWorkflow(){
-  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves","Separate ticket-level ratios from event counts so handovers, flags, manual interventions and recoveries are not double-counted.")+
+  const manual=workflowEvent("manual");
+  const handover=workflowEvent("handover");
+  const recovery=workflowEvent("recovery");
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves","Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
     kpiGrid([
       kpi("Automatic allocation","1,064","89.5% of assigned tickets","↗"),
-      kpi("Manual allocation","55","4.6% of assigned tickets","✎"),
-      kpi("Handover events","128","96 unique tickets affected","⇄"),
-      kpi("Recovery events","27","25 unique tickets affected","↺")
+      kpi("Manual assignment events",fmt(manual.events),fmt(manual.uniqueTickets)+" unique tickets affected","✎"),
+      kpi("Handover events",fmt(handover.events),fmt(handover.uniqueTickets)+" unique tickets affected","⇄"),
+      kpi("Recovery events",fmt(recovery.events),fmt(recovery.uniqueTickets)+" unique tickets affected","↺")
     ])+
     '<div class="grid-two">'+
       panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>')+
-      panel("Workflow events","Recorded event volume in the sample",barRows([{label:"Handover",value:128,color:"#ff5c91"},{label:"Flag",value:88,color:"#ffbd68"},{label:"Manual assignment",value:55,color:"#c2a0ff"},{label:"Recovery",value:27,color:"#76e7ce"},{label:"Reassignment",value:42,color:"#f1846f"}]),'')+
+      panel("Workflow events","Recorded event volume in the sample",barRows(WORKFLOW_EVENT_SUMMARY.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
     '</div>'+
-    panel("Metric definitions","What each ratio means",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],[
-      '<tr><td>Handover</td><td>96</td><td>128</td><td>8.6% of assigned tickets</td></tr>',
-      '<tr><td>Flagged</td><td>72</td><td>88</td><td>6.4% of handled tickets</td></tr>',
-      '<tr><td>Manual assignment</td><td>49</td><td>55</td><td>4.6% of assigned tickets</td></tr>',
-      '<tr><td>Recovery</td><td>25</td><td>27</td><td>2.2% of assigned tickets</td></tr>',
-      '<tr><td>Reassignment</td><td>34</td><td>42</td><td>3.0% of assigned tickets</td></tr>'
-    ]))+
-    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket rate and three times in the event count. These measures must stay separate.</div>';
+    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],WORKFLOW_EVENT_SUMMARY.map(event=>'<tr><td>'+event.label+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+fmt(event.events)+'</td><td>'+event.rate+' of assigned / handled tickets</td></tr>')))+
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket measure and three times in the event count. Events can affect the same ticket more than once; never add event counts to distinct ticket totals.</div>';
 }
 function donutChart(items){
   let offset=0;
@@ -792,44 +807,102 @@ function renderFolders(){
   const search=document.getElementById("memberSearch");
   if(search)search.addEventListener("input",e=>{state.memberSearch=e.target.value;const pos=e.target.selectionStart;renderFolders();const el=document.getElementById("memberSearch");el.focus();el.setSelectionRange(pos,pos);});
 }
+function teamProfileRows(){
+  const matrix=allocationMatrix();
+  const folders=scopeFolders();
+  return AGENTS.map(agent=>{
+    const allocation=matrix.find(row=>row.id===agent.id);
+    const firstAssignedByFolder=allocation?allocation.cells.slice():FOLDERS.map(()=>0);
+    const firstAssigned=folders.reduce((sum,folder)=>sum+firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)],0);
+    return {...agent,firstAssignedByFolder,firstAssigned};
+  });
+}
+function teamWorkloadPanel(rows){
+  if(!rows.length)return '<div class="empty-state">No anonymised profiles match the current search.</div>';
+  const ordered=rows.slice().sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
+  const maximum=Math.max(1,...ordered.map(agent=>agent.open));
+  return '<div class="team-workload-list">'+ordered.map(agent=>
+    '<div class="team-workload-row"><div class="team-workload-person">'+memberCell(agent.name,agent.shift+' shift group')+'</div><div class="team-workload-track"><span style="width:'+(agent.open/maximum*100).toFixed(1)+'%"></span></div><strong>'+fmt(agent.open)+'</strong></div>'
+  ).join("")+'</div>'+
+  '<p class="team-panel-note">Open counts are a static current-workload sample. They are not period-scaled, inbox-scoped or adjusted for scheduled hours, eligibility or ticket complexity.</p>';
+}
+function teamEventLedger(){
+  return '<div class="team-event-ledger">'+
+    dataTable(["Event type","Events recorded","Unique tickets affected","Interpretation"],WORKFLOW_EVENT_SUMMARY.map(event=>
+      '<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+event.rate+' · sample ratio only</td></tr>'
+    ))+
+    '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
+  '</div>';
+}
+function teamEvidencePanel(){
+  const items=[
+    ["First response","Not available","Requires a validated first-response timestamp."],
+    ["Elapsed resolution","Not available","Requires received and resolved timestamps."],
+    ["Active handling time","Not available","Requires explicit start, pause, resume and stop events."],
+    ["Reopened rate","Not available","Requires a validated reopen field or event history."],
+    ["Hours-adjusted comparison","Not available","Requires approved scheduled hours, shift coverage and eligibility history."]
+  ];
+  return '<div class="team-evidence-list">'+items.map(item=>
+    '<div><span>'+item[0]+'</span><strong>'+item[1]+'</strong><small>'+item[2]+'</small></div>'
+  ).join("")+'</div>';
+}
 function renderTeam(){
-  const rows=allocationMatrix().filter(r=>!state.search||activeSearch(r.name));
-  const totalsByMember=rows.map(r=>({...r,scopeTotal:scopeFolders().reduce((s,f)=>s+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0)}));
-  const total=totalsByMember.reduce((s,r)=>s+r.scopeTotal,0);
-  const average=total/Math.max(1,totalsByMember.length);
-  pageContent.innerHTML=heading("TEAM PERFORMANCE","Performance with the right context","Review allocation, workload, responsiveness, resolution and workflow activity without reducing performance to ticket volume alone.")+
+  const matrix=allocationMatrix();
+  const profiles=teamProfileRows().filter(agent=>activeSearch(agent.name));
+  const folders=scopeFolders();
+  const firstAssigned=folders.reduce((sum,folder)=>sum+scaled(folder.assigned),0);
+  const openWorkload=AGENTS.reduce((sum,agent)=>sum+agent.open,0);
+  pageContent.innerHTML=heading("TEAM PERFORMANCE INTELLIGENCE","See the work clearly. Compare it fairly.","Separate first assignments, current open workload and workflow events — then add performance measures only when their source evidence exists.",'<button class="btn btn-secondary" data-action="export-team">↓ Export team snapshot</button>')+
+    '<div class="team-demo-strip"><span><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All 14 profiles are anonymised sample records</span><span>Outlook / Excel <b>Not connected</b></span></div>'+
     kpiGrid([
-      kpi("Team members",String(totalsByMember.length),"Sample roster","♧"),
-      kpi("Allocated tickets",fmt(total),"Current reporting scope","↗"),
-      kpi("Average per member",fmt(average),"Allocation volume only","◷"),
-      kpi("Current open work",fmt(totalsByMember.reduce((s,r)=>s+r.open,0)),"Live-work sample snapshot","▤")
+      kpi("Agent profiles in view",String(profiles.length),"Anonymised sample profiles · global search applies","♧"),
+      kpi("First assignments",fmt(firstAssigned),"Distinct tickets first assigned · selected period and inbox","↗"),
+      kpi("Current open workload",fmt(openWorkload),"All-profile sample snapshot · not period or inbox scoped","◷"),
+      kpi("Workflow event types",String(WORKFLOW_EVENT_SUMMARY.length),"Team-level aggregates shown separately below","⇄")
     ])+
-    '<div class="agent-grid">'+totalsByMember.map(a=>'<button class="agent-card agent-card-button" data-agent="'+a.id+'" type="button"><div class="agent-card-head">'+memberCell(a.name,a.shift)+'</div><div class="agent-card-total">'+fmt(a.scopeTotal)+'</div><div class="agent-card-caption">Initial allocations · selected scope</div><div class="agent-progress"><span style="width:'+Math.min(100,a.scopeTotal/Math.max(1,average*1.7)*100)+'%"></span></div><div class="agent-card-foot"><span>'+fmt(a.open)+' open</span><span>'+a.handovers+' handovers</span></div></button>').join("")+'</div>'+
-    (state.selectedAgent?agentDetail(state.selectedAgent):'<div class="empty-state">Select a team member to open their sample performance profile.</div>');
+    '<div class="team-scope-note"><strong>How to read this screen:</strong> the period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level aggregate counts with no event dates or per-member attribution. None of these sample figures is a real colleague performance assessment.</div>'+
+    '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and current open-work sample for each anonymised profile.</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
+    (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
+      '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
+        '<div class="team-profile-head">'+memberCell(agent.name,agent.shift+' shift group')+'<span class="team-profile-chevron">↗</span></div>'+
+        '<div class="team-profile-metrics"><div><strong>'+fmt(agent.open)+'</strong><span>OPEN WORKLOAD</span></div><div><strong>'+fmt(agent.firstAssigned)+'</strong><span>FIRST ASSIGNED</span></div></div>'+
+        '<div class="team-profile-foot">Open profile · sample data only</div>'+
+      '</button>'
+    ).join("")+'</div>':'<div class="empty-state">No team members match the global search.</div>')+
+    (state.selectedAgent?agentDetail(state.selectedAgent):'')+
+    '<div class="grid-two team-overview-grid">'+
+      panel("Current open-work distribution","Current-state sample by member · independent of period and inbox filters",teamWorkloadPanel(profiles),'<span class="subtle-tag">SNAPSHOT</span>')+
+      panel("First assignments by inbox","Distinct tickets first assigned in the selected reporting scope",barRows(folders.map(folder=>({label:folder.name,value:scaled(folder.assigned),color:folder.color}))),'<span class="subtle-tag">FIRST ASSIGNMENTS</span>')+
+    '</div>'+
+    panel("Member allocation matrix","Count and first-assignment share by inbox",'<p class="team-panel-note">Each share uses all first-assigned tickets in that inbox as its denominator. Searching for members filters visible rows but does not change the denominator. Open work remains a separate snapshot.</p>'+shareMatrix(matrix,true,matrix),'<span class="subtle-tag">INITIAL ASSIGNMENT ONLY</span>')+
+    '<div class="grid-two team-secondary-grid">'+
+      panel("Team-level workflow event ledger","Events and unique tickets affected · separate from initial allocation",teamEventLedger(),'<span class="subtle-tag">NOT MEMBER-ATTRIBUTED</span>')+
+      panel("Performance measures awaiting evidence","Timing, quality and capacity measures are deliberately withheld until validated sources exist",teamEvidencePanel(),'<span class="subtle-tag">NOT AVAILABLE</span>')+
+    '</div>';
 }
 function agentDetail(id){
-  const a=AGENTS.find(x=>x.id===id);if(!a)return "";
-  const row=allocationMatrix().find(x=>x.id===id);
-  return '<section class="panel agent-detail"><div class="panel-heading"><div><div class="eyebrow">MEMBER PROFILE</div><h2 class="panel-title">'+a.name+' · '+a.shift+' shift</h2><p class="panel-subtitle">Illustrative metrics only — not an assessment of a real colleague.</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
-    '<div class="metric-row">'+metricPanel("Initial allocations",fmt(row.total),"First-assignment volume","Current filter")+metricPanel("Open tickets",fmt(a.open),"Current outstanding sample","Snapshot")+metricPanel("First response","'+a.response+'m","Average sample response","Illustrative")+metricPanel("Elapsed resolution",duration(a.resolution),"Average sample elapsed","Illustrative")+'</div>'+
-    '<div class="grid-two"><div><h3 class="mini-heading">Allocation by folder</h3>'+barRows(FOLDERS.map((f,i)=>({label:f.name,value:row.cells[i],color:f.color})))+'</div><div><h3 class="mini-heading">Workflow activity</h3>'+barRows([{label:"Handovers",value:a.handovers,color:"#ff5c91"},{label:"Flags",value:a.flags,color:"#ffbd68"}])+'</div></div></section>';
+  const agent=AGENTS.find(item=>item.id===id);
+  if(!agent)return "";
+  const allocation=allocationMatrix().find(row=>row.id===id);
+  if(!allocation)return "";
+  const folders=scopeFolders();
+  const firstAssigned=folders.reduce((sum,folder)=>sum+allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],0);
+  return '<section class="panel team-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED MEMBER BREAKDOWN</div><h2 class="panel-title">'+agent.name+' · '+agent.shift+' shift group</h2><p class="panel-subtitle">Synthetic sample only. This is a workload and allocation breakdown, not an individual performance rating.</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
+    '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+fmt(firstAssigned)+'</strong></div><div><span>Current open workload</span><strong>'+fmt(agent.open)+'</strong></div><div><span>Shift group</span><strong>'+agent.shift+'</strong><small>Indicative roster label; scheduled hours are not verified.</small></div></div>'+
+    '<div class="grid-two"><div><h3 class="mini-heading">First assignments by inbox</h3>'+barRows(folders.map(folder=>({label:folder.name,value:allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],color:folder.color})))+'</div><div class="team-private-state"><strong>Individual workflow events · Not available</strong><p>Handover, reassignment, recovery and flag events are not attributed to individual profiles in this sample. The aggregate event ledger is shown separately and must not be distributed across members.</p></div></div>'+
+    '</section>';
 }
 function duration(minutes){return Math.floor(minutes/60)+"h "+String(minutes%60).padStart(2,"0")+"m";}
 function renderMy(){
-  const a=AGENTS[3],r=allocationMatrix().find(x=>x.id===a.id),sum=scopeFolders().reduce((s,f)=>s+r.cells[FOLDERS.findIndex(x=>x.id===f.id)],0);
-  pageContent.innerHTML=heading("PERSONAL WORKSPACE","Your performance overview","A private agent experience. This prototype uses a placeholder identity; personal access will be enforced by server-side permissions.")+
-    '<div class="personal-banner"><div class="personal-avatar">A04</div><div><span class="eyebrow">SAMPLE PROFILE</span><h2>Agent 04</h2><p>Late shift · 10:00–20:00 · Demonstration identity</p></div><span class="status-pill good">Sample profile</span></div>'+
-    kpiGrid([
-      kpi("Tickets initially assigned",fmt(sum),"Selected reporting scope","↗"),
-      kpi("Open tickets",fmt(a.open),"Current workload snapshot","◷"),
-      kpi("First response","'+a.response+'m","Average sample time","⌁"),
-      kpi("Elapsed resolution",duration(a.resolution),"Average sample time","✓")
-    ])+
-    '<div class="grid-two">'+
-      panel("Your allocation mix","Initial allocation count by folder",barRows(FOLDERS.map((f,i)=>({label:f.name,value:r.cells[i],color:f.color}))),"")+
-      panel("Your workflow activity","Events recorded in the sample period",barRows([{label:"Handovers",value:a.handovers,color:"#ff5c91"},{label:"Flags",value:a.flags,color:"#ffbd68"}]),"")+
-    '</div>'+
-    panel("Personal performance guidance","What a future personal profile will show",'<div class="feature-list"><div><strong>Resolution quality</strong><span>Elapsed time, active handling time and reopen rates.</span></div><div><strong>Workload context</strong><span>Open tickets, folder mix, scheduled hours and shift comparisons.</span></div><div><strong>Workflow history</strong><span>Your handovers, flags, manual allocations and completed work.</span></div><div><strong>Targets</strong><span>Clear progress against agreed team service targets.</span></div></div>');
+  pageContent.innerHTML=heading("PRIVATE PERFORMANCE","Your personal view is not enabled yet","Individual reporting will appear only after secure sign-in and server-enforced access permissions are in place.")+
+    '<div class="team-private-state my-private-state"><span class="eyebrow">ACCESS NOT CONFIGURED</span><h2>Personal records are protected by design.</h2><p>This public demonstration does not identify the signed-in agent, expose a sample colleague profile or infer whose tickets belong to you.</p><strong>Authentication and individual permissions · Not configured</strong></div>'+
+    panel("Personal access readiness","The private workspace remains unavailable until every control is verified",'<div class="health-list">'+
+      healthRow("Authentication","Not configured","warning","No user identity or secure session is connected")+
+      healthRow("Agent-to-record permissions","Not configured","warning","No server-side ownership checks are available")+
+      healthRow("Personal event history","Not connected","warning","No individual ticket or event records are available")+
+      healthRow("Approved performance measures","Not available","neutral","No validated response, resolution, handling-time or quality feed exists")+
+    '</div>')+
+    '<div class="prototype-warning"><strong>Privacy safeguard.</strong> This page will show only the authenticated agent’s own records after server-side authorisation is implemented. Hiding another colleague’s data in the browser is not sufficient protection.</div>';
 }
 function renderRoster(){
   pageContent.innerHTML=heading("WORKFORCE MANAGEMENT","Roster & coverage","Review shift coverage, scheduled hours, availability and the agent eligibility structure.",'<button class="btn btn-secondary" data-action="roster-preview">＋ Preview roster change</button>')+
@@ -979,6 +1052,27 @@ function exportFolders(){
   const rows=allocationMatrix(),folders=scopeFolders();
   csvDownload("dispatcher-sample-folder-share.csv",[["Member",...folders.flatMap(f=>[f.name+" assigned",f.name+" share"]), "Total"],...rows.map(r=>[r.name,...folders.flatMap(f=>{const fi=FOLDERS.findIndex(x=>x.id===f.id);const total=rows.reduce((s,x)=>s+x.cells[fi],0);return [r.cells[fi],(r.cells[fi]/Math.max(1,total)*100).toFixed(1)+"%"]; }),r.total])]);
 }
+function exportTeam(){
+  const profiles=teamProfileRows().filter(agent=>activeSearch(agent.name));
+  const folders=scopeFolders();
+  const rows=[
+    ["TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
+    ["Reporting period",PERIODS[state.period].label],
+    ["Inbox",scopeName()],
+    ["All records are synthetic; event counts are team-level aggregates and are not attributed to members."],
+    [],
+    ["Member","Shift group (illustrative)",...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current open-work snapshot"],
+    ...profiles.map(agent=>[
+      agent.name,agent.shift,...folders.map(folder=>agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]),
+      agent.firstAssigned,agent.open
+    ]),
+    [],
+    ["TEAM-LEVEL WORKFLOW EVENTS — NOT MEMBER-ATTRIBUTED OR TIME-SCOPED"],
+    ["Event type","Events recorded","Unique tickets affected","Sample rate"],
+    ...WORKFLOW_EVENT_SUMMARY.map(event=>[event.label,event.events,event.uniqueTickets,event.rate])
+  ];
+  csvDownload("dispatcher-sample-team-performance.csv",rows);
+}
 function exportAudit(){
   csvDownload("dispatcher-sample-audit.csv",[["Time","Event","Actor","Inbox","Type"],...AUDIT_EVENTS]);
 }
@@ -1013,6 +1107,7 @@ function handleAction(action){
   if(action==="export-tickets"){exportTickets();return;}
   if(action==="export-brands"){exportBrands();return;}
   if(action==="export-folders"){exportFolders();return;}
+  if(action==="export-team"){exportTeam();return;}
   if(action==="export-audit"){exportAudit();return;}
   if(action==="export-summary"){exportSummary();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
