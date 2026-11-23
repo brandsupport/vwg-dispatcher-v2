@@ -992,7 +992,7 @@ function rosterCoveragePanel(){
     }).join("")+
   '</div>'+
   '<div class="roster-coverage-legend">'+segments.map(segment=>
-    '<div><span class="roster-coverage-dot '+(segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":"late")+'"></span><strong>'+segment.label+'</strong><span>'+rosterClockLabel(segment.start)+'–'+rosterClockLabel(segment.end)+'</span><b>'+segment.headcount+' profiles</b></div>'
+    '<div><span class="roster-coverage-dot '+(segment.headcount===0?"gap":segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":segment.late>0?"late":"other")+'"></span><strong>'+segment.label+'</strong><span>'+rosterClockLabel(segment.start)+'–'+rosterClockLabel(segment.end)+'</span><b>'+segment.headcount+' profiles</b></div>'
   ).join("")+'</div>'+
   '<p class="roster-panel-note">Headcount is derived from placeholder shift windows only. '+breaks+' break snapshots have no timestamp, so they are not deducted from coverage. Empty intervals are shown as gaps, but no staffing target exists to assess sufficiency.</p>';
 }
