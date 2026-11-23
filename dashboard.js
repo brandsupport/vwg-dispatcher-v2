@@ -1,5 +1,6 @@
 /* VWG Dispatch Intelligence — complete UI foundation.
  * All records are synthetic. This prototype has no live data or operational integration.
+ * Dispatch Configuration 2.0 remains a local planning surface with no operational write path.
  */
 const FOLDERS = [
   { id: "agency", name: "Agency Detags", short: "Agency", received: 230, assigned: 218, resolved: 165, open: 50, color: "#ff5c91" },
