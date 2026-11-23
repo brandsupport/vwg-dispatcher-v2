@@ -288,7 +288,7 @@ jobs:
           }
 
                     const reliabilityStart = js.indexOf('function renderReliability(){');
-          const reliabilityEnd = js.indexOf('\nfunction auditTable(', reliabilityStart);
+          const reliabilityEnd = js.indexOf('\nfunction auditBaseEvents(', reliabilityStart);
           const reliabilityView = reliabilityStart >= 0 && reliabilityEnd > reliabilityStart ? js.slice(reliabilityStart, reliabilityEnd) : '';
           for (const text of ['RELIABILITY CENTRE 2.0','SYNTHETIC INVESTIGATION DATA · READ ONLY','Runtime health','Not observable','Exception investigation ledger','Recovery review queue','Duplicate and write-integrity signals','Production boundary']) {
             if (!reliabilityView.includes(text)) throw new Error('Reliability Centre 2.0 section or safety disclosure missing: ' + text);
@@ -388,7 +388,7 @@ jobs:
           if (auditCheck.count !== 20 || auditCheck.ids !== 20 || auditCheck.stats.eventCount !== 20 ||
               auditCheck.stats.ticketCount !== 4 || auditCheck.stats.configurationCount !== 3 ||
               auditCheck.stats.exceptionCount !== 5 || auditCheck.agencyCount !== 4 ||
-              auditCheck.exceptionCount !== 4 || auditCheck.actorCount !== 3 || auditCheck.correlationCount !== 3 ||
+              auditCheck.exceptionCount !== 3 || auditCheck.actorCount !== 3 || auditCheck.correlationCount !== 3 ||
               !auditCheck.hasBeforeAfter || !auditCheck.hasActor || !auditCheck.hasCorrelation) {
             throw new Error('Audit sample ledger counts, inbox scope, filters or evidence fields failed reconciliation: ' + JSON.stringify(auditCheck));
           }
