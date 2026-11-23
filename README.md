@@ -29,13 +29,13 @@ The complete UI foundation now includes fourteen navigable areas:
 - Team Performance 2.0 with anonymised member profiles, separate open-work snapshots, first-allocation shares by inbox and a team-level workflow event ledger.
 - Private-performance screen layout (placeholder identity in the prototype).
 - Roster & Coverage 2.0 with a filterable anonymised directory, derived shift-overlap map, four-inbox eligibility matrix and coverage-readiness guardrails.
-- Dispatch configuration.
+- Dispatch Configuration 2.0 with a proposed cross-inbox policy matrix, local open-work scenario preview, change-governance gates and configuration-proposal CSV export. It is design-only and cannot change live dispatch settings.
 - Reliability centre.
 - Audit history.
 - Reports and CSV exports.
 - Administration and environment overview.
 
-Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal, CSV exports work with synthetic data, and operational preview buttons only change local prototype state or display an explanatory message.
+Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal and CSV exports work with synthetic data. The Dispatch Configuration scenario preview recalculates a local illustrative priority order only; it does not persist settings, create assignments or contact an operational service.
 
 All member names remain anonymised (Agent 01–Agent 14). Do not replace them with real team names until authentication, role permissions and the live data connection are ready.
 
@@ -74,6 +74,23 @@ Response time, elapsed resolution, active handling time, reopen rate and hours-a
 Roster & Coverage 2.0 uses explicit sample shift windows to derive overlap intervals. The current demo uses anonymised placeholder windows only; it does not represent an approved rota or verified scheduled hours. The sample eligibility policy marks each profile as eligible for all four inboxes, but no live eligibility source is connected.
 
 Availability values are untimestamped snapshots. They must not be subtracted from shift coverage or treated as live break/absence coverage. Minimum staffing targets, fortnightly rotations and coverage sufficiency remain unconfigured until approved operational rules and source data are loaded. Egypt-local shift schedules and UK mailbox timestamps must remain separate.
+
+### Dispatch configuration design
+
+Dispatch Configuration 2.0 is a **planning workspace, not an active rules engine**. All proposed controls are marked Not configured until a private backend, approved source data and server-side permissions exist.
+
+The proposed policy is organised into six areas:
+
+- **Global allocation model:** one shared fairness view across Agency Detags, Detags, Transfers and Unadopts, rather than treating each inbox as an isolated pool.
+- **Workload weighting:** current open workload may influence candidate priority. It remains separate from historical first-assignment counts and must use a timestamped current-state snapshot.
+- **Shift and availability eligibility:** use the approved Egypt-local rota plus timestamped availability events. Do not subtract untimestamped availability snapshots from coverage.
+- **Four-inbox routing:** validate a versioned, manager-owned eligibility allow-list before scoring an agent for a specific inbox.
+- **Recovery behaviour:** restore the original owner where that owner remains valid; otherwise hold the item for review rather than silently assigning a new owner.
+- **Assignment safeguards:** enforce idempotency, atomic claim or version checks, controlled retries, verified write outcomes and append-only audit records.
+
+The local scenario preview lets a reader choose an inbox and vary the influence of the synthetic global open-work snapshot. Its relative priority scores are illustrative only, are not a live routing forecast, and never create or change an assignment. The exported CSV is a design proposal with current readiness gaps, not an active configuration file.
+
+The proposed change lifecycle is **Draft → Validate → Approve → Apply → Audit**. In the public prototype, only local drafting and scenario exploration are available. Validation and approval are blocked until trusted roster and availability sources plus authentication exist; Apply is blocked because there is no backend write path; persistent Audit is not configured. A button click or local calculation must never be reported as a successful operational change.
 
 ## Planned application areas
 
