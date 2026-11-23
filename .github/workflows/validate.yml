@@ -387,7 +387,7 @@ jobs:
           );
           if (auditCheck.count !== 20 || auditCheck.ids !== 20 || auditCheck.stats.eventCount !== 20 ||
               auditCheck.stats.ticketCount !== 4 || auditCheck.stats.configurationCount !== 3 ||
-              auditCheck.stats.exceptionCount !== 4 || auditCheck.agencyCount !== 4 ||
+              auditCheck.stats.exceptionCount !== 5 || auditCheck.agencyCount !== 4 ||
               auditCheck.exceptionCount !== 4 || auditCheck.actorCount !== 3 || auditCheck.correlationCount !== 3 ||
               !auditCheck.hasBeforeAfter || !auditCheck.hasActor || !auditCheck.hasCorrelation) {
             throw new Error('Audit sample ledger counts, inbox scope, filters or evidence fields failed reconciliation: ' + JSON.stringify(auditCheck));
@@ -395,7 +395,7 @@ jobs:
           if (!readme.includes('### Audit History 2.0') ||
               !readme.includes('The screen deliberately does not show an audit-completeness percentage') ||
               !readme.includes('cryptographic integrity chain') ||
-              !readme.includes('Corrective events')) {
+              !readme.includes('Corrections must be appended')) {
             throw new Error('Audit History governance and data-integrity limitations are missing from README.');
           }
 
