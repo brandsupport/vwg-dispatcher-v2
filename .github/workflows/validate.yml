@@ -128,7 +128,7 @@ jobs:
             if (!css.includes(text)) throw new Error('Ticket Analytics styling missing: ' + text);
           }
           const ticketAgeingStart = js.indexOf('function ticketAgeingSummary(');
-          const ticketAgeingEnd = js.indexOf('\\nfunction ', ticketAgeingStart + 10);
+          const ticketAgeingEnd = js.indexOf('\nfunction ', ticketAgeingStart + 10);
           const ticketAgeingFunction = ticketAgeingStart >= 0 && ticketAgeingEnd > ticketAgeingStart ? js.slice(ticketAgeingStart, ticketAgeingEnd) : '';
           if (!ticketAgeingFunction) throw new Error('Ticket age-band calculation is missing.');
           const ticketAgeingResult = vm.runInNewContext(ageFunction + '\\n' + ticketAgeingFunction + '; ticketAgeingSummary([{status:"Assigned",age:"30m"},{status:"Waiting",age:"2h"},{status:"Overdue",age:"5h"},{status:"Unassigned",age:"8h 15m"},{status:"Resolved",age:"9h"}])');
@@ -136,7 +136,7 @@ jobs:
             throw new Error('Ticket ageing bands did not correctly classify the unresolved sample records.');
           }
           const ticketPriorityStart = js.indexOf('function ticketPriority(');
-          const ticketPriorityEnd = js.indexOf('\\nfunction ', ticketPriorityStart + 10);
+          const ticketPriorityEnd = js.indexOf('\nfunction ', ticketPriorityStart + 10);
           const ticketPriorityFunction = ticketPriorityStart >= 0 && ticketPriorityEnd > ticketPriorityStart ? js.slice(ticketPriorityStart, ticketPriorityEnd) : '';
           const priorityResult = vm.runInNewContext(ticketPriorityFunction + '; [ticketPriority({status:"Overdue"}),ticketPriority({status:"Waiting"}),ticketPriority({status:"Assigned"})]');
           if (priorityResult.join(",") !== "High,Medium,Normal") throw new Error('Ticket priority mapping is incorrect.');
