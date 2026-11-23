@@ -236,5 +236,56 @@ jobs:
             if (!readme.toLowerCase().includes(text.toLowerCase())) throw new Error('Roster data limitation missing from README: ' + text);
           }
 
-          console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance and Roster & Coverage 2.0 integrity checks.');
+          const configStart = js.indexOf('function renderRules(){');
+          const configEnd = js.indexOf('\nfunction configCard(', configStart);
+          const configView = configStart >= 0 && configEnd > configStart ? js.slice(configStart, configEnd) : '';
+          for (const text of ['DISPATCH CONFIGURATION 2.0','Proposed dispatch policy','Global allocation model','Workload weighting','Shift and availability eligibility','Four-inbox routing matrix','Recovery behaviour','Assignment safeguards','Safe scenario preview','Four-inbox eligibility baseline','Change governance and release gates','Production readiness checklist','Operational boundary','Not configured','Not connected','Blocked · NO BACKEND']) {
+            if (!configView.includes(text)) throw new Error('Dispatch Configuration 2.0 section or safety disclosure missing: ' + text);
+          }
+          if (configView.includes('"Enabled"') || configView.includes('data-action="config-preview"')) {
+            throw new Error('Dispatch Configuration must not present a placeholder rule as enabled or offer an inert per-card edit control.');
+          }
+          for (const text of ['.config-demo-strip','.config-status-grid','.config-rule-grid','.config-preview-workspace','.config-lifecycle','.config-gate-list','.config-final-note']) {
+            if (!css.includes(text)) throw new Error('Dispatch Configuration styling missing: ' + text);
+          }
+          for (const text of ['function configurationPreviewRows(','function configurationPreviewResults(','function exportConfiguration(']) {
+            if (!js.includes(text)) throw new Error('Dispatch Configuration helper missing: ' + text);
+          }
+          if (!js.includes('data-config-scenario="folder"') || !js.includes('data-config-scenario="weight"') ||
+              !js.includes('if(action==="reset-config-preview")') || !js.includes('if(action==="export-config"){exportConfiguration();return;}') ||
+              !js.includes('dispatcher-sample-dispatch-configuration-proposal.csv')) {
+            throw new Error('Dispatch Configuration scenario controls or proposal export are not wired.');
+          }
+          const previewStart = js.indexOf('function configurationPreviewRows(');
+          const previewEnd = js.indexOf('\nfunction configurationPreviewResults(', previewStart);
+          const previewFunction = previewStart >= 0 && previewEnd > previewStart ? js.slice(previewStart, previewEnd) : '';
+          if (!previewFunction) throw new Error('Configuration scenario score calculation is missing.');
+          const previewCheck = vm.runInNewContext(
+            'const FOLDERS=[{id:"agency"},{id:"detags"}]; const AGENTS=[' +
+            '{id:"a",name:"Agent A",shift:"Early",open:2,eligibleFolders:["agency"]},' +
+            '{id:"b",name:"Agent B",shift:"Late",open:8,eligibleFolders:["agency","detags"]},' +
+            '{id:"c",name:"Agent C",shift:"Early",open:5,eligibleFolders:["agency"]}' +
+            ']; ' + previewFunction +
+            '; [configurationPreviewRows("agency",0),configurationPreviewRows("agency",100),configurationPreviewRows("detags",100)]'
+          );
+          const equalPriority = previewCheck[0];
+          const weightedPriority = previewCheck[1];
+          const folderScoped = previewCheck[2];
+          if (equalPriority.length !== 3 || new Set(equalPriority.map(item=>item.score)).size !== 1) {
+            throw new Error('Zero open-work influence must give eligible sample agents equal priority.');
+          }
+          if (weightedPriority.map(item=>item.id).join(",") !== "a,c,b" ||
+              weightedPriority[0].score !== 100 || weightedPriority[2].score !== 0) {
+            throw new Error('Maximum open-work influence must order eligible agents from lowest to highest sample open workload.');
+          }
+          if (folderScoped.length !== 1 || folderScoped[0].id !== "b") {
+            throw new Error('Scenario preview must respect the selected inbox eligibility list.');
+          }
+          if (!readme.includes('### Dispatch configuration design') ||
+              !readme.includes('The local scenario preview') ||
+              !readme.includes('Draft → Validate → Approve → Apply → Audit')) {
+            throw new Error('Dispatch Configuration governance and prototype limits are missing from the README.');
+          }
+
+                    console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens, including Team Performance, Roster & Coverage 2.0 and Dispatch Configuration 2.0 integrity checks.');
           NODE
