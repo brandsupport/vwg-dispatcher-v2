@@ -82,9 +82,13 @@ jobs:
           for (const helper of ['overviewTrendData','overviewRiskSummary','overviewInboxSnapshot','overviewTeamPanel','overviewAllocationSummary','overviewIntegrationPanel']) {
             if (!js.includes('function ' + helper + '(')) throw new Error('Missing management overview component: ' + helper);
           }
-          for (const text of ['MANAGEMENT COMMAND CENTRE','DEMONSTRATION DATA · READ ONLY','REOPENED TICKETS','Not connected','Not configured','Initial allocation distribution','Source & platform readiness']) {
+          for (const text of ['MANAGEMENT COMMAND CENTRE','DEMONSTRATION DATA · READ ONLY','REOPENED TICKETS','Not connected','Initial allocation distribution','Source & platform readiness']) {
             if (!overview.includes(text)) throw new Error('Management overview disclosure or section missing: ' + text);
           }
+          const readinessStart = js.indexOf('function overviewIntegrationPanel(');
+          const readinessEnd = js.indexOf('\\nfunction renderOverview(', readinessStart);
+          const readiness = readinessStart >= 0 && readinessEnd > readinessStart ? js.slice(readinessStart, readinessEnd) : '';
+          if (!readiness.includes('Not configured') || !readiness.includes('Not connected')) throw new Error('Source readiness must disclose disconnected production integrations.');
           for (const stale of ['+8.4%','+5.2%','+11.6%','42 aged over 24h','Last heartbeat 10:42:18','Dispatcher engine","Running']) {
             if (overview.includes(stale)) throw new Error('Stale or unsupported Overview claim remains: ' + stale);
           }

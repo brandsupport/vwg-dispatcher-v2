@@ -188,7 +188,7 @@ function statusPill(status){
   const key=String(status).toLowerCase();
   let type="neutral";
   if(["assigned","available","resolved","automatic","healthy","active","in progress"].includes(key))type="good";
-  if(["flagged","waiting","break","paused","pending","reassigned"].includes(key))type="warning";
+  if(["flagged","waiting","break","paused","pending","reassigned","not connected","not configured"].includes(key))type="warning";
   if(["overdue","unassigned","exception","failed","critical"].includes(key))type="danger";
   return '<span class="status-pill '+type+'">'+esc(status)+'</span>';
 }
@@ -297,7 +297,7 @@ function overviewAllocationSummary(rows){
     return {name:folder.name,count:rows.reduce((sum,row)=>sum+row.cells[fi],0)};
   });
   const total=totalsByFolder.reduce((sum,item)=>sum+item.count,0);
-  const values=rows.map(row=>row.total).filter(Number.isFinite);
+  const values=rows.map(row=>folders.reduce((sum,folder)=>sum+row.cells[FOLDERS.findIndex(item=>item.id===folder.id)],0)).filter(Number.isFinite);
   const low=values.length?Math.min(...values):0;
   const high=values.length?Math.max(...values):0;
   return '<div class="overview-allocation-summary">'+
