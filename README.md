@@ -92,6 +92,22 @@ The local scenario preview lets a reader choose an inbox and vary the influence 
 
 The proposed change lifecycle is **Draft → Validate → Approve → Apply → Audit**. In the public prototype, only local drafting and scenario exploration are available. Validation and approval are blocked until trusted roster and availability sources plus authentication exist; Apply is blocked because there is no backend write path; persistent Audit is not configured. A button click or local calculation must never be reported as a successful operational change.
 
+### Reliability Centre 2.0
+
+Reliability Centre 2.0 is a **synthetic exception-investigation workspace**, not a live monitoring console. Its ten anonymised example records demonstrate the structure of write failures, unknown write outcomes, transient retries, recovery holds, duplicate deliveries, concurrency conflicts and stale-write guards.
+
+The screen derives all counts from the sample incident records in the selected inbox scope. A case reference is counted once; retry attempts are retained as fields within that case and do not inflate the number of incidents. It distinguishes:
+- A **rejected write**, where the sample response indicates that the write was refused.
+- An **unknown write outcome**, where a timeout leaves it unclear whether the underlying operation committed. This must be reconciled against canonical mailbox and tracker state before any repeat attempt.
+- A **duplicate delivery signal**, which may be marked suppressed in a sample record or held for review when a canonical event identity has not been established.
+- A **concurrency or stale-write guard**, which indicates a sample request was blocked before it could overwrite a newer record.
+
+Recovery examples preserve the original owner as the starting point. A production recovery must verify the current mailbox category, tracker row and eligibility before restoring that owner; otherwise it should hold for review. The prototype provides no retry, restore, assign or queue-control action.
+
+The integration-readiness list deliberately reports Outlook event ingestion, the Excel tracker adapter, dispatcher heartbeat, recovery worker and persistent audit storage as Not connected / Not configured. The UI cannot infer service health, live queue depth, actual latency, or successful writes without authenticated telemetry and backend verification.
+
+The CSV export includes only the currently filtered synthetic case records and labels the file as demonstration data. It is an investigation example, not an operational incident export.
+
 ## Planned application areas
 
 1. Overview
