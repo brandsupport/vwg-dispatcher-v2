@@ -108,5 +108,38 @@ jobs:
           }
           if (overview.includes('smallChart([')) throw new Error('Old fixed, unscoped Overview trend remains.');
 
+
+          const ticketStart = js.indexOf('function renderTickets(){');
+          const ticketEnd = js.indexOf('\\nfunction chartPair(', ticketStart);
+          const ticketView = ticketStart >= 0 && ticketEnd > ticketStart ? js.slice(ticketStart, ticketEnd) : '';
+          for (const helper of ['ticketQueueBase','ticketStatusMatches','ticketPriority','ticketFilteredRows','ticketStatusCounts','ticketAgeingSummary','ticketStatusSummary','ticketLifecycleLedger','ticketTelemetryCard']) {
+            if (!js.includes('function ' + helper + '(')) throw new Error('Missing Ticket Analytics component: ' + helper);
+          }
+          for (const text of ['TICKET FLOW INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','REOPENED','Not available','AWAITING EVENT DATA','Ticket explorer','SAMPLE QUEUE ONLY']) {
+            if (!ticketView.includes(text)) throw new Error('Ticket Analytics disclosure or section missing: ' + text);
+          }
+          for (const text of ['data-ticket-search','data-ticket-filter','data-ticket-status','reset-ticket-filters','export-tickets']) {
+            if (!js.includes(text)) throw new Error('Ticket explorer interaction missing: ' + text);
+          }
+          for (const stale of ['12m','28m','3h 42m','2h 18m','46m','SAMPLE PROFILE','Resolution time distribution']) {
+            if (ticketView.includes(stale)) throw new Error('Unsupported fixed Ticket Analytics metric remains: ' + stale);
+          }
+          for (const text of ['.ticket-demo-strip','.ticket-rate-strip','.ticket-analytics-primary','.ticket-ageing-summary','.ticket-telemetry-grid','.ticket-explorer-panel']) {
+            if (!css.includes(text)) throw new Error('Ticket Analytics styling missing: ' + text);
+          }
+          const ticketAgeingStart = js.indexOf('function ticketAgeingSummary(');
+          const ticketAgeingEnd = js.indexOf('\\nfunction ', ticketAgeingStart + 10);
+          const ticketAgeingFunction = ticketAgeingStart >= 0 && ticketAgeingEnd > ticketAgeingStart ? js.slice(ticketAgeingStart, ticketAgeingEnd) : '';
+          if (!ticketAgeingFunction) throw new Error('Ticket age-band calculation is missing.');
+          const ticketAgeingResult = vm.runInNewContext(ageFunction + '\\n' + ticketAgeingFunction + '; ticketAgeingSummary([{status:"Assigned",age:"30m"},{status:"Waiting",age:"2h"},{status:"Overdue",age:"5h"},{status:"Unassigned",age:"8h 15m"},{status:"Resolved",age:"9h"}])');
+          if (ticketAgeingResult.under1h !== 1 || ticketAgeingResult.oneToFour !== 1 || ticketAgeingResult.fourToEight !== 1 || ticketAgeingResult.overEight !== 1 || ticketAgeingResult.total !== 4) {
+            throw new Error('Ticket ageing bands did not correctly classify the unresolved sample records.');
+          }
+          const ticketPriorityStart = js.indexOf('function ticketPriority(');
+          const ticketPriorityEnd = js.indexOf('\\nfunction ', ticketPriorityStart + 10);
+          const ticketPriorityFunction = ticketPriorityStart >= 0 && ticketPriorityEnd > ticketPriorityStart ? js.slice(ticketPriorityStart, ticketPriorityEnd) : '';
+          const priorityResult = vm.runInNewContext(ticketPriorityFunction + '; [ticketPriority({status:"Overdue"}),ticketPriority({status:"Waiting"}),ticketPriority({status:"Assigned"})]');
+          if (priorityResult.join(",") !== "High,Medium,Normal") throw new Error('Ticket priority mapping is incorrect.');
+
           console.log('Dispatcher 2.0 UI foundation validation passed: ' + views.length + ' screens.');
           NODE

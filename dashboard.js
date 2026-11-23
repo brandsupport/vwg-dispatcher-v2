@@ -82,7 +82,8 @@ const AUDIT_EVENTS = [
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   selectedAgent:null, paused:false, pausedFolders:{}, modal:null,
-  liveStatus:"all", liveOwner:"all", liveBrand:"all", liveSort:"oldest", liveSearch:""
+  liveStatus:"all", liveOwner:"all", liveBrand:"all", liveSort:"oldest", liveSearch:"",
+  ticketStatus:"all", ticketBrand:"all", ticketOwner:"all", ticketSort:"oldest", ticketSearch:""
 };
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
@@ -531,28 +532,184 @@ function renderLive(){
       '</div>','<button class="panel-action" data-go="reliability">Open reliability centre ↗</button>')
     '</div>';
 }
+function ticketQueueBase(){
+  const folderName=FOLDERS.find(folder=>folder.id===state.folder)?.name;
+  return TICKETS.filter(ticket=>
+    (!folderName||ticket.folder===folderName) &&
+    activeSearch([ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.status].join(" "))
+  );
+}
+function ticketStatusMatches(ticket,filter){
+  if(filter==="all")return true;
+  if(filter==="unassigned")return ticket.status==="Unassigned";
+  if(filter==="active")return ["Assigned","In progress","Reassigned"].includes(ticket.status);
+  if(filter==="waiting")return ticket.status==="Waiting";
+  if(filter==="attention")return ["Flagged","Overdue","Unassigned"].includes(ticket.status)||liveSla(ticket).tone==="warning";
+  if(filter==="resolved")return ["Resolved","Closed"].includes(ticket.status);
+  return true;
+}
+function ticketPriority(ticket){
+  if(["Flagged","Overdue","Unassigned"].includes(ticket.status))return "High";
+  if(ticket.status==="Waiting")return "Medium";
+  return "Normal";
+}
+function ticketFilteredRows(){
+  const query=String(state.ticketSearch||"").trim().toLowerCase();
+  return ticketQueueBase().filter(ticket=>
+    ticketStatusMatches(ticket,state.ticketStatus) &&
+    (state.ticketBrand==="all"||ticket.brand===state.ticketBrand) &&
+    (state.ticketOwner==="all"||ticket.member===state.ticketOwner) &&
+    (!query||[ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.status,ticket.last].join(" ").toLowerCase().includes(query))
+  ).sort((a,b)=>{
+    if(state.ticketSort==="newest")return liveAgeMinutes(a)-liveAgeMinutes(b);
+    if(state.ticketSort==="priority"){
+      const rank={High:0,Medium:1,Normal:2};
+      return rank[ticketPriority(a)]-rank[ticketPriority(b)]||liveAgeMinutes(b)-liveAgeMinutes(a);
+    }
+    return liveAgeMinutes(b)-liveAgeMinutes(a);
+  });
+}
+function ticketStatusCounts(base){
+  const filters=["all","unassigned","active","waiting","attention","resolved"];
+  return Object.fromEntries(filters.map(filter=>[filter,base.filter(ticket=>ticketStatusMatches(ticket,filter)).length]));
+}
+function ticketAgeingSummary(tickets){
+  const open=tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status));
+  const summary={under1h:0,oneToFour:0,fourToEight:0,overEight:0,total:open.length};
+  open.forEach(ticket=>{
+    const minutes=liveAgeMinutes(ticket);
+    if(minutes<60)summary.under1h++;
+    else if(minutes<240)summary.oneToFour++;
+    else if(minutes<480)summary.fourToEight++;
+    else summary.overEight++;
+  });
+  return summary;
+}
+function ticketStatusSummary(tickets){
+  return [
+    {key:"Unassigned",label:"Unassigned",value:tickets.filter(ticket=>ticket.status==="Unassigned").length,color:"#ff174f"},
+    {key:"Active",label:"Active",value:tickets.filter(ticket=>["Assigned","In progress","Reassigned"].includes(ticket.status)).length,color:"#ff5c91"},
+    {key:"Waiting",label:"Waiting",value:tickets.filter(ticket=>ticket.status==="Waiting").length,color:"#ffbd68"},
+    {key:"Flagged / overdue",label:"Flagged / overdue",value:tickets.filter(ticket=>["Flagged","Overdue"].includes(ticket.status)).length,color:"#c2a0ff"},
+    {key:"Resolved",label:"Resolved",value:tickets.filter(ticket=>["Resolved","Closed"].includes(ticket.status)).length,color:"#76e7ce"}
+  ].map(row=>({...row,share:tickets.length?row.value/tickets.length*100:0}));
+}
+function ticketRows(){
+  return ticketFilteredRows().map(ticket=>{
+    const sla=liveSla(ticket);
+    return '<tr>'+
+      '<td><button class="link-button ticket-ref" type="button" data-ticket="'+esc(ticket.ref)+'">'+esc(ticket.ref)+'</button><span class="ticket-subject">'+esc(ticket.subject)+'</span></td>'+
+      '<td>'+esc(ticket.brand)+'</td>'+
+      '<td>'+esc(ticket.folder)+'</td>'+
+      '<td>'+esc(ticket.member)+'</td>'+
+      '<td><strong class="ticket-age">'+esc(ticket.age)+'</strong></td>'+
+      '<td><span class="ticket-priority '+ticketPriority(ticket).toLowerCase()+'">'+ticketPriority(ticket)+'</span></td>'+
+      '<td>'+statusPill(ticket.status)+'</td>'+
+      '<td><span class="sla-pill '+sla.tone+'">'+esc(sla.label)+'</span></td>'+
+      '<td>'+esc(ticket.last)+'</td>'+
+    '</tr>';
+  });
+}
+function ticketStatusTabs(base){
+  const counts=ticketStatusCounts(base);
+  const labels=[["all","All records"],["unassigned","Unassigned"],["active","Active"],["waiting","Waiting"],["attention","Needs attention"],["resolved","Resolved"]];
+  return '<div class="ticket-status-tabs" role="group" aria-label="Filter ticket status">'+labels.map(([key,label])=>
+    '<button type="button" class="live-status-tab '+(state.ticketStatus===key?"active":"")+'" data-ticket-status="'+key+'" aria-pressed="'+(state.ticketStatus===key)+'">'+label+' <b>'+counts[key]+'</b></button>'
+  ).join("")+'</div>';
+}
+function ticketAgeingPanel(summary){
+  const rows=[
+    {label:"Under 1 hour",value:summary.under1h,color:"#76e7ce"},
+    {label:"1–4 hours",value:summary.oneToFour,color:"#ffbd68"},
+    {label:"4–8 hours",value:summary.fourToEight,color:"#ff5c91"},
+    {label:"Over 8 hours",value:summary.overEight,color:"#c2a0ff"}
+  ];
+  return '<div class="ticket-ageing-summary"><strong>'+summary.total+'</strong><span>unresolved records in the visible sample queue</span></div>'+
+    barRows(rows)+
+    '<p class="ticket-panel-foot">Bands are calculated from the sample age strings. They are not a contractual SLA measure and are not extrapolated to the aggregate ticket totals.</p>';
+}
+function ticketLifecycleLedger(t){
+  const rate=t.received?t.assigned/t.received*100:0;
+  const resolution=t.received?t.resolved/t.received*100:0;
+  const rows=[
+    ["Received",t.received,"Distinct tickets in selected aggregate scope","100%"],
+    ["First assigned",t.assigned,"Distinct tickets with an initial allocation",rate.toFixed(1)+"% of received"],
+    ["Resolved",t.resolved,"Recorded completed tickets in sample aggregates",resolution.toFixed(1)+"% of received"],
+    ["Outstanding",t.open,"Current open-work snapshot; not a remaining cohort count","Snapshot"],
+    ["Not initially assigned",t.unassigned,"Received less initially assigned aggregate","Derived gap"]
+  ];
+  return '<div class="ticket-ledger">'+rows.map((row,index)=>
+    '<div class="ticket-ledger-row '+(index===0?"primary":"")+'"><div><strong>'+row[0]+'</strong><small>'+row[2]+'</small></div><b>'+fmt(row[1])+'</b><span>'+row[3]+'</span></div>'
+  ).join("")+'</div>'+
+  '<p class="ticket-panel-foot">The open-work snapshot and historical flow totals are separate measures. Do not subtract the snapshot from received volume to infer cohort closure.</p>';
+}
+function ticketTelemetryCard(title,reason){
+  return '<article class="metric-panel ticket-metric-unavailable"><span>'+title+'</span><strong>Not available</strong><p>'+reason+'</p><small>Requires validated event-level timestamps</small></article>';
+}
 function renderTickets(){
   const t=totals();
+  const base=ticketQueueBase();
   const rows=ticketRows();
-  pageContent.innerHTML=heading("TICKET ANALYTICS","Ticket flow, end to end","Understand what arrived, what was allocated, what was resolved and where work is accumulating.",'<button class="btn btn-secondary" data-action="export-tickets">↓ Export tickets</button>')+
+  const brands=brandRows();
+  const ageing=ticketAgeingSummary(base);
+  const statuses=ticketStatusSummary(base);
+  const owners=[...new Set(TICKETS.map(ticket=>ticket.member))].sort();
+  const brandOptions=[...new Set(TICKETS.map(ticket=>ticket.brand))].sort();
+  const trend=overviewTrendData(t.received,t.resolved);
+  pageContent.innerHTML=
+    heading("TICKET FLOW INTELLIGENCE","Investigate ticket movement, not just totals.","Explore aggregate ticket flow, analyse the demonstration queue and identify where validated lifecycle evidence is still missing.",'<button class="btn btn-secondary" data-action="export-tickets">↓ Export visible records</button>')+
+    '<div class="ticket-demo-strip"><span><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Aggregate totals are synthetic</span><span>Explorer contains '+base.length+' static sample records in the selected inbox/global search scope</span><span>Outlook / Excel <b>Not connected</b></span></div>'+
     kpiGrid([
-      kpi("Received",fmt(t.received),"Unique tickets in period","▤"),
-      kpi("Initially assigned",fmt(t.assigned),"First allocation events","↗"),
-      kpi("Resolved",fmt(t.resolved),"Unique resolved tickets","✓"),
-      kpi("Still outstanding",fmt(t.open),"Open at snapshot time","◷")
+      kpi("Tickets received",fmt(t.received),"Distinct tickets in the selected reporting scope","▤"),
+      kpi("Initially assigned",fmt(t.assigned),"Distinct tickets with a first allocation","↗"),
+      kpi("Tickets resolved",fmt(t.resolved),"Recorded completed tickets in sample aggregates","✓"),
+      kpi("Outstanding workload",fmt(t.open),"Current aggregate open-work snapshot","◷",null,"warning")
     ])+
-    '<div class="grid-two">'+
-      panel("Ticket volume trend","Received vs resolved · sample daily series",'<div class="dual-bars">'+chartPair([76,88,94,83,108,102,121,115,96,130,118,125],[61,78,82,91,94,99,106,110,94,116,120,127],["Mon","Tue","Wed","Thu","Fri","Sat","Sun","Mon","Tue","Wed","Thu","Fri"])+'</div>',horizontalLegend([{label:"Received",color:"#f1846f"},{label:"Resolved",color:"#76e7ce"}]))+
-      panel("Resolution time distribution","Elapsed time from receipt to resolution",barRows([{label:"Under 1 hour",value:18,color:"#76e7ce"},{label:"1–4 hours",value:42,color:"#c2a0ff"},{label:"4–8 hours",value:22,color:"#ff5c91"},{label:"8–24 hours",value:13,color:"#ffbd68"},{label:"Over 24 hours",value:5,color:"#ef8887"}],{percent:true}),'<span class="subtle-tag">SAMPLE PROFILE</span>')+
+    '<div class="ticket-rate-strip">'+
+      '<div><span>INITIAL ALLOCATION RATE</span><strong>'+(t.received?(t.assigned/t.received*100).toFixed(1):"0.0")+'%</strong><small>First-assigned ÷ received</small></div>'+
+      '<div><span>RESOLUTION RATIO</span><strong>'+(t.received?(t.resolved/t.received*100).toFixed(1):"0.0")+'%</strong><small>Resolved ÷ received · not a cohort closure rate</small></div>'+
+      '<div><span>NOT INITIALLY ASSIGNED</span><strong>'+fmt(t.unassigned)+'</strong><small>Received less first-assigned total</small></div>'+
+      '<div><span>REOPENED</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
-    '<div class="grid-equal">'+
-      metricPanel("Assignment delay","12m","Average receipt-to-first-assignment","Median 7m")+
-      metricPanel("First response","28m","Average receipt-to-first-response","Median 19m")+
-      metricPanel("Elapsed resolution","3h 42m","Average total elapsed time","Median 2h 18m")+
-      metricPanel("Active handling","46m","Illustrative recorded active time","Requires activity events")+
+    '<div class="grid-two ticket-analytics-primary">'+
+      panel("Received versus resolved","12 illustrative intervals distributed from selected aggregate totals",'<div class="dual-bars">'+chartPair(trend.received,trend.resolved,trend.labels)+'</div><div class="ticket-chart-note">This is a generated distribution of synthetic totals, not a timestamped daily or weekly source trend.</div>',horizontalLegend([{label:"Received",color:"#ff174f"},{label:"Resolved",color:"#ff85aa"}]))+
+      panel("Lifecycle ledger","Distinct ticket counts and current-state snapshot",ticketLifecycleLedger(t),'<span class="subtle-tag">AGGREGATE VIEW</span>')+
     '</div>'+
-    panel("Ticket explorer","Search across reference, brand, folder, owner and subject",dataTable(["Reference","Brand","Inbox","Assigned to","Received","Age","Status","Last event"],rows),'<span class="subtle-tag">'+rows.length+' SAMPLE RECORDS</span>');
+    '<div class="grid-two ticket-analytics-secondary">'+
+      panel("Queue status mix","Status composition of the static demonstration records in this inbox scope",barRows(statuses),'<span class="subtle-tag">'+base.length+' SAMPLE RECORDS</span>')+
+      panel("Open-ticket ageing","Age distribution within the unresolved sample queue",ticketAgeingPanel(ageing),'<span class="subtle-tag">SAMPLE QUEUE ONLY</span>')+
+    '</div>'+
+    '<div class="section-heading ticket-section-heading"><div><h2>Resolution & response telemetry</h2><p>These metrics require explicit event timestamps; the prototype does not estimate them from ticket age.</p></div><span class="subtle-tag">AWAITING EVENT DATA</span></div>'+
+    '<div class="ticket-telemetry-grid">'+
+      ticketTelemetryCard("Assignment delay","Receipt to first-assignment timestamp is not connected.")+
+      ticketTelemetryCard("First response","First agent response timestamp is not available in the sample records.")+
+      ticketTelemetryCard("Elapsed resolution","Receipt to resolution timestamps are not available.")+
+      ticketTelemetryCard("Active handling time","Requires explicit start, pause, resume and stop events.")+
+    '</div>'+
+    '<div class="grid-two ticket-analytics-secondary">'+
+      panel("Brand demand","Unique tickets by identified brand, including Other / unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
+      panel("Metric interpretation","Definitions that keep volume and handling measures separate",'<div class="ticket-definition-list">'+
+        '<div><strong>Received / resolved</strong><span>Distinct ticket totals, not event counts.</span></div>'+
+        '<div><strong>Initial allocation</strong><span>First assignment only; later handovers and recoveries do not add to this count.</span></div>'+
+        '<div><strong>Outstanding</strong><span>Current open-work snapshot, not a historical cohort balance.</span></div>'+
+        '<div><strong>Ageing</strong><span>Current sample ticket age, not active handling time.</span></div>'+
+      '</div>','<span class="subtle-tag">DATA RULES</span>')+
+    '</div>'+
+    '<section class="panel ticket-explorer-panel">'+
+      '<div class="panel-heading"><div><h2 class="panel-title">Ticket explorer</h2><p class="panel-subtitle">Search and inspect individual synthetic records. Selecting a row opens its read-only sample timeline.</p></div><span class="subtle-tag">READ ONLY</span></div>'+
+      ticketStatusTabs(base)+
+      '<div class="ticket-filter-toolbar">'+
+        '<label class="live-queue-search"><span>⌕</span><input type="search" data-ticket-search value="'+esc(state.ticketSearch)+'" placeholder="Search reference, subject, owner…" autocomplete="off" aria-label="Search ticket explorer"></label>'+
+        '<label><span class="live-filter-label">BRAND</span><select class="live-select" data-ticket-filter="ticketBrand"><option value="all">All brands</option>'+brandOptions.map(name=>'<option value="'+esc(name)+'" '+(state.ticketBrand===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+        '<label><span class="live-filter-label">OWNER</span><select class="live-select" data-ticket-filter="ticketOwner"><option value="all">All owners</option>'+owners.map(name=>'<option value="'+esc(name)+'" '+(state.ticketOwner===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+        '<label><span class="live-filter-label">SORT</span><select class="live-select" data-ticket-filter="ticketSort"><option value="oldest" '+(state.ticketSort==="oldest"?"selected":"")+'>Oldest first</option><option value="newest" '+(state.ticketSort==="newest"?"selected":"")+'>Newest first</option><option value="priority" '+(state.ticketSort==="priority"?"selected":"")+'>Priority first</option></select></label>'+
+      '</div>'+
+      '<div class="live-queue-meta"><span id="ticketQueueCount">Showing '+rows.length+' of '+base.length+' sample records</span><button type="button" class="text-action" data-action="reset-ticket-filters">Reset explorer filters</button></div>'+
+      '<div id="ticketExplorerRows">'+dataTable(["Reference / subject","Brand","Inbox","Owner","Age","Priority","Status","SLA preview","Last sample event"],rows)+'</div>'+
+    '</section>'+
+    '<div class="ticket-final-note"><strong>Important:</strong> all figures and ticket records on this screen are synthetic. Sample SLA previews use illustrative age/status rules and are not approved service targets. No live ticket history, event timing, mailbox or workbook data is connected.</div>';
 }
+
 function chartPair(a,b,labels){
   const max=Math.max(...a,...b),h=115;
   return '<div class="paired-chart">'+a.map((v,i)=>'<div class="paired-col"><div class="paired-bars"><span class="paired-bar received" style="height:'+v/max*100+'%"></span><span class="paired-bar resolved" style="height:'+b[i]/max*100+'%"></span></div><small>'+labels[i]+'</small></div>').join("")+'</div>';
@@ -809,7 +966,11 @@ function exportLiveQueue(){
   ]);
 }
 function exportTickets(){
-  csvDownload("dispatcher-sample-tickets.csv",[["Reference","Brand","Folder","Member","Subject","Age","Status"],...TICKETS.map(t=>[t.ref,t.brand,t.folder,t.member,t.subject,t.age,t.status])]);
+  const rows=ticketFilteredRows();
+  csvDownload("dispatcher-sample-tickets-filtered.csv",[
+    ["Reference","Brand","Folder","Member","Subject","Age","Priority","Status","SLA preview","Last sample event"],
+    ...rows.map(ticket=>[ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.age,ticketPriority(ticket),ticket.status,liveSla(ticket).label,ticket.last])
+  ]);
 }
 function exportBrands(){
   csvDownload("dispatcher-sample-brand-mix.csv",[["Brand","Tickets"],...brandRows().map(b=>[b.name,scaled(b.value)])]);
@@ -847,6 +1008,7 @@ function handleAction(action){
   if(action==="refresh"){showToast("Preview refreshed. Sample data remains unchanged.");return;}
   if(action==="export-live-queue"){exportLiveQueue();return;}
   if(action==="reset-live-filters"){state.liveStatus="all";state.liveOwner="all";state.liveBrand="all";state.liveSort="oldest";state.liveSearch="";render();return;}
+  if(action==="reset-ticket-filters"){state.ticketStatus="all";state.ticketBrand="all";state.ticketOwner="all";state.ticketSort="oldest";state.ticketSearch="";render();return;}
   if(action==="toggle-dispatch"){state.paused=!state.paused;showToast(state.paused?"Demo dispatch state set to paused. No live system affected.":"Demo dispatch state resumed. No live system affected.");render();return;}
   if(action==="export-tickets"){exportTickets();return;}
   if(action==="export-brands"){exportBrands();return;}
@@ -863,6 +1025,11 @@ document.getElementById("folderSelect").addEventListener("change",e=>{state.fold
 document.getElementById("globalSearch").addEventListener("input",e=>{state.search=e.target.value;render();});
 document.getElementById("profileButton").addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
 document.addEventListener("change",event=>{
+  const ticketFilter=event.target.closest("[data-ticket-filter]");
+  if(ticketFilter){
+    const key=ticketFilter.dataset.ticketFilter;
+    if(["ticketBrand","ticketOwner","ticketSort"].includes(key)){state[key]=ticketFilter.value;render();}
+  }
   const filter=event.target.closest("[data-live-filter]");
   if(filter){
     const key=filter.dataset.liveFilter;
@@ -870,6 +1037,15 @@ document.addEventListener("change",event=>{
   }
 });
 document.addEventListener("input",event=>{
+  const ticketSearch=event.target.closest("[data-ticket-search]");
+  if(ticketSearch){
+    state.ticketSearch=ticketSearch.value;
+    const rows=document.getElementById("ticketExplorerRows");
+    const count=document.getElementById("ticketQueueCount");
+    const base=ticketQueueBase(),filtered=ticketFilteredRows();
+    if(rows)rows.innerHTML=dataTable(["Reference / subject","Brand","Inbox","Owner","Age","Priority","Status","SLA preview","Last sample event"],ticketRows());
+    if(count)count.textContent="Showing "+filtered.length+" of "+base.length+" sample records";
+  }
   const search=event.target.closest("[data-live-search]");
   if(search){
     state.liveSearch=search.value;
@@ -885,10 +1061,12 @@ document.addEventListener("click",event=>{
   const ticket=event.target.closest("[data-ticket]");
   const agent=event.target.closest("[data-agent]");
   const liveStatus=event.target.closest("[data-live-status]");
+  const ticketStatus=event.target.closest("[data-ticket-status]");
   const liveFolder=event.target.closest("[data-live-folder]");
   if(action)handleAction(action.dataset.action);
   if(go)navigate(go.dataset.go);
   if(ticket)openTicket(ticket.dataset.ticket);
+  if(ticketStatus){state.ticketStatus=ticketStatus.dataset.ticketStatus;render();}
   if(liveStatus){state.liveStatus=liveStatus.dataset.liveStatus;render();}
   if(liveFolder){state.folder=liveFolder.dataset.liveFolder;document.getElementById("folderSelect").value=state.folder;render();}
   if(agent){state.selectedAgent=agent.dataset.agent;render();}

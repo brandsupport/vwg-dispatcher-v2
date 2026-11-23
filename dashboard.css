@@ -1517,3 +1517,85 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .overview-risk-ticket{grid-template-columns:minmax(0,1fr) auto}
   .overview-risk-ticket .sla-pill{grid-column:2;grid-row:2;justify-self:end}
 }
+
+
+/* Ticket Analytics — lifecycle investigation workspace */
+.ticket-demo-strip{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:-8px 0 16px;padding:11px 14px;border:1px solid rgba(255,85,132,.24);border-radius:11px;background:linear-gradient(100deg,rgba(73,15,39,.72),rgba(24,8,17,.76));color:#c5a8b5;font-size:9px;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+.ticket-demo-strip>span{display:inline-flex;align-items:center;gap:6px}
+.ticket-demo-strip b{color:#fff0f5}
+.ticket-demo-strip>span:first-child{color:#ff9ab6;font-size:8px;font-weight:900;letter-spacing:.1em}
+.ticket-demo-strip i{width:7px;height:7px;border-radius:50%;background:#ff174f;box-shadow:0 0 10px rgba(255,23,79,.9)}
+.ticket-rate-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:-3px 0 16px}
+.ticket-rate-strip>div{min-width:0;padding:12px 14px;border:1px solid rgba(255,87,135,.19);border-radius:11px;background:linear-gradient(145deg,rgba(48,14,31,.76),rgba(20,8,16,.8));box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.ticket-rate-strip span,.ticket-rate-strip strong,.ticket-rate-strip small{display:block}
+.ticket-rate-strip span{color:#b78e9e;font-size:8px;font-weight:900;letter-spacing:.075em}
+.ticket-rate-strip strong{margin-top:7px;color:#fff0f5;font:800 21px Manrope,sans-serif}
+.ticket-rate-strip small{margin-top:3px;color:#a98b99;font-size:8px;line-height:1.45}
+.ticket-analytics-primary{grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr);align-items:stretch}
+.ticket-analytics-secondary{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.ticket-chart-note,.ticket-panel-foot{margin:9px 0 0;color:#a98a98;font-size:8px;line-height:1.55}
+.ticket-ledger{display:grid;gap:1px}
+.ticket-ledger-row{display:grid;grid-template-columns:minmax(0,1fr) 60px 92px;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid rgba(255,100,148,.12)}
+.ticket-ledger-row:last-child{border-bottom:0}
+.ticket-ledger-row>div{min-width:0}
+.ticket-ledger-row strong,.ticket-ledger-row small{display:block}
+.ticket-ledger-row strong{color:#f9eaf0;font-size:9px}
+.ticket-ledger-row small{margin-top:3px;color:#a98a98;font-size:7px;line-height:1.4}
+.ticket-ledger-row>b{color:#fff0f5;font:800 13px Manrope,sans-serif;text-align:right}
+.ticket-ledger-row>span{color:#b48f9e;font-size:7px;text-align:right}
+.ticket-ledger-row.primary strong,.ticket-ledger-row.primary>b{color:#ff93b0}
+.ticket-ageing-summary{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+.ticket-ageing-summary strong{color:#fff0f5;font:800 23px Manrope,sans-serif}
+.ticket-ageing-summary span{color:#a98a98;font-size:8px}
+.ticket-telemetry-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.ticket-metric-unavailable{border-color:rgba(255,88,138,.18);background:linear-gradient(145deg,rgba(47,14,31,.78),rgba(20,8,16,.82))}
+.ticket-metric-unavailable>span{color:#b795a3}
+.ticket-metric-unavailable>strong{color:#ffcbda;font-size:16px}
+.ticket-metric-unavailable p{color:#a98b99;font-size:8px;line-height:1.45}
+.ticket-metric-unavailable small{color:#8f7180}
+.ticket-section-heading{margin-top:17px}
+.ticket-definition-list{display:grid;gap:1px}
+.ticket-definition-list>div{display:grid;grid-template-columns:minmax(105px,.8fr) minmax(0,1.2fr);gap:9px;padding:10px 0;border-bottom:1px solid rgba(255,100,148,.13)}
+.ticket-definition-list>div:last-child{border-bottom:0}
+.ticket-definition-list strong{color:#f5e4eb;font-size:8px}
+.ticket-definition-list span{color:#ad8c9a;font-size:8px;line-height:1.5}
+.ticket-explorer-panel{margin-top:15px}
+.ticket-explorer-panel .panel-heading{align-items:center}
+.ticket-status-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 13px}
+.ticket-filter-toolbar{display:grid;grid-template-columns:minmax(190px,1.5fr) repeat(3,minmax(112px,.8fr));gap:8px;align-items:end;margin:0 0 10px}
+.ticket-filter-toolbar label{display:flex;flex-direction:column;gap:5px;min-width:0}
+.ticket-filter-toolbar .live-queue-search{display:flex;flex-direction:row;align-items:center}
+.ticket-filter-toolbar .live-queue-search input{width:100%;min-width:0}
+.ticket-ref{display:block;font-size:10px;font-weight:800}
+.ticket-subject{display:block;max-width:245px;margin-top:3px;overflow:hidden;color:#a98a98;font-size:8px;text-overflow:ellipsis}
+.ticket-age{color:#f7e7ed;font-size:9px}
+.ticket-priority{display:inline-flex;align-items:center;padding:4px 6px;border:1px solid transparent;border-radius:6px;font-size:8px;font-weight:800}
+.ticket-priority.high{color:#ff9db7;background:rgba(255,23,79,.14);border-color:rgba(255,73,119,.22)}
+.ticket-priority.medium{color:#ffd08a;background:rgba(255,189,104,.12);border-color:rgba(255,189,104,.20)}
+.ticket-priority.normal{color:#aeeede;background:rgba(118,231,206,.10);border-color:rgba(118,231,206,.17)}
+.ticket-explorer-panel .data-table{min-width:980px}
+.ticket-explorer-panel .data-table th,.ticket-explorer-panel .data-table td{padding:10px 8px}
+.ticket-final-note{margin-top:14px;padding:12px 14px;border:1px solid rgba(194,160,255,.20);border-radius:10px;background:rgba(104,67,145,.09);color:#c8b7dc;font-size:8px;line-height:1.6}
+.ticket-final-note strong{color:#e0ceff}
+@media(max-width:1250px){
+  .ticket-analytics-primary{grid-template-columns:1fr}
+  .ticket-telemetry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:900px){
+  .ticket-rate-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ticket-analytics-secondary{grid-template-columns:1fr}
+  .ticket-filter-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ticket-filter-toolbar .live-queue-search{grid-column:1/-1}
+}
+@media(max-width:560px){
+  .ticket-demo-strip{align-items:flex-start;flex-direction:column;gap:7px}
+  .ticket-rate-strip{gap:7px}
+  .ticket-rate-strip>div{padding:10px}
+  .ticket-rate-strip strong{font-size:18px}
+  .ticket-telemetry-grid{grid-template-columns:1fr}
+  .ticket-filter-toolbar{grid-template-columns:1fr}
+  .ticket-filter-toolbar .live-queue-search{grid-column:auto}
+  .ticket-ledger-row{grid-template-columns:minmax(0,1fr) 48px 78px;gap:5px}
+  .ticket-ledger-row>span{font-size:6px}
+  .ticket-definition-list>div{grid-template-columns:1fr}
+}
