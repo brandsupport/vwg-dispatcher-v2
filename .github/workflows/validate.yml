@@ -36,6 +36,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
+          import vm from 'node:vm';
           const html = fs.readFileSync('index.html', 'utf8');
           const js = fs.readFileSync('dashboard.js', 'utf8');
           const css = fs.readFileSync('dashboard.css', 'utf8');
@@ -63,6 +64,12 @@ jobs:
           for (const text of ['.live-queue-layout','.live-inbox-grid','.live-status-tab','.live-coverage-row']) {
             if (!css.includes(text)) throw new Error('Live Operations styling missing: ' + text);
           }
+          const ageFunction = js.match(/function liveAgeMinutes\\(ticket\\)\\{[\\s\\S]*?\\n\\}/);
+          if (!ageFunction) throw new Error('Live Operations age parser is missing.');
+          const ageMinutes = vm.runInNewContext(ageFunction[0] + '; liveAgeMinutes({age: "5h 42m"})');
+          if (ageMinutes !== 342) throw new Error('Live Operations age parser returned ' + ageMinutes + ' instead of 342.');
+          const shortAge = vm.runInNewContext(ageFunction[0] + '; liveAgeMinutes({age: "18m"})');
+          if (shortAge !== 18) throw new Error('Live Operations short age parser returned ' + shortAge + ' instead of 18.');
           if (!css.includes('.sidebar') || !css.includes('@media') || !css.includes('.modal-card')) {
             throw new Error('Responsive layout or ticket detail modal styles are missing.');
           }
