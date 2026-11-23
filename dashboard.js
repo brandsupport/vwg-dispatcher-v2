@@ -254,8 +254,11 @@ function liveBaseTickets(){
 }
 function liveAgeMinutes(ticket){
   if(Number.isFinite(ticket.ageMinutes))return ticket.ageMinutes;
-  const hours=Number((ticket.age.match(/(\\d+)\\s*h/i)||[])[1]||0);
-  const minutes=Number((ticket.age.match(/(\\d+)\\s*m/i)||[])[1]||0);
+  const age=String(ticket.age||"").toLowerCase();
+  const hourPart=age.includes("h")?age.slice(0,age.indexOf("h")).trim():"0";
+  const minutePart=age.includes("h")?age.slice(age.indexOf("h")+1).replace("m","").trim():age.replace("m","").trim();
+  const hours=parseInt(hourPart,10)||0;
+  const minutes=parseInt(minutePart,10)||0;
   return hours*60+minutes;
 }
 function liveSlaTarget(ticket){
