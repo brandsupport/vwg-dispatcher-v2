@@ -152,6 +152,10 @@ async function readSource(kind,file){
 }
 function normaliseInbox(value){
   const key=norm(value);
+  if(key.includes("agencydetags")||key.includes("agency detags"))return "agency";
+  if(key.includes("unadopts"))return "unadopts";
+  if(key.includes("transfers"))return "transfers";
+  if(key.includes("detags"))return "detags";
   for(const [code,aliases] of Object.entries(INBOXES))if(aliases.some(alias=>norm(alias)===key))return code;
   return "";
 }
@@ -241,6 +245,7 @@ function renderSnapshot(snapshot){
   ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
   $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
   $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
+  $("dailyResults").innerHTML=buildTable(["UTC date","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
   $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
@@ -270,7 +275,7 @@ async function sanitise(){
       if(receivedDate)dateSet.add(receivedDate);
       const owner=selectedValue(row,"tickets","current_owner");
       const ownerRef=isUnassigned(owner)?null:await pseudonym(key,"agent",owner);
-      ticketMap.set(id,{inbox,brand,resolved:isResolved(status),ownerRef,unassigned:isUnassigned(owner)});
+      ticketMap.set(id,{inbox,brand,resolved:isResolved(status),ownerRef,unassigned:isUnassigned(owner),receivedDate});
       quality.tickets.rows_accepted++;
     }
     const initialRows=new Map();
@@ -300,9 +305,10 @@ async function sanitise(){
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
-    const agentCounts=new Map();const workload=new Map();
+    const agentCounts=new Map();const workload=new Map();const dailyMap=new Map();
     for(const [ticketKey,ticket] of ticketMap.entries()){
       const stats=inboxStats[ticket.inbox];stats.ticket_records++;
+      if(ticket.receivedDate){const dailyKey=ticket.receivedDate+"|"+ticket.inbox;const daily=dailyMap.get(dailyKey)||{date_utc:ticket.receivedDate,inbox_code:ticket.inbox,ticket_records:0};daily.ticket_records++;dailyMap.set(dailyKey,daily);}
       if(ticket.resolved)stats.resolved++;else{stats.outstanding++;if(ticket.unassigned)stats.unassigned++;}
       brandStats[ticket.brand]=(brandStats[ticket.brand]||0)+1;
       if(ticket.ownerRef&&!ticket.resolved){const workloadKey=ticket.ownerRef+"|"+ticket.inbox;workload.set(workloadKey,(workload.get(workloadKey)||0)+1);}
@@ -339,6 +345,7 @@ async function sanitise(){
     }
     const workflow=[...workflowMap.values()].map(row=>({event_type:row.event_type,inbox_code:row.inbox_code,event_count:row.event_count,distinct_tickets:row.tickets.size})).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
     const byInbox=Object.keys(INBOXES).map(inbox_code=>({inbox_code,...inboxStats[inbox_code]}));
+    const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code));
     const overall={ticket_records:ticketMap.size,initially_assigned:validInitial.size,resolved:byInbox.reduce((sum,row)=>sum+row.resolved,0),outstanding:byInbox.reduce((sum,row)=>sum+row.outstanding,0),unassigned:byInbox.reduce((sum,row)=>sum+row.unassigned,0)};
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
     const warnings=[];
@@ -358,7 +365,7 @@ async function sanitise(){
       generated_at_utc:new Date().toISOString(),
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
-      tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand},
+      tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
       allocations,
       workflow,
       data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
@@ -382,6 +389,7 @@ function downloadCSVs(){
   if(!currentSnapshot)return;
   const s=currentSnapshot;
   const filesToDownload=[
+    ["dispatcher-daily-volume.csv",["date_utc","inbox_code","ticket_records"],s.tickets.daily_volume.map(r=>[r.date_utc,r.inbox_code,r.ticket_records])],
     ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","initially_assigned","resolved","outstanding","unassigned"],s.tickets.by_inbox.map(r=>[r.inbox_code,INBOX_LABELS[r.inbox_code],r.ticket_records,r.initially_assigned,r.resolved,r.outstanding,r.unassigned])],
     ["dispatcher-brand-summary.csv",["brand_code","brand_name","ticket_count","share_pct"],s.tickets.by_brand.map(r=>[r.brand_code,BRAND_LABELS[r.brand_code],r.count,s.tickets.total?(r.count/s.tickets.total*100).toFixed(2):"0.00"])],
     ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
