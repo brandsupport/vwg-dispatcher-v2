@@ -1101,7 +1101,7 @@ function overviewTeamPanel(){
         '<strong>'+fmt(agent.open)+'</strong>'+
       '</div>'
     ).join("")+'</div>'+
-    '<p class="overview-panel-foot">'+roster.length+' pseudonymised roster profiles · '+active.length+' active this fortnight · open workload is a point-in-time count, not hours-adjusted capacity.</p>';
+    '<p class="overview-panel-foot">'+roster.length+' pseudonymised roster profiles · '+active.length+' active this fortnight · '+(hasResolutionTracking()?"open workload is a point-in-time count":"counts show current owner records; resolution state is not tracked")+' and is not hours-adjusted capacity.</p>';
   }
   const available=AGENTS.filter(agent=>agent.availability==="Available").length;
   const onBreak=AGENTS.filter(agent=>agent.availability==="Break").length;
@@ -1879,7 +1879,7 @@ function renderTeam(){
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
     '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent names can be loaded from a separate private lookup kept only in this browser; the shared JSON remains pseudonymised. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolution status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; event involvement is not the same as authenticated action attribution. Resolution rate is not tracked yet.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
-    '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and current open-work '+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile.")+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
+    '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and '+(state.importedSnapshot&&!hasResolutionTracking()?"records with a current owner. Resolution state is not tracked.": "current open-work "+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile."))+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
       '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
         '<div class="team-profile-head">'+memberCell(agent.name,agent.shift||"Pseudonymised reference")+'<span class="team-profile-chevron">↗</span></div>'+
