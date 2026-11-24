@@ -2373,6 +2373,15 @@ function handleAction(action){
   if(action==="reset-reliability-filters"){state.reliabilitySearch="";state.reliabilityType="all";state.reliabilityStatus="all";state.reliabilitySeverity="all";state.selectedReliabilityEvent=null;renderReliability();return;}
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
+document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
+document.getElementById("snapshotFileInput").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];
+  if(!file)return;
+  try{await loadLocalSnapshot(file);}
+  catch(error){showToast("Could not import snapshot: "+error.message);}
+  finally{event.target.value="";}
+});
+document.getElementById("resetSnapshotButton").addEventListener("click",clearLocalSnapshot);
 document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click",()=>navigate(btn.dataset.view)));
 document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
 document.getElementById("folderSelect").addEventListener("change",e=>{state.folder=e.target.value;render();});
