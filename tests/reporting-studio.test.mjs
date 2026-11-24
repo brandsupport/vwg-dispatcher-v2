@@ -27,6 +27,7 @@ function loadStudio(){
       normaliseInbox,
       normaliseWorkflowEvent,
       parseExplicitDate,
+      parseSourceInstant,
       async process(csvs) {
         const ticketData=parseCSV(csvs.tickets);
         const assignmentData=parseCSV(csvs.assignments);
@@ -68,6 +69,14 @@ test("only explicit timezone dates are accepted for daily grouping",()=>{
   assert.equal(hooks.parseExplicitDate("2026-11-22"),"2026-11-22");
   assert.equal(hooks.parseExplicitDate("2026-11-22T23:30:00-02:00"),"2026-11-23");
   assert.equal(hooks.parseExplicitDate("2026-11-22 23:30:00 UK"),null);
+});
+
+test("local UK and Egypt workbook timestamps are converted using IANA timezone rules",()=>{
+  const hooks=loadStudio();
+  assert.equal(hooks.parseSourceInstant("2026-11-22 11:14:00","Africa/Cairo").toISOString(),"2026-11-22T09:14:00.000Z");
+  assert.equal(hooks.parseSourceInstant("2026-07-20 09:00:00","Europe/London").toISOString(),"2026-07-20T08:00:00.000Z");
+  assert.equal(hooks.parseSourceInstant("25/10/2026 01:30:00","Europe/London"),null,"the repeated UK autumn clock hour must not be guessed");
+  assert.equal(hooks.parseSourceInstant("29/03/2026 01:30:00","Europe/London"),null,"a nonexistent UK spring clock time must not be guessed");
 });
 
 test("synthetic exports produce reconciled aggregate metrics without raw identifiers",async()=>{
