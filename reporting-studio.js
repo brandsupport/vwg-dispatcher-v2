@@ -37,19 +37,19 @@ const SOURCE_CONFIG={
   assignments:{
     title:"Assignment history export",
     fields:[
-      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
+      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"agent",label:"New owner / assigned agent",required:true,aliases:["original assignee","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
       {id:"kind",label:"Assignment type",required:true,aliases:["assignment flag","assignment kind","assignment type","event type","type","action","allocation type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["inbox","folder","queue","folder name"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Assignment timestamp",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
   },
   workflow:{
     title:"Workflow / activity export",
     fields:[
-      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
+      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"event_type",label:"Workflow event type",required:true,aliases:["assignment flag","workflow event","event type","event","activity","action","type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["inbox","folder","queue","folder name"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
   }
