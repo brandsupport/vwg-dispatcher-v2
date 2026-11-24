@@ -537,6 +537,51 @@ function validateAndSanitiseSnapshot(raw){
   const resolutionTracking=raw.tickets.resolution_tracking??"not_captured";
   if(!["not_captured","source_status_present"].includes(resolutionTracking))fail("The resolution-tracking metadata is invalid.");
   const brandFieldMapped=raw.tickets.brand_field_mapped===true;
+  const nullableMinutes=(value,label)=>{
+    if(value===null||value===undefined)return null;
+    if(typeof value!=="number"||!Number.isFinite(value)||value<0)fail("Invalid "+label+".");
+    return value;
+  };
+  const cleanDurationSummary=(value,label)=>{
+    if(!isObject(value))fail("The "+label+" resolution summary is invalid.");
+    return {
+      timed_tickets:count(value.timed_tickets??0,label+" timed tickets"),
+      average_minutes:nullableMinutes(value.average_minutes,label+" average resolution time"),
+      median_minutes:nullableMinutes(value.median_minutes,label+" median resolution time"),
+      p90_minutes:nullableMinutes(value.p90_minutes,label+" p90 resolution time")
+    };
+  };
+  const rawResolutionMetrics=raw.tickets.resolution_metrics||{
+    status_field_mapped:resolutionTracking==="source_status_present",
+    resolved_at_field_mapped:false,resolved_by_field_mapped:false,
+    overall:{timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},by_inbox:[]
+  };
+  if(!isObject(rawResolutionMetrics))fail("The resolution metrics section is invalid.");
+  const resolutionMetrics={
+    status_field_mapped:rawResolutionMetrics.status_field_mapped===true,
+    resolved_at_field_mapped:rawResolutionMetrics.resolved_at_field_mapped===true,
+    resolved_by_field_mapped:rawResolutionMetrics.resolved_by_field_mapped===true,
+    overall:cleanDurationSummary(rawResolutionMetrics.overall,"overall"),
+    by_inbox:(rawResolutionMetrics.by_inbox||[]).map(row=>{
+      if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("A resolution summary contains an invalid inbox.");
+      return {inbox_code:row.inbox_code,...cleanDurationSummary(row,"inbox")};
+    })
+  };
+  if(resolutionMetrics.overall.timed_tickets>cleanOverall.resolved)fail("Timed resolution records exceed the resolved ticket count.");
+  const resolutionByAgentRaw=raw.tickets.resolution_by_agent||[];
+  if(!Array.isArray(resolutionByAgentRaw))fail("The per-agent resolution section is invalid.");
+  const resolutionByAgent=resolutionByAgentRaw.map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||"")))fail("A resolution row has an invalid agent reference.");
+    const resolvedTickets=count(row.resolved_tickets,"agent resolved ticket count");
+    const timedTickets=count(row.timed_tickets,"agent timed resolution count");
+    if(timedTickets>resolvedTickets)fail("Agent timed resolutions exceed resolved ticket count.");
+    return {
+      agent_ref:row.agent_ref,resolved_tickets:resolvedTickets,timed_tickets:timedTickets,
+      total_resolution_minutes:count(row.total_resolution_minutes??0,"agent total resolution minutes")
+    };
+  });
+  if(new Set(resolutionByAgent.map(row=>row.agent_ref)).size!==resolutionByAgent.length)fail("Duplicate per-agent resolution rows were found.");
+  if(resolutionByAgent.reduce((sum,row)=>sum+row.resolved_tickets,0)>cleanOverall.resolved)fail("Per-agent resolved ticket totals exceed the resolved ticket count.");
   const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
   for(const key of Object.keys(cleanOverall)){
     if(sum(byInbox,key)!==cleanOverall[key])fail("Inbox totals do not reconcile with the overall "+key+" value.");
@@ -672,7 +717,8 @@ function validateAndSanitiseSnapshot(raw){
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
     tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
-      resolution_tracking:resolutionTracking,brand_field_mapped:brandFieldMapped},
+      resolution_tracking:resolutionTracking,resolution_metrics:resolutionMetrics,resolution_by_agent:resolutionByAgent,
+      brand_field_mapped:brandFieldMapped},
     allocations,assignment_methods:assignmentMethods,team_roster:teamRoster,workflow,activity_log:activityLog,
     data_quality:{
       sources,
