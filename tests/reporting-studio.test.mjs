@@ -121,7 +121,7 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
     "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner",
     "KEY-001,Detags,Assigned,Audi,2026-11-24 08:30:00,Belal",
     "KEY-002,Agency Detags,Assigned,Volkswagen,2026-11-24 09:00:00,Balqees"
-  ].join("\\r\\n");
+  ].join("\r\n");
   const activity=[
     "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
     "2026-11-24 10:30:00,AUTO_ASSIGNMENT,KEY-001,Detags,Belal,Belal,TRUE,0,",
@@ -129,7 +129,7 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
     "2026-11-24 11:30:00,HANDOVER,KEY-001,Detags,Belal,Mariam,TRUE,0,",
     "2026-11-24 12:00:00,CATEGORY_REMOVAL_DETECTED,KEY-001,Detags,Belal,Mariam,TRUE,1,",
     "2026-11-24 12:30:00,CATEGORY_RESTORED,KEY-001,Detags,Belal,Mariam,TRUE,1,"
-  ].join("\\r\\n");
+  ].join("\r\n");
   const result=await hooks.processVwg(tickets,activity);
   const snapshot=result.snapshot;
   assert.equal(hooks.autoMap(["Event Type","Assignment Flag"],hooks.sourceConfig.assignments.fields.find(field=>field.id==="kind").aliases),"Event Type");
