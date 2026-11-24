@@ -239,7 +239,7 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
   });
   const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,(snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0))]));
   assert.deepEqual(events,{
-    assigned:2,handover:1,recovery_requested:1,recovery_restored:1,
+    assigned:2,handover:1,flagged:1,recovery_restored:1,
     manual_assignment:1,exception:2
   });
   assert.equal(snapshot.workflow.some(row=>row.event_type==="baseline_registered"),false);
@@ -248,7 +248,7 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
   const imported=validateWithDashboard(snapshot);
   const views=calculateDashboardViews(imported);
   const visibleEvents=Object.fromEntries(views.workflow.map(row=>[row.id,row.events]));
-  assert.deepEqual(visibleEvents,{handover:1,flag:0,manual:1,recovery:2,reassignment:0});
+  assert.deepEqual(visibleEvents,{handover:1,flag:1,manual:1,recovery:1,reassignment:0});
 
   const serialised=JSON.stringify(imported);
   for(const prohibited of [
