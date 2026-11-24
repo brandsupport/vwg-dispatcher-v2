@@ -2,7 +2,7 @@
 
 A standalone operations intelligence and management platform for the VWG Brand Support ticket operation.
 
-> **Current status: public dashboard demo plus an undeployed backend foundation.** The dashboard remains synthetic-data-only and has no live Outlook or Excel connection. Backend Worker code and a D1 schema exist under backend/, but no production Worker, D1 database, Cloudflare Access application, secrets or real data are configured. No operational write route is implemented.
+> **Current status: synthetic-data dashboard plus local-only reporting studio and staging backend foundation.** The public dashboard remains synthetic-data-only and has no live Outlook or Excel connection. The Reporting Studio processes selected CSV files in the browser and exports pseudonymised aggregate reports; it does not upload files or connect to the API. A staging D1 database and staging Worker/version have been created separately, but the dashboard is not connected to them. No production database, approved identity integration, real operational data feed or operational write route is configured.
 
 ## Product direction
 
@@ -39,9 +39,17 @@ Global reporting-period, inbox and search controls are available across the dash
 
 All member names remain anonymised (Agent 01–Agent 14). Do not replace them with real team names until authentication, role permissions and the live data connection are ready.
 
+## Offline Reporting Studio
+
+The standalone `reporting-studio.html` companion is available from Reports & Exports. It reads selected CSV exports in the browser tab, applies explicit column mappings, HMAC-pseudonymises agent identifiers, and produces aggregate JSON/CSV reports. It makes no network calls and does not write source rows or keys to browser storage. The same three static files can be downloaded and opened locally for strict offline use.
+
+The initial inputs are a ticket/current-state snapshot (required), assignment history (optional) and workflow/activity history (optional). Source column headings are not assumed: users confirm the mapping. See [docs/OFFLINE_REPORTING_WORKFLOW.md](docs/OFFLINE_REPORTING_WORKFLOW.md) and the fictional CSVs under `examples/` before using any approved operational export.
+
+The studio does not upload data to D1 or feed the public dashboard automatically. The generated output is a local aggregate snapshot for controlled review. Real operational exports require approval from the relevant company data owner/security process.
+
 ## Backend & Database Foundation 1.0
 
-The repository now includes a separate, **not-yet-deployed** Cloudflare Worker API and D1 migration foundation under backend/. It is intentionally separate from the public GitHub Pages frontend.
+The repository includes a separate Cloudflare Worker API and D1 migration foundation under backend/. The staging D1 schema has been created and its tables, indexes, triggers, schema version and four inbox seed records were verified in Cloudflare. The staging Worker was built and appears in the Cloudflare deployment view. It remains separate from the public GitHub Pages frontend.
 
 The initial API is read-only and exposes a liveness endpoint, authenticated identity/permission summary, the four inbox definitions, database schema readiness and an authorised audit read. Cloudflare Access is required for protected API routes. The Worker resolves one approved IdP group to one role, denies missing or overlapping role mappings, and ignores identity headers supplied by clients.
 
@@ -49,7 +57,7 @@ The first D1 migration creates pseudonymized principals, ticket current state, s
 
 The backend has automated tests for unauthenticated access, role separation, exact CORS origins, pseudonymized audit writes, the four inboxes, schema constraints, one-initial-assignment enforcement and audit update/delete guards.
 
-**Nothing has been deployed to Cloudflare.** No D1 database has been created, no remote migration has run, no Access application or IdP groups have been configured, and no secret has been provisioned. The local Access identity is a development simulation only. Production deployment is gated on company security approval and the instructions in backend/README.md.
+**Staging is not production-ready.** Cloudflare Access and its role groups were not configured, and the protected API deliberately fails closed without that trusted identity context. The dashboard is not connected to the staging Worker or D1. There is no production database, no live Citrix/Outlook/Excel feed, no real operational data and no production secret configuration. The Cloudflare dashboard inspection reported the staging version in its active deployment view with 100% traffic allocation and 0 requests/sec at the time of inspection; verify its current rollout before making deployment changes. Production use remains gated on company security approval and an approved authentication design.
 
 D1 is single-threaded per database. Query duration, write contention, storage growth and recovery requirements must be measured before implementing live assignment writes. The audit triggers are an application-level append-only guard, not a cryptographic or externally immutable ledger.
 
