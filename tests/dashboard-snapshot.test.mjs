@@ -110,6 +110,30 @@ test("preserves safe Activity Log event details and automatic/manual method coun
   assert.equal("details" in clean.activity_log[0],false);
 });
 
+test("validates explicit resolution-time summaries and resolver references",()=>{
+  const input=snapshotFixture();
+  input.tickets.resolution_tracking="source_status_present";
+  input.tickets.resolution_metrics={
+    status_field_mapped:true,
+    resolved_at_field_mapped:true,
+    resolved_by_field_mapped:true,
+    overall:{timed_tickets:1,average_minutes:120,median_minutes:120,p90_minutes:120},
+    by_inbox:[
+      {inbox_code:"agency",timed_tickets:1,average_minutes:120,median_minutes:120,p90_minutes:120},
+      {inbox_code:"detags",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},
+      {inbox_code:"transfers",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},
+      {inbox_code:"unadopts",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null}
+    ]
+  };
+  input.tickets.resolution_by_agent=[
+    {agent_ref:"Agent-AAAAAAAAAA",resolved_tickets:1,timed_tickets:1,total_resolution_minutes:120}
+  ];
+  const clean=JSON.parse(JSON.stringify(validate(input)));
+  assert.equal(clean.tickets.resolution_metrics.overall.average_minutes,120);
+  assert.equal(clean.tickets.resolution_by_agent[0].resolved_tickets,1);
+  assert.equal(clean.tickets.resolution_by_agent[0].total_resolution_minutes,120);
+});
+
 test("rejects an overall total that does not reconcile with inbox totals", () => {
   const input = snapshotFixture();
   input.tickets.overall.ticket_records = 99;
