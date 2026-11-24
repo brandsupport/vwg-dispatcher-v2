@@ -49,7 +49,7 @@ const SOURCE_CONFIG={
     title:"Workflow / activity export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"event_type",label:"Activity Log event type",required:true,aliases:["event type","workflow event","event","activity","action","type","assignment flag"]},
+      {id:"event_type",label:"Activity Log event type",required:true,aliases:["event type","workflow event","event","activity","action","type"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]},
       {id:"original_agent",label:"Original assignee",aliases:["original assignee"]},
