@@ -508,21 +508,40 @@ async function sanitise(){
         q.rows_accepted++;
         const list=initialRows.get(ticketKey)||[];
         await rememberAgent(agent);
-        list.push({agent,inbox:resolvedInbox,method:initialAssignmentMethod(kind)});initialRows.set(ticketKey,list);
+        const assignedAtRaw=selectedValue(row,"assignments","occurred_at");
+        const assignedAtUtc=parseExplicitTimestamp(assignedAtRaw,"Africa/Cairo");
+        if(assignedAtRaw&&!assignedAtUtc)q.ambiguous_time++;
+        list.push({agent,inbox:resolvedInbox,method:initialAssignmentMethod(kind),occurredAtUtc:assignedAtUtc});initialRows.set(ticketKey,list);
       }
     }
     const validInitial=new Map();let ambiguousInitial=0;
     for(const [ticketKey,items] of initialRows.entries()){
-      const uniqueItems=[...new Map(items.map(item=>[norm(item.agent)+"|"+item.inbox+"|"+item.method,item])).values()];
+      const uniqueItems=[...new Map(items.map(item=>[norm(item.agent)+"|"+item.inbox+"|"+item.method+"|"+(item.occurredAtUtc||"") ,item])).values()];
       const duplicateCount=items.length-uniqueItems.length;
       if(duplicateCount>0){
         quality.assignments.duplicate_rows+=duplicateCount;
         quality.assignments.rows_accepted-=duplicateCount;
         quality.assignments.rows_skipped+=duplicateCount;
       }
-      if(uniqueItems.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=uniqueItems.length;quality.assignments.rows_skipped+=uniqueItems.length;continue;}
+      let chosen=null;
+      if(uniqueItems.length===1)chosen=uniqueItems[0];
+      else if(uniqueItems.every(item=>item.occurredAtUtc)){
+        const ordered=uniqueItems.slice().sort((a,b)=>a.occurredAtUtc.localeCompare(b.occurredAtUtc));
+        if(ordered[0].occurredAtUtc!==ordered[1].occurredAtUtc)chosen=ordered[0];
+      }
+      if(!chosen){
+        ambiguousInitial++;
+        quality.assignments.rows_accepted-=uniqueItems.length;
+        quality.assignments.rows_skipped+=uniqueItems.length;
+        continue;
+      }
+      if(uniqueItems.length>1){
+        const superseded=uniqueItems.length-1;
+        quality.assignments.rows_accepted-=superseded;
+        quality.assignments.rows_skipped+=superseded;
+      }
       const ticket=ticketMap.get(ticketKey);
-      if(ticket&&uniqueItems[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(uniqueItems[0].agent),inbox_code:uniqueItems[0].inbox,method:uniqueItems[0].method});
+      if(ticket&&chosen.inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(chosen.agent),inbox_code:chosen.inbox,method:chosen.method});
       else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
