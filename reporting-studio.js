@@ -203,7 +203,6 @@ function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
     received:["received","ticket received","created"],
-    flagged:["flagged","flag","flag raised","flagged for review"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
