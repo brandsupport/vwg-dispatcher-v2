@@ -345,7 +345,9 @@ test("real tracker sheet headers map Assignments for initial allocation and Acti
   assert.equal(handover.original_agent_name,"Agent Alice");
   assert.equal(handover.current_agent_name,"Agent Bella");
 
-  const eventCounts=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,row.event_count]));
+  const eventCounts=snapshot.workflow.reduce((result,row)=>{
+    result[row.event_type]=(result[row.event_type]||0)+row.event_count;return result;
+  },{});
   assert.deepEqual(eventCounts,{assigned:2,handover:1,flagged:1,recovery_restored:1,manual_assignment:1,exception:2,queued:1});
   assert.equal(snapshot.workflow.some(row=>row.event_type==="baseline_registered"),false);
 
@@ -374,7 +376,11 @@ test("the Team & Shifts roster is pseudonymised and drives actual imported shift
     .replaceAll('"Sample Agent A","Sample Agent A"','"Display Alice","Sample Agent A"')
     .replaceAll('"Sample Agent B","Sample Agent B"','"Display Bella","Sample Agent B"')
     .replaceAll('"Sample Agent C","Sample Agent C"','"Display Charlie","Sample Agent C"')
-    .replaceAll('"Sample Agent D","Sample Agent D"','"Display Delta","Sample Agent D"');
+    .replaceAll('"Sample Agent D","Sample Agent D"','"Display Delta","Sample Agent D"')
+    .replaceAll('"Sample Agent E","Sample Agent E"','"Display Echo","Sample Agent E"')
+    .replaceAll('"Sample Agent F","Sample Agent F"','"Display Foxtrot","Sample Agent F"')
+    .replaceAll('"Sample Agent G","Sample Agent G"','"Display Golf","Sample Agent G"')
+    .replaceAll('"Sample Agent H","Sample Agent H"','"Display Hotel","Sample Agent H"');
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
     tickets:read("examples/synthetic-ticket-snapshot.csv"),
     assignments:read("examples/synthetic-assignment-history.csv"),
