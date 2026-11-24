@@ -91,7 +91,7 @@ test("synthetic exports produce reconciled aggregate metrics without raw identif
   assert.equal(snapshot.allocations.find(row=>row.inbox_code==="detags").allocation_share_pct,100);
   assert.equal(snapshot.allocations.find(row=>row.inbox_code==="detags").current_open_workload,2);
   assert.equal(snapshot.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
-  assert.equal(snapshot.data_quality.workflow.rows_skipped,1);
+  assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Workflow history").rows_skipped,1);
   const exported=JSON.stringify(snapshot);
   for(const raw of ["SAMPLE-001","Sample Agent A","Sample Agent B","example@example.invalid","Free text with sample"]) {
     assert.equal(exported.includes(raw),false,"raw value leaked into snapshot: "+raw);
