@@ -449,6 +449,7 @@ const ADMIN_INTEGRATIONS = [
   {name:"Secret manager",boundary:"Connector credential storage",status:"Not connected",secret:"No vault reference configured",gate:"Server-side vault, scoped service identities, rotation, access logging and incident revocation."}
 ];
 
+let privateAgentNames=new Map();
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   importedSnapshot:null,
@@ -682,12 +683,65 @@ function validateAndSanitiseSnapshot(raw){
 function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
+function displayAgentName(reference){return privateAgentNames.get(reference)||reference;}
+function memberInitials(name){
+  const value=String(name||"").trim();
+  if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
+  return value.split(/\\s+/).filter(Boolean).slice(0,2).map(part=>Array.from(part)[0]||"").join("").toUpperCase()||"AG";
+}
+function parseCsvRows(input){
+  const source=String(input||"").replace(/^\\uFEFF/,"");
+  const rows=[];let row=[],field="",quoted=false;
+  for(let i=0;i<source.length;i++){
+    const ch=source[i];
+    if(quoted){
+      if(ch==='"'&&source[i+1]==='"'){field+='"';i++;}
+      else if(ch==='"')quoted=false;
+      else field+=ch;
+    }else if(ch==='"')quoted=true;
+    else if(ch===","){row.push(field);field="";}
+    else if(ch==="\\n"){row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);row=[];field="";}
+    else field+=ch;
+  }
+  row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);
+  if(quoted)throw new Error("The private lookup CSV has an unterminated quoted field.");
+  return rows;
+}
+async function loadPrivateAgentLookup(file){
+  if(!file)return;
+  if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before importing its private name lookup.");
+  if(file.size>1024*1024)throw new Error("The private name lookup must be smaller than 1 MB.");
+  const rows=parseCsvRows(await file.text());
+  if(rows.length<2)throw new Error("The private name lookup contains no agent records.");
+  const headers=rows[0].map(value=>value.trim().toLowerCase());
+  const refIndex=headers.indexOf("agent_ref"),nameIndex=headers.indexOf("display_name");
+  if(refIndex<0||nameIndex<0)throw new Error("The private lookup needs agent_ref and display_name columns.");
+  const known=new Set([
+    ...(state.importedSnapshot.team_roster||[]).map(row=>row.agent_ref),
+    ...state.importedSnapshot.allocations.map(row=>row.agent_ref),
+    ...state.importedSnapshot.activity_log.flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean))
+  ]);
+  const next=new Map();
+  for(const row of rows.slice(1)){
+    const reference=String(row[refIndex]||"").trim(),name=String(row[nameIndex]||"").trim();
+    if(!reference&&!name)continue;
+    if(!/^Agent-[A-F0-9]{10}$/.test(reference)||!name)throw new Error("A private lookup row has an invalid agent reference or blank display name.");
+    if(!known.has(reference))continue;
+    if(next.has(reference)&&next.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
+    next.set(reference,name);
+  }
+  if(!next.size)throw new Error("No private agent references matched the imported snapshot. Export the name lookup with the same workspace key.");
+  privateAgentNames=next;
+  render();
+  showToast("Loaded "+next.size+" colleague names in this browser tab only.");
+}
 async function loadLocalSnapshot(file){
   if(!file)return;
   if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
   const parsed=JSON.parse(await file.text());
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
+  privateAgentNames=new Map();
   state.period="snapshot";
   const periodSelect=document.getElementById("periodSelect");
   periodSelect.value="snapshot";
@@ -699,6 +753,8 @@ async function loadLocalSnapshot(file){
   document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Browser memory only · Refresh clears the import";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
+  document.getElementById("importAgentLookupButton").hidden=false;
+  document.getElementById("agentLookupFileInput").value="";
   state.selectedAgent=null;
   state.memberSearch="";
   state.search="";
@@ -721,6 +777,9 @@ function clearLocalSnapshot(){
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
   document.getElementById("snapshotFileInput").value="";
+  document.getElementById("importAgentLookupButton").hidden=true;
+  document.getElementById("agentLookupFileInput").value="";
+  privateAgentNames=new Map();
   state.selectedAgent=null;
   state.memberSearch="";
   render();
@@ -756,7 +815,7 @@ function allocationMatrix(){
       if(!agents.has(agentRef)){
         const roster=rosterByRef.get(agentRef);
         agents.set(agentRef,{
-          id:"snapshot-"+agentRef,name:agentRef,
+          id:"snapshot-"+agentRef,name:displayAgentName(agentRef),
           shift:roster?roster.shift_group:"Shift data not included",
           availability:roster?(roster.active_this_fortnight?"Active this fortnight":"Inactive this fortnight"):"Not supplied",
           activeThisFortnight:roster?roster.active_this_fortnight:null,
@@ -863,7 +922,8 @@ function shareMatrix(rows,full,denominatorRows){
   return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>'+(missing?'<p class="team-panel-note">Assignment history was not included in this import. First-assignment counts and shares are unavailable; current ownership is not used as a substitute.</p>':'');
 }
 function memberCell(name,shift){
-  return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
+  const shown=displayAgentName(name);
+  return '<div class="member-cell"><span class="member-avatar" aria-hidden="true">'+esc(memberInitials(shown))+'</span><span class="member-identity"><span class="member-name">'+esc(shown)+'</span><span class="member-role">'+esc(shift||"Team member")+'</span></span></div>';
 }
 function dataTable(headers,rows,empty){
   if(!rows.length)return '<div class="empty-state">'+(empty||"No records match the current filters.")+'</div>';
@@ -1037,7 +1097,8 @@ function renderOverview(){
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
-  const resolutionRate=t.received?t.resolved/t.received*100:null;
+  const resolutionRate=!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"
+    ?(t.received?t.resolved/t.received*100:null):null;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
     ? panel("Received-date coverage","Actual UTC received dates present in the imported ticket snapshot. Resolved-date history is not included.",overviewSnapshotTrendTable(),'<span class="subtle-tag">SOURCE DATES ONLY</span>')
@@ -1055,12 +1116,12 @@ function renderOverview(){
     kpiGrid([
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
-      kpi(imported?"Resolved / closed":"Tickets resolved",fmt(t.resolved),imported?"Current resolved state in the snapshot":"Recorded completed tickets in sample totals","✓"),
+      kpi(imported?"Resolved / closed":"Tickets resolved",resolutionRate===null?"Not tracked":fmt(t.resolved),imported?(resolutionRate===null?"The dispatcher does not yet record resolved / closed events":"Explicit resolved states in the snapshot"):"Recorded completed tickets in sample totals","✓"),
       kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
-      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRateValue+'</strong><small>'+(imported?"Resolved ÷ snapshot records; not a cohort closure rate":"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
       '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
@@ -1732,7 +1793,7 @@ function rosterProfiles(){
     return {
       ...base,
       id:"snapshot-"+meta.agent_ref,
-      name:meta.agent_ref,
+      name:displayAgentName(meta.agent_ref),
       shift:meta.shift_group,
       start:meta.shift_start_egypt,
       end:meta.shift_end_egypt,
