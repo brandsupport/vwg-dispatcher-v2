@@ -355,7 +355,7 @@ jobs:
             throw new Error('Roster invalid or overnight shift boundaries were not handled safely.');
           }
           const gapCoverage = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"08:00",end:"10:00"},{shift:"Late",start:"11:00",end:"12:00"}])');
-          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No sample shift coverage") {
+          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No scheduled shift coverage") {
             throw new Error('Roster coverage calculation must preserve zero-headcount gap intervals.');
           }
           const eligibilityStart = js.indexOf('const AGENTS = AGENT_NAMES.map(');
