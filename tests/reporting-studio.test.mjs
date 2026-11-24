@@ -82,7 +82,7 @@ test("synthetic exports produce reconciled aggregate metrics without raw identif
     )
   };
   const snapshot=await hooks.process(csvs);
-  assert.equal(snapshot.schema_version,"dispatcher-reporting-snapshot-1");
+  assert.equal(snapshot.schema_version,"dispatcher-reporting-snapshot-2");
   assert.equal(snapshot.tickets.total,5);
   assert.equal(JSON.stringify(snapshot.tickets.overall),JSON.stringify({ticket_records:5,initially_assigned:4,resolved:1,outstanding:4,unassigned:1}));
   assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="detags").initially_assigned,2);
