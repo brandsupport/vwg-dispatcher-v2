@@ -122,7 +122,7 @@ function parseCSV(text){
 function autoMap(headers,aliases){
   const indexed=headers.map(header=>({header,key:norm(header)}));
   for(const alias of aliases){const target=norm(alias);const exact=indexed.find(item=>item.key===target);if(exact)return exact.header;}
-  for(const alias of aliases){const target=norm(alias);const partial=indexed.find(item=>item.key&&target&&(item.key.includes(target)||target.includes(item.key)));if(partial)return partial.header;}
+  for(const alias of aliases){const target=norm(alias);const partial=indexed.find(item=>item.key&&target&&target.length>=4&&item.key.includes(target));if(partial)return partial.header;}
   return "";
 }
 const WORKBOOK_SHEET_HINTS={
