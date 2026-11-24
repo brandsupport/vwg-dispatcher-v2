@@ -179,7 +179,7 @@ jobs:
             throw new Error('Overview must stay at portfolio level and must not duplicate the ticket queue or live status panels.');
           }
           const liveStart = js.indexOf('function renderLive(){');
-          const liveEnd = js.indexOf('\\nfunction ticketQueueBase(', liveStart);
+          const liveEnd = js.indexOf('\nfunction ticketQueueBase(', liveStart);
           const liveView = liveStart >= 0 && liveEnd > liveStart ? js.slice(liveStart, liveEnd) : '';
           for (const text of ['Queue-first control room','Working queue','Needs attention','Team coverage','Recent operational events']) {
             if (!liveView.includes(text)) throw new Error('Live Operations is missing its ticket-workbench distinction: ' + text);
