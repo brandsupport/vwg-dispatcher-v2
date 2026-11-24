@@ -2300,7 +2300,7 @@ body { font-size:15.2px !important; line-height:1.52; }
 .sidebar-note strong { font-size:12.5px !important; }
 .sidebar-note small,.back-link,.sidebar-footer { font-size:11.8px !important; }
 .topbar-context { font-size:13.8px !important; }
-.context-kicker,.filter-control span { font-size:10.8px !important; }
+.context-kicker,.filter-control span { font-size:11.5px !important; }
 .filter-control select,.global-search input,.search-control,.select-control { font-size:13px !important; }
 .demo-badge { font-size:11.5px !important; }
 .user-avatar { font-size:11.5px !important; }
@@ -2323,7 +2323,7 @@ body { font-size:15.2px !important; line-height:1.52; }
 .page-content .member-role,.page-content .brand-detail-note,.page-content .agent-card-caption,
 .page-content .agent-folder-tags span,.page-content .control-card p,.page-content .control-tag,
 .page-content .info-strip,.page-content .unclassified-note { font-size:11.8px !important; line-height:1.5; }
-.page-content .data-table th { font-size:10.8px !important; padding:10px 9px; letter-spacing:.06em; }
+.page-content .data-table th { font-size:11.5px !important; padding:10px 9px; letter-spacing:.06em; }
 .page-content .data-table td { font-size:12px !important; padding:10px 9px; }
 .page-content .member-avatar { font-size:11.5px !important; }
 .page-content input,.page-content select,.page-content textarea { font-size:13px !important; min-height:34px; }
