@@ -114,7 +114,7 @@
       <div class="guardrail-grid">
         <div><strong>First assignment ≠ every touch</strong><p>Allocation share counts one initial assignment per unique ticket. Handover, reassignment and recovery activity stays separate.</p></div>
         <div><strong>Current workload is a snapshot</strong><p>Open work is derived from the ticket-state export and is not historical allocation volume.</p></div>
-        <div><strong>No invented timing metrics</strong><p>Response time, active handling time and resolution duration are not calculated from incomplete or ambiguous timestamps.</p></div>
+        <div><strong>No invented timing metrics</strong><p>Elapsed solve time is calculated only when explicit resolution and received timestamps are present and valid. Response time and active handling time remain unavailable without their own source events.</p></div>
         <div><strong>Uncertain data stays uncertain</strong><p>Unknown inboxes, duplicate ticket rows, ambiguous initial assignments and unmapped states are counted as quality issues, not silently guessed.</p></div>
       </div>
     </section>
