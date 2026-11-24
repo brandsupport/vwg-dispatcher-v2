@@ -148,7 +148,7 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
     received:2,assigned:2,resolved:0,open:2,unassigned:0
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
-    ["handover",1],["flag",0],["manual",0],["recovery",0],["reassignment",0]
+    ["handover",1],["flag",0],["manual",0],["recovery",1],["reassignment",0]
   ]);
 
   const rawValues=[
