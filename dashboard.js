@@ -1191,7 +1191,7 @@ function renderOverview(){
       panel("Brand demand",imported?"Approved brand classification across all inboxes; the snapshot does not include a brand-by-inbox cross-tab.":"Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
       panel("How to read this overview","Aggregate management measures — not a ticket workbench",'<div class="overview-guide-list">'+
         '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner. '+(imported&&!assignmentsAvailable?"No assignment-history file was included, so this measure is unavailable.":"")+'</span></div>'+
-        '<div><strong>Resolution ratio</strong><span>'+(imported?"Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate.":"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
+        '<div><strong>Resolution ratio</strong><span>'+(imported?(resolutionRate===null?"Not tracked until explicit Resolution Status is supplied.": "Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate."):"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
         '<div><strong>Outstanding workload</strong><span>'+(imported?"The current open-state snapshot, separate from historical allocation volume.":"A current-state sample snapshot, separate from historical allocation volume.")+'</span></div>'+
       '</div>','<span class="subtle-tag">MEASURE GUIDE</span>')+
     '</div>'+
@@ -2879,9 +2879,10 @@ function exportSummary(){
     ["Inbox",scopeName()],
     [imported?"Ticket records":"Received",t.received],
     ["Initially assigned",assignmentsAvailable?t.assigned:"Not supplied"],
-    ["Resolved / closed",t.resolved],
+    ["Resolved / closed",!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"?t.resolved:"Not tracked"],
     ["Outstanding",t.open],
     ["Currently unassigned",t.unassigned],
+    ["Average elapsed resolution",imported?formatDurationMinutes(state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes):"Not available"],
     ["Source mode",imported?"Sanitised aggregate · local browser memory":"Synthetic demonstration"]
   ]);
 }
@@ -2994,7 +2995,12 @@ document.addEventListener("input",event=>{
   const auditSearch=event.target.closest("[data-audit-search]");
   if(auditSearch){
     state.auditSearch=auditSearch.value;
-    if(state.importedSnapshot)renderAudit();else refreshAuditPanels();
+    if(state.importedSnapshot){
+      const start=auditSearch.selectionStart,end=auditSearch.selectionEnd;
+      renderAudit();
+      const next=document.querySelector("[data-audit-search]");
+      if(next){next.focus();next.setSelectionRange(start,end);}
+    }else refreshAuditPanels();
     return;
   }
   const reliabilitySearch=event.target.closest("[data-reliability-search]");
@@ -3044,7 +3050,7 @@ document.addEventListener("input",event=>{
     const count=document.getElementById("rosterDirectoryCount");
     if(state.selectedRosterAgent&&!profiles.some(agent=>agent.id===state.selectedRosterAgent))state.selectedRosterAgent=null;
     if(rows)rows.innerHTML=rosterDirectoryRows(profiles);
-    if(count)count.textContent="Showing "+profiles.length+" of "+AGENTS.length+" sample profiles";
+    if(count)count.textContent="Showing "+profiles.length+" of "+rosterProfiles().length+(state.importedSnapshot?" imported roster profiles":" sample profiles");
     const detail=document.getElementById("rosterAgentDetail");
     if(detail)detail.innerHTML=state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):"";
   }
