@@ -7,6 +7,9 @@ on:
       - "index.html"
       - "dashboard.css"
       - "dashboard.js"
+      - "reporting-studio.html"
+      - "reporting-studio.css"
+      - "reporting-studio.js"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -37,7 +40,7 @@ jobs:
       - name: Prepare static demo
         run: |
           mkdir -p _site
-          cp index.html dashboard.css dashboard.js _site/
+          cp index.html dashboard.css dashboard.js reporting-studio.html reporting-studio.css reporting-studio.js _site/
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
