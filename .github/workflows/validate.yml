@@ -498,8 +498,14 @@ jobs:
           for (const helper of ['auditBaseEvents','auditFilteredEvents','auditStats','auditEventRows','auditDetailMarkup','auditRelatedEvents','auditTimelineMarkup','refreshAuditPanels','exportAuditHistory']) {
             if (!js.includes('function ' + helper + '(')) throw new Error('Audit History helper missing: ' + helper);
           }
-          for (const text of ['data-audit-search','data-audit-filter','data-audit-event','dispatcher-sample-audit-history.csv','if(action==="reset-audit-filters")','if(action==="export-audit"){exportAuditHistory();return;}']) {
+          for (const text of ['data-audit-search','data-audit-filter','data-audit-event','dispatcher-sample-audit-history.csv','if(action==="reset-audit-filters")']) {
             if (!js.includes(text)) throw new Error('Audit History interaction or export is not wired: ' + text);
+          }
+          if (!js.includes('if(action==="export-audit"){if(state.importedSnapshot)exportImportedActivityLog();else exportAuditHistory();return;}')) {
+            throw new Error('Audit History must export the imported Activity Log when a sanitised snapshot is loaded.');
+          }
+          for (const helper of ['function importedActivityRows(){','function exportImportedActivityLog(){','function renderImportedActivityAudit(){','state.importedSnapshot.activity_log']) {
+            if (!js.includes(helper)) throw new Error('Imported Activity Log viewer/export helper missing: ' + helper);
           }
           const auditDataStart = js.indexOf('const AUDIT_LEDGER = [');
           const auditDataEnd = js.indexOf('\n];', auditDataStart) + 3;

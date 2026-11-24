@@ -109,6 +109,7 @@ function calculateDashboardViews(snapshot,folder="all"){
     extractConstant("BRANDS"),
     "const WORKFLOW_EVENT_SUMMARY=[];",
     "const state={importedSnapshot:"+JSON.stringify(snapshot)+",folder:"+JSON.stringify(folder)+",period:'snapshot',search:''};",
+    "function displayAgentName(reference){return reference;}",
     extractFunction("folderAssignedRows"),
     extractFunction("allocationMatrix"),
     extractFunction("rosterClockMinutes"),
@@ -249,7 +250,7 @@ test("the committed synthetic inputs are the three documented sample files",()=>
 });
 
 
-test("real tracker sheet headers map safely and Assignment Flag drives activity categorisation",async()=>{
+test("real tracker sheet headers map safely and Event Type drives Activity Log categorisation",async()=>{
   const assignmentsHeaders=[
     "Email Key / ID","Received At (UK)","Source Inbox","Email Subject","Original Assignee","Current Owner","Assignment Flag",
     "Incident Count","Last Incident At","Status","Handover Notes","Last Verified At","LoginUserEmail (optional)",
@@ -273,16 +274,16 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
     {"Email Key / ID":"SYN-104","Received At (UK)":"2026-11-22T10:20:00+00:00","Source Inbox":"Unadopts","Assignment Flag":"queued","Status":"Received"}
   ]);
   const activity=makeCsv(activityHeaders,[
-    {"Event Time (Egypt)":"2026-11-22T11:14:00+02:00","Event Type":"true","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"auto assigned"},
-    {"Event Time (Egypt)":"2026-11-22T11:30:00+02:00","Event Type":"false","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"handover"},
-    {"Event Time (Egypt)":"2026-11-22T11:40:00+02:00","Event Type":"true","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"category removal detected"},
-    {"Event Time (Egypt)":"2026-11-22T11:45:00+02:00","Event Type":"false","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"category restored"},
-    {"Event Time (Egypt)":"2026-11-22T12:00:00+02:00","Event Type":"true","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"manual assignment captured"},
-    {"Event Time (Egypt)":"2026-11-22T12:05:00+02:00","Event Type":"false","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"pending item not found"},
-    {"Event Time (Egypt)":"2026-11-22T12:20:00+02:00","Event Type":"true","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"auto assigned"},
-    {"Event Time (Egypt)":"2026-11-22T12:25:00+02:00","Event Type":"false","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"MULTIPLE_CATEGORIES_PENDING"},
-    {"Event Time (Egypt)":"2026-11-22T12:30:00+02:00","Event Type":"false","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"baseline registered"},
-    {"Event Time (Egypt)":"2026-11-22T12:35:00+02:00","Event Type":"false","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"queued"}
+    {"Event Time (Egypt)":"2026-11-22T11:14:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T11:30:00+02:00","Event Type":"HANDOVER","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T11:40:00+02:00","Event Type":"CATEGORY_REMOVAL_DETECTED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T11:45:00+02:00","Event Type":"CATEGORY_RESTORED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:00:00+02:00","Event Type":"MANUAL_ASSIGNMENT_CAPTURED","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T12:05:00+02:00","Event Type":"PENDING_ITEM_NOT_FOUND","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:20:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T12:25:00+02:00","Event Type":"MULTIPLE_CATEGORIES_PENDING","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:30:00+02:00","Event Type":"BASELINE_REGISTERED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:35:00+02:00","Event Type":"QUEUED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"}
   ]);
 
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
@@ -292,28 +293,34 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
 
   assert.deepEqual(run.mappings.tickets,{
     ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"",
-    received_at:"Received At (UK)",current_owner:"Current Owner"
+    received_at:"Received At (UK)",current_owner:"Current Owner",
+    resolution_status:"",resolved_at:"",resolved_by:""
   });
   assert.deepEqual(run.mappings.assignments,{
-    ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Assignment Flag",
+    ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",
     inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
   });
   assert.deepEqual(run.mappings.workflow,{
-    ticket_ref:"Email Key / ID",event_type:"Assignment Flag",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
+    ticket_ref:"Email Key / ID",event_type:"Event Type",
+    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",
+    original_assignee:"Original Assignee",current_owner:"Current Owner",
+    assignment_flag:"Assignment Flag",incident_count:"Incident Count"
   });
 
   assert.equal(snapshot.tickets.total,4);
   assert.deepEqual(snapshot.tickets.overall,{
-    ticket_records:4,initially_assigned:2,resolved:1,outstanding:3,unassigned:1
+    ticket_records:4,initially_assigned:3,resolved:0,outstanding:4,unassigned:1
   });
+  assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
+  assert.equal(snapshot.tickets.brand_field_mapped,false);
   const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,(snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0))]));
   assert.deepEqual(events,{
     assigned:2,handover:1,flagged:1,recovery_restored:1,
-    manual_assignment:1,exception:2
+    manual_assignment:1,exception:2,received:1
   });
+  assert.equal(snapshot.activity_log.length,9);
+  assert.ok(snapshot.activity_log.every(row=>row.assignment_flag===true||row.assignment_flag===false));
   assert.equal(snapshot.workflow.some(row=>row.event_type==="baseline_registered"),false);
-  assert.equal(snapshot.workflow.some(row=>row.event_type==="queued"),false);
 
   const imported=validateWithDashboard(snapshot);
   const views=calculateDashboardViews(imported);
@@ -321,6 +328,9 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
   assert.deepEqual(visibleEvents,{handover:1,flag:1,manual:1,recovery:1,reassignment:0});
 
   const serialised=JSON.stringify(imported);
+  assert.ok(snapshot.activity_log.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
+  assert.ok(snapshot.activity_log.every(row=>row.original_agent_ref===null||/^Agent-[A-F0-9]{10}$/.test(row.original_agent_ref)));
+  assert.ok(snapshot.activity_log.every(row=>row.current_agent_ref===null||/^Agent-[A-F0-9]{10}$/.test(row.current_agent_ref)));
   for(const prohibited of [
     "SYN-101","SYN-102","SYN-103","SYN-104",
     "SYNTHETIC SUBJECT - DO NOT EXPORT","SYNTHETIC PRIVATE NOTE",

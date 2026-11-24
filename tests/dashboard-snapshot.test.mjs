@@ -82,6 +82,58 @@ test("drops unrecognised properties before keeping the snapshot in memory", () =
   assert.equal("employee_name" in clean.allocations[0], false);
 });
 
+test("preserves safe Activity Log event details and automatic/manual method counts",()=>{
+  const input=snapshotFixture();
+  input.tickets.resolution_tracking="not_captured";
+  input.tickets.brand_field_mapped=false;
+  input.assignment_methods={automatic:1,manual:1,other:0};
+  input.activity_log=[{
+    event_time_egypt:"2026-11-24 12:00:00",
+    event_time_utc:"2026-11-24T10:00:00.000Z",
+    event_type:"handover",
+    inbox_code:"detags",
+    ticket_ref:"Ref-CCCCCCCCCC",
+    original_agent_ref:"Agent-AAAAAAAAAA",
+    current_agent_ref:"Agent-BBBBBBBBBB",
+    assignment_flag:true,
+    incident_count:1,
+    details:"This property must be discarded."
+  }];
+  const clean=JSON.parse(JSON.stringify(validate(input)));
+  assert.deepEqual(clean.assignment_methods,{automatic:1,manual:1,other:0});
+  assert.equal(clean.activity_log.length,1);
+  assert.equal(clean.activity_log[0].event_type,"handover");
+  assert.equal(clean.activity_log[0].ticket_ref,"Ref-CCCCCCCCCC");
+  assert.equal(clean.activity_log[0].assignment_flag,true);
+  assert.equal(clean.tickets.resolution_tracking,"not_captured");
+  assert.equal(clean.tickets.brand_field_mapped,false);
+  assert.equal("details" in clean.activity_log[0],false);
+});
+
+test("validates explicit resolution-time summaries and resolver references",()=>{
+  const input=snapshotFixture();
+  input.tickets.resolution_tracking="source_status_present";
+  input.tickets.resolution_metrics={
+    status_field_mapped:true,
+    resolved_at_field_mapped:true,
+    resolved_by_field_mapped:true,
+    overall:{timed_tickets:1,average_minutes:120,median_minutes:120,p90_minutes:120},
+    by_inbox:[
+      {inbox_code:"agency",timed_tickets:1,average_minutes:120,median_minutes:120,p90_minutes:120},
+      {inbox_code:"detags",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},
+      {inbox_code:"transfers",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},
+      {inbox_code:"unadopts",timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null}
+    ]
+  };
+  input.tickets.resolution_by_agent=[
+    {agent_ref:"Agent-AAAAAAAAAA",resolved_tickets:1,timed_tickets:1,total_resolution_minutes:120}
+  ];
+  const clean=JSON.parse(JSON.stringify(validate(input)));
+  assert.equal(clean.tickets.resolution_metrics.overall.average_minutes,120);
+  assert.equal(clean.tickets.resolution_by_agent[0].resolved_tickets,1);
+  assert.equal(clean.tickets.resolution_by_agent[0].total_resolution_minutes,120);
+});
+
 test("rejects an overall total that does not reconcile with inbox totals", () => {
   const input = snapshotFixture();
   input.tickets.overall.ticket_records = 99;

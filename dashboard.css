@@ -2498,3 +2498,112 @@ body { font-size:15.2px !important; line-height:1.52; }
 .local-snapshot-strip{border-color:rgba(255,92,145,.3)!important;background:linear-gradient(105deg,rgba(255,23,79,.105),rgba(194,160,255,.055))!important}
 .local-snapshot-strip .overview-demo-label{color:#ffb6c8}
 .local-snapshot-strip .overview-demo-label i{background:#ff174f!important;box-shadow:0 0 9px rgba(255,23,79,.7)}
+
+
+/* Reporting overhaul: prevent dense member and matrix content from colliding. */
+.page-content .grid-two > *,
+.page-content .grid-three > *,
+.page-content .panel,
+.page-content .panel-body,
+.page-content .team-profile-card,
+.page-content .team-profile-head,
+.page-content .team-profile-head > * {
+  min-width: 0;
+}
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+.data-table {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.data-table th,
+.data-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  vertical-align: middle;
+  line-height: 1.45;
+}
+.data-table th {
+  min-width: 86px;
+}
+.member-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.member-avatar {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  line-height: 1;
+}
+.member-identity {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+}
+.member-name,
+.member-role {
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.member-name { font-size: 12.8px; }
+.member-role { font-size: 11.8px; }
+.matrix-table { min-width: 920px; }
+.roster-directory-panel .table-wrap { max-height: 520px; }
+.roster-directory-panel .data-table { min-width: 1080px; }
+.roster-directory-panel .data-table td { padding: 10px 9px; }
+.roster-directory-panel .roster-member-button { display: block; width: 100%; min-width: 0; white-space: normal; }
+.roster-time-cell { white-space: nowrap !important; }
+.team-profile-head { align-items: flex-start; }
+.team-profile-head .member-cell { flex: 1 1 auto; min-width: 0; }
+.team-profile-head .member-name { font-size: 13px; }
+.team-workload-row { grid-template-columns: minmax(150px, .95fr) minmax(90px, 1fr) 44px; }
+.team-secondary-grid .table-wrap { max-width: 100%; }
+.activity-history-panel .audit-filter-toolbar { grid-template-columns: minmax(220px, 1fr) auto; }
+.activity-history-panel .data-table { min-width: 1040px; }
+.not-tracked-value { color: #e6b9ca; font-weight: 700; white-space: nowrap; }
+.live-import-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255,92,145,.22);
+  border-radius: 12px;
+  background: linear-gradient(105deg,rgba(255,23,79,.09),rgba(194,160,255,.05));
+}
+.live-import-footer > div { min-width: 0; flex: 1 1 440px; }
+.live-import-footer strong,
+.live-import-footer span { display: block; }
+.live-import-footer strong { color: #ffe3ec; font-size: 13px; }
+.live-import-footer span { margin-top: 4px; color: #b89eab; font-size: 12px; line-height: 1.5; }
+@media(max-width:760px) {
+  .activity-history-panel .audit-filter-toolbar { grid-template-columns: minmax(0,1fr); }
+  .team-workload-row { grid-template-columns: minmax(120px,1fr) minmax(60px,.8fr) 34px; }
+  .live-import-footer { align-items: stretch; }
+}

@@ -1,6 +1,6 @@
-ticket_ref,inbox,status,brand,received_at,current_owner
-SAMPLE-001,Agency Detags,In progress,Audi,2026-11-22T09:12:00Z,Sample Agent A
-SAMPLE-002,Detags,Waiting,Volkswagen,2026-11-22T09:28:00Z,Sample Agent B
-SAMPLE-003,Transfers,Resolved,Skoda,2026-11-22T10:03:00Z,Sample Agent C
-SAMPLE-004,Unadopts,Received,Unclassified,2026-11-22T10:31:00Z,Unassigned
-SAMPLE-005,Detags,Assigned,CUPRA,2026-11-22T11:02:00Z,Sample Agent B
+ticket_ref,inbox,status,resolution_status,brand,received_at,current_owner,resolved_at,resolved_by
+SAMPLE-001,Agency Detags,In progress,Open,Audi,2026-11-22T09:12:00Z,Sample Agent A,,
+SAMPLE-002,Detags,Waiting,Open,Volkswagen,2026-11-22T09:28:00Z,Sample Agent B,,
+SAMPLE-003,Transfers,Resolved,Resolved,Skoda,2026-11-22T10:03:00Z,Sample Agent C,2026-11-22T10:55:00Z,Sample Agent C
+SAMPLE-004,Unadopts,Received,Open,Unclassified,2026-11-22T10:31:00Z,Unassigned,,
+SAMPLE-005,Detags,Assigned,Open,CUPRA,2026-11-22T11:02:00Z,Sample Agent B,,

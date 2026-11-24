@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1019">
   <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
-  <link rel="stylesheet" href="./reporting-studio.css?v=20261124-balanced-footer-2">
+  <link rel="stylesheet" href="./reporting-studio.css?v=20261124-private-lookup-2">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js" defer></script>
+  <script src="./reporting-studio.js?v=20261124-reporting-overhaul-3" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -103,7 +103,8 @@
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
       <div class="download-bar">
         <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
-        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
+        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button><button id="downloadPrivateLookup" class="button button-muted" type="button">Download private agent-name lookup</button></div>
+        <p class="table-note private-lookup-note"><strong>Keep this private file separate.</strong> It contains colleague display names and pseudonymous IDs. Do not upload it to GitHub, share it with the JSON snapshot, or send it outside approved recipients. Import it separately into the dashboard on your approved device to show colleague names locally.</p>
       </div>
       <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>
     </section>
@@ -113,7 +114,7 @@
       <div class="guardrail-grid">
         <div><strong>First assignment ≠ every touch</strong><p>Allocation share counts one initial assignment per unique ticket. Handover, reassignment and recovery activity stays separate.</p></div>
         <div><strong>Current workload is a snapshot</strong><p>Open work is derived from the ticket-state export and is not historical allocation volume.</p></div>
-        <div><strong>No invented timing metrics</strong><p>Response time, active handling time and resolution duration are not calculated from incomplete or ambiguous timestamps.</p></div>
+        <div><strong>No invented timing metrics</strong><p>Elapsed solve time is calculated only when explicit resolution and received timestamps are present and valid. Response time and active handling time remain unavailable without their own source events.</p></div>
         <div><strong>Uncertain data stays uncertain</strong><p>Unknown inboxes, duplicate ticket rows, ambiguous initial assignments and unmapped states are counted as quality issues, not silently guessed.</p></div>
       </div>
     </section>

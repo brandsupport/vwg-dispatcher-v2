@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./dashboard.css?v=20261124-local-snapshot-2">
-  <script src="./dashboard.js?v=20261124-startup-fix-1" defer></script>
+  <link rel="stylesheet" href="./dashboard.css?v=20261124-reporting-overhaul-3">
+  <script src="./dashboard.js?v=20261124-reporting-overhaul-3" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -84,8 +84,10 @@
           </label>
           <div class="dataset-actions">
             <button class="dataset-import-button" id="importSnapshotButton" type="button">Import snapshot</button>
+            <button class="dataset-import-button" id="importAgentLookupButton" type="button" hidden>Import private names</button>
             <button class="dataset-reset-button" id="resetSnapshotButton" type="button" hidden>Use demo</button>
             <input id="snapshotFileInput" type="file" accept=".json,application/json" hidden>
+            <input id="agentLookupFileInput" type="file" accept=".csv,text/csv" hidden>
           </div>
           <span class="demo-badge" id="datasetBadge"><span></span> DEMO DATA</span>
           <button class="user-avatar" id="profileButton" type="button" aria-label="Prototype profile">DI</button>

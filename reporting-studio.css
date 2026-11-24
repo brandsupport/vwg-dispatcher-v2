@@ -501,3 +501,21 @@ body { font-size:15.8px !important; line-height:1.55; }
   .studio-footer-main { justify-content:center; }
   .studio-footer-credit { width:100%; }
 }
+
+
+/* Private local agent lookup control */
+.download-actions { display:flex; flex-wrap:wrap; gap:9px; min-width:0; }
+.download-actions .button { max-width:100%; white-space:normal; }
+.private-lookup-note {
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid rgba(255,92,145,.22);
+  border-radius:9px;
+  background:rgba(255,23,79,.055);
+  color:#c6a7b6;
+}
+.private-lookup-note strong { color:#ffbfd0; }
+@media(max-width:600px) {
+  .download-actions { display:grid; grid-template-columns:minmax(0,1fr); }
+  .download-actions .button { width:100%; }
+}

@@ -449,6 +449,7 @@ const ADMIN_INTEGRATIONS = [
   {name:"Secret manager",boundary:"Connector credential storage",status:"Not connected",secret:"No vault reference configured",gate:"Server-side vault, scoped service identities, rotation, access logging and incident revocation."}
 ];
 
+let privateAgentNames=new Map();
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   importedSnapshot:null,
@@ -533,6 +534,54 @@ function validateAndSanitiseSnapshot(raw){
     outstanding:count(overall.outstanding,"overall outstanding count"),
     unassigned:count(overall.unassigned,"overall unassigned count")
   };
+  const resolutionTracking=raw.tickets.resolution_tracking??"not_captured";
+  if(!["not_captured","source_status_present"].includes(resolutionTracking))fail("The resolution-tracking metadata is invalid.");
+  const brandFieldMapped=raw.tickets.brand_field_mapped===true;
+  const nullableMinutes=(value,label)=>{
+    if(value===null||value===undefined)return null;
+    if(typeof value!=="number"||!Number.isFinite(value)||value<0)fail("Invalid "+label+".");
+    return value;
+  };
+  const cleanDurationSummary=(value,label)=>{
+    if(!isObject(value))fail("The "+label+" resolution summary is invalid.");
+    return {
+      timed_tickets:count(value.timed_tickets??0,label+" timed tickets"),
+      average_minutes:nullableMinutes(value.average_minutes,label+" average resolution time"),
+      median_minutes:nullableMinutes(value.median_minutes,label+" median resolution time"),
+      p90_minutes:nullableMinutes(value.p90_minutes,label+" p90 resolution time")
+    };
+  };
+  const rawResolutionMetrics=raw.tickets.resolution_metrics||{
+    status_field_mapped:resolutionTracking==="source_status_present",
+    resolved_at_field_mapped:false,resolved_by_field_mapped:false,
+    overall:{timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null},by_inbox:[]
+  };
+  if(!isObject(rawResolutionMetrics))fail("The resolution metrics section is invalid.");
+  const resolutionMetrics={
+    status_field_mapped:rawResolutionMetrics.status_field_mapped===true,
+    resolved_at_field_mapped:rawResolutionMetrics.resolved_at_field_mapped===true,
+    resolved_by_field_mapped:rawResolutionMetrics.resolved_by_field_mapped===true,
+    overall:cleanDurationSummary(rawResolutionMetrics.overall,"overall"),
+    by_inbox:(rawResolutionMetrics.by_inbox||[]).map(row=>{
+      if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("A resolution summary contains an invalid inbox.");
+      return {inbox_code:row.inbox_code,...cleanDurationSummary(row,"inbox")};
+    })
+  };
+  if(resolutionMetrics.overall.timed_tickets>cleanOverall.resolved)fail("Timed resolution records exceed the resolved ticket count.");
+  const resolutionByAgentRaw=raw.tickets.resolution_by_agent||[];
+  if(!Array.isArray(resolutionByAgentRaw))fail("The per-agent resolution section is invalid.");
+  const resolutionByAgent=resolutionByAgentRaw.map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||"")))fail("A resolution row has an invalid agent reference.");
+    const resolvedTickets=count(row.resolved_tickets,"agent resolved ticket count");
+    const timedTickets=count(row.timed_tickets,"agent timed resolution count");
+    if(timedTickets>resolvedTickets)fail("Agent timed resolutions exceed resolved ticket count.");
+    return {
+      agent_ref:row.agent_ref,resolved_tickets:resolvedTickets,timed_tickets:timedTickets,
+      total_resolution_minutes:count(row.total_resolution_minutes??0,"agent total resolution minutes")
+    };
+  });
+  if(new Set(resolutionByAgent.map(row=>row.agent_ref)).size!==resolutionByAgent.length)fail("Duplicate per-agent resolution rows were found.");
+  if(resolutionByAgent.reduce((sum,row)=>sum+row.resolved_tickets,0)>cleanOverall.resolved)fail("Per-agent resolved ticket totals exceed the resolved ticket count.");
   const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
   for(const key of Object.keys(cleanOverall)){
     if(sum(byInbox,key)!==cleanOverall[key])fail("Inbox totals do not reconcile with the overall "+key+" value.");
@@ -634,13 +683,43 @@ function validateAndSanitiseSnapshot(raw){
   if(!sources.some(row=>row.source==="Ticket snapshot"))fail("The data-quality section does not identify the ticket snapshot source.");
   const sourceSet=new Set(sources.map(row=>row.source));
   if(sourceSet.size!==sources.length)fail("Duplicate data-quality source rows were found.");
+  const methodsRaw=raw.assignment_methods||{automatic:cleanOverall.initially_assigned,manual:0,other:0};
+  const assignmentMethods={
+    automatic:count(methodsRaw.automatic??0,"automatic first-assignment count"),
+    manual:count(methodsRaw.manual??0,"manual first-assignment count"),
+    other:count(methodsRaw.other??0,"other first-assignment count")
+  };
+  if(assignmentMethods.automatic+assignmentMethods.manual+assignmentMethods.other!==cleanOverall.initially_assigned){
+    fail("Automatic, manual and other first-assignment counts do not reconcile.");
+  }
+  const activityLogRaw=raw.activity_log??[];
+  if(!Array.isArray(activityLogRaw))fail("The Activity Log detail section is invalid.");
+  const activityLog=activityLogRaw.map(row=>{
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code)||
+       !/^Ref-[A-F0-9]{10}$/.test(String(row.ticket_ref||"")))fail("An Activity Log event contains an invalid reference or event type.");
+    if(row.event_time_utc!==null&&row.event_time_utc!==""&&(typeof row.event_time_utc!=="string"||!row.event_time_utc.endsWith("Z")||!Number.isFinite(Date.parse(row.event_time_utc))))fail("An Activity Log event contains an invalid timestamp.");
+    for(const key of ["original_agent_ref","current_agent_ref"]){
+      if(row[key]!==null&&row[key]!==undefined&&!/^Agent-[A-F0-9]{10}$/.test(String(row[key])))fail("An Activity Log event contains an invalid agent reference.");
+    }
+    if(typeof row.assignment_flag!=="boolean")fail("An Activity Log assignment flag is invalid.");
+    return {
+      event_time_egypt:typeof row.event_time_egypt==="string"?row.event_time_egypt:"",
+      event_time_utc:row.event_time_utc||null,
+      event_type:row.event_type,inbox_code:row.inbox_code,ticket_ref:row.ticket_ref,
+      original_agent_ref:row.original_agent_ref||null,current_agent_ref:row.current_agent_ref||null,
+      assignment_flag:row.assignment_flag,
+      incident_count:count(row.incident_count??0,"Activity Log incident count")
+    };
+  });
   return {
     schema_version:"dispatcher-reporting-snapshot-1",
     generated_at_utc:raw.generated_at_utc,
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
-    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-    allocations,team_roster:teamRoster,workflow,
+    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
+      resolution_tracking:resolutionTracking,resolution_metrics:resolutionMetrics,resolution_by_agent:resolutionByAgent,
+      brand_field_mapped:brandFieldMapped},
+    allocations,assignment_methods:assignmentMethods,team_roster:teamRoster,workflow,activity_log:activityLog,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
@@ -650,12 +729,65 @@ function validateAndSanitiseSnapshot(raw){
 function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
+function displayAgentName(reference){return privateAgentNames.get(reference)||reference;}
+function memberInitials(name){
+  const value=String(name||"").trim();
+  if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
+  return value.split(/\\s+/).filter(Boolean).slice(0,2).map(part=>Array.from(part)[0]||"").join("").toUpperCase()||"AG";
+}
+function parseCsvRows(input){
+  const source=String(input||"").replace(/^\\uFEFF/,"");
+  const rows=[];let row=[],field="",quoted=false;
+  for(let i=0;i<source.length;i++){
+    const ch=source[i];
+    if(quoted){
+      if(ch==='"'&&source[i+1]==='"'){field+='"';i++;}
+      else if(ch==='"')quoted=false;
+      else field+=ch;
+    }else if(ch==='"')quoted=true;
+    else if(ch===","){row.push(field);field="";}
+    else if(ch==="\\n"){row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);row=[];field="";}
+    else field+=ch;
+  }
+  row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);
+  if(quoted)throw new Error("The private lookup CSV has an unterminated quoted field.");
+  return rows;
+}
+async function loadPrivateAgentLookup(file){
+  if(!file)return;
+  if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before importing its private name lookup.");
+  if(file.size>1024*1024)throw new Error("The private name lookup must be smaller than 1 MB.");
+  const rows=parseCsvRows(await file.text());
+  if(rows.length<2)throw new Error("The private name lookup contains no agent records.");
+  const headers=rows[0].map(value=>value.trim().toLowerCase());
+  const refIndex=headers.indexOf("agent_ref"),nameIndex=headers.indexOf("display_name");
+  if(refIndex<0||nameIndex<0)throw new Error("The private lookup needs agent_ref and display_name columns.");
+  const known=new Set([
+    ...(state.importedSnapshot.team_roster||[]).map(row=>row.agent_ref),
+    ...state.importedSnapshot.allocations.map(row=>row.agent_ref),
+    ...state.importedSnapshot.activity_log.flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean))
+  ]);
+  const next=new Map();
+  for(const row of rows.slice(1)){
+    const reference=String(row[refIndex]||"").trim(),name=String(row[nameIndex]||"").trim();
+    if(!reference&&!name)continue;
+    if(!/^Agent-[A-F0-9]{10}$/.test(reference)||!name)throw new Error("A private lookup row has an invalid agent reference or blank display name.");
+    if(!known.has(reference))continue;
+    if(next.has(reference)&&next.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
+    next.set(reference,name);
+  }
+  if(!next.size)throw new Error("No private agent references matched the imported snapshot. Export the name lookup with the same workspace key.");
+  privateAgentNames=next;
+  render();
+  showToast("Loaded "+next.size+" colleague names in this browser tab only.");
+}
 async function loadLocalSnapshot(file){
   if(!file)return;
   if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
   const parsed=JSON.parse(await file.text());
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
+  privateAgentNames=new Map();
   state.period="snapshot";
   const periodSelect=document.getElementById("periodSelect");
   periodSelect.value="snapshot";
@@ -667,6 +799,8 @@ async function loadLocalSnapshot(file){
   document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Browser memory only · Refresh clears the import";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
+  document.getElementById("importAgentLookupButton").hidden=false;
+  document.getElementById("agentLookupFileInput").value="";
   state.selectedAgent=null;
   state.memberSearch="";
   state.search="";
@@ -689,12 +823,23 @@ function clearLocalSnapshot(){
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
   document.getElementById("snapshotFileInput").value="";
+  document.getElementById("importAgentLookupButton").hidden=true;
+  document.getElementById("agentLookupFileInput").value="";
+  privateAgentNames=new Map();
   state.selectedAgent=null;
   state.memberSearch="";
   render();
   showToast("Returned to the synthetic demo dataset.");
 }
 function fmt(value){return Math.round(value).toLocaleString("en-GB");}
+function formatDurationMinutes(value){
+  if(value===null||value===undefined||!Number.isFinite(value))return "Not tracked";
+  const minutes=Math.max(0,Math.round(value));
+  const days=Math.floor(minutes/1440),hours=Math.floor((minutes%1440)/60),mins=minutes%60;
+  if(days)return days+"d "+hours+"h "+mins+"m";
+  if(hours)return hours+"h "+mins+"m";
+  return mins+"m";
+}
 function scaled(value){return Math.max(0,Math.round(value*(state.importedSnapshot?1:PERIODS[state.period].factor)));}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
@@ -724,7 +869,7 @@ function allocationMatrix(){
       if(!agents.has(agentRef)){
         const roster=rosterByRef.get(agentRef);
         agents.set(agentRef,{
-          id:"snapshot-"+agentRef,name:agentRef,
+          id:"snapshot-"+agentRef,name:displayAgentName(agentRef),
           shift:roster?roster.shift_group:"Shift data not included",
           availability:roster?(roster.active_this_fortnight?"Active this fortnight":"Inactive this fortnight"):"Not supplied",
           activeThisFortnight:roster?roster.active_this_fortnight:null,
@@ -831,7 +976,8 @@ function shareMatrix(rows,full,denominatorRows){
   return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>'+(missing?'<p class="team-panel-note">Assignment history was not included in this import. First-assignment counts and shares are unavailable; current ownership is not used as a substitute.</p>':'');
 }
 function memberCell(name,shift){
-  return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
+  const shown=displayAgentName(name);
+  return '<div class="member-cell"><span class="member-avatar" aria-hidden="true">'+esc(memberInitials(shown))+'</span><span class="member-identity"><span class="member-name">'+esc(shown)+'</span><span class="member-role">'+esc(shift||"Team member")+'</span></span></div>';
 }
 function dataTable(headers,rows,empty){
   if(!rows.length)return '<div class="empty-state">'+(empty||"No records match the current filters.")+'</div>';
@@ -899,7 +1045,7 @@ function overviewInboxSnapshot(inboxes){
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
       '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(imported&&state.importedSnapshot.tickets.resolution_tracking!=="source_status_present"?"Not tracked":fmt(folder.resolved))+'</b></span></div>'+
       '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
       '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
     '</article>';
@@ -1005,7 +1151,10 @@ function renderOverview(){
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
-  const resolutionRate=t.received?t.resolved/t.received*100:null;
+  const resolutionRate=!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"
+    ?(t.received?t.resolved/t.received*100:null):null;
+  const resolutionAverage=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes:null;
+  const resolutionTimedCount=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.timed_tickets||0:0;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
     ? panel("Received-date coverage","Actual UTC received dates present in the imported ticket snapshot. Resolved-date history is not included.",overviewSnapshotTrendTable(),'<span class="subtle-tag">SOURCE DATES ONLY</span>')
@@ -1023,12 +1172,12 @@ function renderOverview(){
     kpiGrid([
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
-      kpi(imported?"Resolved / closed":"Tickets resolved",fmt(t.resolved),imported?"Current resolved state in the snapshot":"Recorded completed tickets in sample totals","✓"),
+      kpi(imported?"Resolved / closed":"Tickets resolved",resolutionRate===null?"Not tracked":fmt(t.resolved),imported?(resolutionRate===null?"The dispatcher does not yet record resolved / closed events":"Explicit resolved states in the snapshot"):"Recorded completed tickets in sample totals","✓"),
       kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
-      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRateValue+'</strong><small>'+(imported?"Resolved ÷ snapshot records; not a cohort closure rate":"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
       '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
@@ -1042,7 +1191,7 @@ function renderOverview(){
       panel("Brand demand",imported?"Approved brand classification across all inboxes; the snapshot does not include a brand-by-inbox cross-tab.":"Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
       panel("How to read this overview","Aggregate management measures — not a ticket workbench",'<div class="overview-guide-list">'+
         '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner. '+(imported&&!assignmentsAvailable?"No assignment-history file was included, so this measure is unavailable.":"")+'</span></div>'+
-        '<div><strong>Resolution ratio</strong><span>'+(imported?"Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate.":"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
+        '<div><strong>Resolution ratio</strong><span>'+(imported?(resolutionRate===null?"Not tracked until explicit Resolution Status is supplied.": "Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate."):"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
         '<div><strong>Outstanding workload</strong><span>'+(imported?"The current open-state snapshot, separate from historical allocation volume.":"A current-state sample snapshot, separate from historical allocation volume.")+'</span></div>'+
       '</div>','<span class="subtle-tag">MEASURE GUIDE</span>')+
     '</div>'+
@@ -1189,7 +1338,48 @@ function liveAttentionPanel(base){
     '<button class="live-attention-item" type="button" data-ticket="'+esc(ticket.ref)+'"><span class="live-attention-mark '+(ticket.status==="Overdue"?"danger":"warning")+'"></span><span class="live-attention-copy"><strong>'+esc(ticket.ref)+' · '+esc(ticket.status)+'</strong><small>'+esc(ticket.subject)+'</small></span><span class="live-attention-age">'+esc(ticket.age)+'</span></button>'
   ).join("")+'</div>';
 }
+function renderImportedLiveOperations(){
+  const folders=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
+  const team=allocationMatrix().filter(agent=>activeSearch(agent.name)).sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
+  const received=folders.reduce((sum,folder)=>sum+folder.received,0);
+  const assigned=folders.reduce((sum,folder)=>sum+folder.assigned,0);
+  const open=folders.reduce((sum,folder)=>sum+folder.open,0);
+  const unassigned=folders.reduce((sum,folder)=>sum+folder.unassigned,0);
+  const methods=state.importedSnapshot.assignment_methods;
+  const workflow=(state.importedSnapshot.workflow||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const statusRows=folders.map(folder=>
+    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(folder.open)+'</td><td>'+(state.importedSnapshot.tickets.resolution_tracking==="source_status_present"?fmt(folder.resolved):"Not tracked")+'</td></tr>'
+  );
+  const ownerRows=team.map(agent=>
+    '<tr><td>'+memberCell(agent.name,agent.shift||"Shift data not included")+'</td><td class="total-cell">'+fmt(agent.open)+'</td><td>'+fmt(agent.assigned)+'</td><td>'+esc(agent.availability||"Not supplied")+'</td></tr>'
+  );
+  const eventRows=workflow.map(row=>
+    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+  );
+  pageContent.innerHTML=heading("CURRENT-STATE OPERATIONS","Workstream control room","This is the operational summary for the imported point-in-time workbook snapshot. It is not a live Outlook connection and does not contain individual ticket details.",'<button class="btn btn-secondary" data-go="folders">Open folder share ↗</button>')+
+    '<div class="live-environment-strip local-snapshot-strip"><span class="live-env-tag"><i class="demo-dot"></i> SANITISED SNAPSHOT</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Not controlled from this dashboard</span><span><b>Records</b> '+fmt(received)+'</span></div>'+
+    kpiGrid([
+      kpi("Ticket records",fmt(received),"Current Assignments register rows","▤"),
+      kpi("Initial allocations",fmt(assigned),fmt(methods.automatic)+" automatic · "+fmt(methods.manual)+" manual","↗"),
+      kpi("Open workload",fmt(open),"Current owner / status snapshot","◷"),
+      kpi("Unassigned open",fmt(unassigned),"Rows without a current owner","＋",null,unassigned?"warning":"positive")
+    ])+
+    '<div class="grid-two live-import-primary">'+
+      panel("Inbox workstream status","Current row counts from Assignments, split by the four monitored Inbox folders",dataTable(["Inbox","Ticket records","First assigned","Unassigned","Open workload","Resolved / closed"],statusRows),'<span class="subtle-tag">SOURCE SNAPSHOT</span>')+
+      panel("Allocation method","Initial allocation events read from Activity Log column B",dataTable(["Method","Tickets","Share"],[
+        ["Automatic",fmt(methods.automatic),(assigned?methods.automatic/assigned*100:0).toFixed(1)+"%"],
+        ["Manual",fmt(methods.manual),(assigned?methods.manual/assigned*100:0).toFixed(1)+"%"],
+        ["Other / legacy",fmt(methods.other),(assigned?methods.other/assigned*100:0).toFixed(1)+"%"]
+      ]),'<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
+    '</div>'+
+    '<div class="grid-two live-import-secondary">'+
+      panel("Current owner workload","Open records grouped by the current owner captured in Assignments",team.length?dataTable(["Colleague","Open workload","First assigned","Fortnight status"],ownerRows):'<div class="empty-state">No owner counts are available in this snapshot.</div>','<button class="panel-action" data-go="team">Agent review ↗</button>')+
+      panel("Recent event categories","Activity Log event totals in the imported snapshot. Event counts are not live.",eventRows.length?dataTable(["Event","Inbox","Events","Tickets affected"],eventRows):'<div class="empty-state">No mapped Activity Log events are included.</div>','<button class="panel-action" data-go="workflow">Workflow insights ↗</button>')+
+    '</div>'+
+    '<div class="live-import-footer"><div><strong>Actions are deliberately read-only.</strong><span>The dashboard cannot assign, resolve, reassign or move Outlook messages. Use Classic Outlook and the dispatcher for operational actions; use this screen to review the imported state.</span></div><button class="btn btn-primary" type="button" data-go="audit">Review Activity Log ↗</button></div>';
+}
 function renderLive(){
+  if(state.importedSnapshot){renderImportedLiveOperations();return;}
   const base=liveBaseTickets();
   const open=base.filter(t=>!["Resolved","Closed"].includes(t.status));
   const unassigned=base.filter(t=>t.status==="Unassigned").length;
@@ -1353,8 +1543,10 @@ function ticketTelemetryCard(title,reason){
 function renderTickets(){
   if(state.importedSnapshot){
     const t=totals(),assignmentAvailable=importedSourceAvailable("Assignment history");
+    const resolutionAvailable=state.importedSnapshot.tickets.resolution_tracking==="source_status_present";
+    const resolutionSummary=state.importedSnapshot.tickets.resolution_metrics?.overall||{timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null};
     const inboxRows=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder).map(folder=>
-      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+fmt(folder.resolved)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
+      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+(resolutionAvailable?fmt(folder.resolved):"Not tracked")+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
     );
     const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30).map(row=>
       '<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.ticket_records)+'</td></tr>'
@@ -1364,19 +1556,24 @@ function renderTickets(){
       kpiGrid([
         kpi("Ticket records",fmt(t.received),"Unique current-state records","▤"),
         kpi("Initially assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Validated first-assignment events":"Assignment history was not supplied","↗"),
-        kpi("Resolved / closed",fmt(t.resolved),"Current state at snapshot time","✓"),
+        kpi("Resolved / closed",resolutionAvailable?fmt(t.resolved):"Not tracked",resolutionAvailable?"Explicit Resolution Status / Resolved At source fields":"The current tracker does not record ticket closure","✓"),
         kpi("Outstanding",fmt(t.open),"Current open-state records","◷")
       ])+
       '<div class="grid-two ticket-analytics-primary">'+
         panel("Ticket state by inbox","Current-state records from the imported aggregate",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned"],inboxRows),'<span class="subtle-tag">SNAPSHOT</span>')+
         panel("Current ticket state","Portfolio totals · current snapshot",dataTable(["Measure","Records"],[
           '<tr><td>Ticket records</td><td class="total-cell">'+fmt(t.received)+'</td></tr>',
-          '<tr><td>Resolved / closed</td><td>'+fmt(t.resolved)+'</td></tr>',
+          '<tr><td>Resolved / closed</td><td>'+(resolutionAvailable?fmt(t.resolved):"Not tracked")+'</td></tr>',
           '<tr><td>Outstanding</td><td>'+fmt(t.open)+'</td></tr>',
           '<tr><td>Currently unassigned</td><td>'+fmt(t.unassigned)+'</td></tr>'
         ]))+
       '</div>'+
       panel("Received-date coverage","Records with valid UTC received dates only. Records without a trustworthy timestamp are excluded from this date list.",dates.length?dataTable(["Received date · UTC","Inbox","Ticket records"],dates):'<div class="empty-state">No valid received dates were supplied in this snapshot.</div>')+
+      panel("Elapsed resolution time","Calculated from Received At (UK) and Resolved At (UK) only for records with valid explicit resolution timestamps.",resolutionSummary.timed_tickets?dataTable(["Measure","Elapsed time","Timed tickets"],[
+        '<tr><td>Average</td><td class="total-cell">'+formatDurationMinutes(resolutionSummary.average_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>',
+        '<tr><td>Median</td><td>'+formatDurationMinutes(resolutionSummary.median_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>',
+        '<tr><td>90th percentile</td><td>'+formatDurationMinutes(resolutionSummary.p90_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>'
+      ]):'<div class="empty-state">Elapsed solve time is not tracked in this source. The tracker must provide Resolved At (UK) in addition to Received At (UK).</div>')+
       '<div class="prototype-warning"><strong>Why there is no ticket explorer:</strong> the Studio removes ticket references and source rows before export. To inspect individual tickets, use the approved source system; this public dashboard does not receive or store raw ticket-level data.</div>';
     return;
   }
@@ -1447,23 +1644,25 @@ function metricPanel(title,value,copy,note){
 function renderBrands(){
   const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
   const imported=Boolean(state.importedSnapshot);
-  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explore validated brand categories from the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Brand totals · all inboxes</span><span>No brand-by-inbox split supplied</span></div>':'')+
+  const brandSourceAvailable=!imported||state.importedSnapshot.tickets.brand_field_mapped===true;
+  const displayRows=brandSourceAvailable?rows:[{...rows.find(row=>row.id==="other"),id:"unclassified",name:"Brand not recorded",value:total}];
+  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?(brandSourceAvailable?"Explore brand values supplied in the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"The current tracker export contains no Brand field. All "+fmt(total)+" tickets remain unclassified until the dispatcher records brand explicitly."):"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+(brandSourceAvailable?"Brand totals · all inboxes":"BRAND FIELD NOT CAPTURED")+'</span><span>No brand-by-inbox split supplied</span></div>':'')+
     kpiGrid([
       kpi(imported?"Ticket records":"Total tickets",fmt(total),imported?"Current-state snapshot records":"Distinct received tickets","▤"),
-      kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
-      kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
-      kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
+      kpi("Identified brand",brandSourceAvailable?fmt(known):"Not captured",brandSourceAvailable?(total?(known/total*100).toFixed(1)+"% classified":"—"):"The tracker has no Brand column","◈"),
+      kpi("Audi tickets",brandSourceAvailable?fmt(rows.find(b=>b.id==="audi").value):"Not captured",brandSourceAvailable?"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%":"No brand source","A"),
+      kpi("Škoda tickets",brandSourceAvailable?fmt(rows.find(b=>b.id==="skoda").value):"Not captured",brandSourceAvailable?"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%":"No brand source","Š")
     ])+
     '<div class="grid-two">'+
-      panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
+      panel("Brand distribution",brandSourceAvailable?"Share of unique tickets in the current scope":"All records retained as unclassified because the source does not record brand",brandBarList(displayRows),'<span class="subtle-tag">'+(brandSourceAvailable?"7 CATEGORIES":"NOT CAPTURED")+'</span>')+
       panel("Brand mix by inbox",imported?"Not supplied by the aggregate snapshot. Clear the global inbox filter to review overall brand totals.":"The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">'+(imported?"NOT IN SOURCE":"SAMPLE COMPARISON")+'</span>')+
     '</div>'+
-    panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],rows.map(b=>{
+    panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],displayRows.map(b=>{
       const share=total?b.value/total*100:0;
       return '<tr><td><span class="brand-register-name"><i style="background:'+b.color+'"></i>'+b.name+'</span></td><td class="total-cell">'+fmt(b.value)+'</td><td>'+share.toFixed(1)+'%</td><td>'+statusPill(b.id==="other"?"Review required":"Identified")+'</td><td>'+(b.id==="other"?"Retain until confirmed":"Explicit / validated mapping")+'</td></tr>';
     })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
-    '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
+    '<div class="prototype-warning"><strong>Classification safeguard.</strong> '+(brandSourceAvailable?"Brand identity comes from an explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.":"The Assignments sheet currently has no Brand column, so the dashboard cannot count Audi, Volkswagen, Škoda, SEAT, CUPRA or VWCV separately. A source field and dispatcher write path are required; no guesses are made from email subjects.")+'</div>';
 }
 function brandFolderTable(){
   if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
@@ -1484,7 +1683,11 @@ function renderWorkflow(){
   const importedNote=sourceAvailable?"Event totals are aggregated; distinct-ticket counts remain visible by inbox below.":"No workflow-history file supplied";
   const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
   const allocationMethodPanel=imported
-    ? panel("Allocation method split","The snapshot distinguishes first allocations from workflow events but does not identify automatic versus manual allocation method.",'<div class="empty-state">Not available in this source export. No allocation method split is inferred.</div>','<span class="subtle-tag">NOT IN SOURCE</span>')
+    ? panel("Initial assignment method","Counts of explicit AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED Activity Log events",dataTable(["Initial method","Tickets","Share"],[
+        ["Automatic",fmt(state.importedSnapshot.assignment_methods.automatic),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.automatic/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")],
+        ["Manual",fmt(state.importedSnapshot.assignment_methods.manual),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.manual/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")],
+        ["Other / legacy",fmt(state.importedSnapshot.assignment_methods.other),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.other/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")]
+      ]),'<span class="subtle-tag">ACTIVITY LOG EVENTS</span>')
     : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
   pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
     (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
@@ -1575,6 +1778,56 @@ function teamEventLedger(){
     '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
   '</div>';
 }
+function agentResolutionMetrics(agentRef){
+  const row=(state.importedSnapshot?.tickets.resolution_by_agent||[]).find(item=>item.agent_ref===agentRef);
+  if(!row)return {resolvedTickets:0,timedTickets:0,averageMinutes:null};
+  return {
+    resolvedTickets:row.resolved_tickets,
+    timedTickets:row.timed_tickets,
+    averageMinutes:row.timed_tickets?row.total_resolution_minutes/row.timed_tickets:null
+  };
+}
+function agentActivityMetrics(agentRef){
+  const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
+    (state.folder==="all"||event.inbox_code===state.folder)&&
+    (event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)
+  );
+  const distinctTickets=type=>new Set(events.filter(event=>
+    event.event_type===type&&(event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)
+  ).map(event=>event.ticket_ref)).size;
+  return {
+    automatic:distinctTickets("assigned"),
+    manual:distinctTickets("manual_assignment"),
+    handovers:events.filter(event=>event.event_type==="handover").length,
+    recovery:events.filter(event=>["flagged","recovery_requested","recovery_held","recovery_restored","exception"].includes(event.event_type)).length
+  };
+}
+function agentPerformanceReviewPanel(profiles){
+  const imported=Boolean(state.importedSnapshot);
+  if(!imported)return panel("Agent performance review","Demonstration data only; no real agent performance is calculated.",'<div class="empty-state">Import a sanitised reporting snapshot to review actual allocation and current workload counts.</div>');
+  const hasActivity=importedSourceAvailable("Workflow history")&&(state.importedSnapshot.activity_log||[]).length>0;
+  const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
+  const hasResolvedAt=state.importedSnapshot.tickets.resolution_metrics?.resolved_at_field_mapped===true;
+  const rows=profiles.map(agent=>{
+    const agentRef=agent.id.replace(/^snapshot-/,"");
+    const metrics=agentActivityMetrics(agentRef);
+    const resolution=agentResolutionMetrics(agentRef);
+    return '<tr>'+
+      '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
+      '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.automatic):"Not supplied")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.manual):"Not supplied")+'</td>'+
+      '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.handovers):"Not supplied")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.recovery):"Not supplied")+'</td>'+
+      '<td>'+(hasResolvedBy?fmt(resolution.resolvedTickets):"Not supplied")+'</td>'+
+      '<td>'+(hasResolvedAt?formatDurationMinutes(resolution.averageMinutes):"Not tracked")+'</td>'+
+      '<td><span class="not-tracked-value">Not tracked</span></td>'+
+    '</tr>';
+  });
+  return panel("Agent performance review","First assignments, current open work and event involvement. When the tracker provides an explicit resolver and timestamps, resolved counts and average elapsed solve time appear here. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual","Open workload","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
+    '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague&#39;s original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
+}
 function teamEvidencePanel(){
   const items=[
     ["First response","Not available","Requires a validated first-response timestamp."],
@@ -1605,7 +1858,7 @@ function renderTeam(){
       kpi("Current open workload",fmt(openWorkload),state.importedSnapshot?"Owner snapshot · independent of inbox filter":"All-profile sample snapshot · not period or inbox scoped","◷"),
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
-    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent labels are keyed pseudonymous references, not colleague names. Current open workload is a point-in-time count. First-assignment totals and workflow event totals are aggregate measures; event timestamps, inbox eligibility and individual event attribution are not present. When supplied, shift group, Egypt-local start/end and active-fortnight status are available against pseudonymous references.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level aggregate counts with no event dates or per-member attribution. None of these sample figures is a real colleague performance assessment.")+'</div>'+
+    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent names can be loaded from a separate private lookup kept only in this browser; the shared JSON remains pseudonymised. Current open workload is a point-in-time count. First-assignment counts are explicit; event involvement is not the same as authenticated action attribution. Resolution rate is not tracked yet.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
     '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and current open-work '+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile.")+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
       '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
@@ -1615,6 +1868,7 @@ function renderTeam(){
       '</button>'
     ).join("")+'</div>':'<div class="empty-state">No team members match the global search.</div>')+
     (state.selectedAgent?agentDetail(state.selectedAgent):'')+
+    agentPerformanceReviewPanel(profiles)+
     '<div class="grid-two team-overview-grid">'+
       panel("Current open-work distribution",state.importedSnapshot?"Current-state open workload by pseudonymised owner · independent of date selection": "Current-state sample by member · independent of period and inbox filters",teamWorkloadPanel(profiles),'<span class="subtle-tag">SNAPSHOT</span>')+
       panel("First assignments by inbox","Distinct tickets first assigned in the selected scope",assignmentsAvailable?barRows(folders.map(folder=>({label:folder.name,value:folder.assigned,color:folder.color}))):'<div class="empty-state">Assignment history was not supplied.</div>','<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
@@ -1700,7 +1954,7 @@ function rosterProfiles(){
     return {
       ...base,
       id:"snapshot-"+meta.agent_ref,
-      name:meta.agent_ref,
+      name:displayAgentName(meta.agent_ref),
       shift:meta.shift_group,
       start:meta.shift_start_egypt,
       end:meta.shift_end_egypt,
@@ -2208,7 +2462,67 @@ function refreshAuditPanels(){
   if(detail)detail.innerHTML=auditDetailMarkup(selected);
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
+function importedActivityRows(){
+  if(!state.importedSnapshot)return [];
+  const term=String(state.auditSearch||"").trim().toLowerCase();
+  return (state.importedSnapshot.activity_log||[])
+    .filter(event=>state.folder==="all"||event.inbox_code===state.folder)
+    .filter(event=>!term||[
+      event.event_time_egypt,event.event_type,event.ticket_ref,event.inbox_code,
+      displayAgentName(event.original_agent_ref||""),displayAgentName(event.current_agent_ref||""),
+      event.assignment_flag,event.incident_count
+    ].join(" ").toLowerCase().includes(term))
+    .slice().sort((a,b)=>(b.event_time_utc||"").localeCompare(a.event_time_utc||""));
+}
+function exportImportedActivityLog(){
+  const rows=importedActivityRows();
+  csvDownload("dispatcher-sanitised-activity-log.csv",[
+    ["Event time (Egypt local)","Event type","Pseudonymous ticket reference","Inbox","Original assignee reference","Current owner reference","Assignment flag","Incident count"],
+    ...rows.map(event=>[
+      event.event_time_egypt||event.event_time_utc||"Not supplied",
+      event.event_type,event.ticket_ref,
+      FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code,
+      event.original_agent_ref||"",event.current_agent_ref||"",
+      event.assignment_flag?"TRUE":"FALSE",event.incident_count
+    ])
+  ]);
+}
+function renderImportedActivityAudit(){
+  const all=state.importedSnapshot.activity_log||[];
+  const visible=importedActivityRows();
+  const totalTickets=new Set(visible.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored"].includes(event.event_type)).length;
+  const sourceAvailable=importedSourceAvailable("Workflow history");
+  const rows=visible.map(event=>
+    '<tr>'+
+      '<td class="mono">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+esc(event.ticket_ref)+'</small></td>'+
+      '<td>'+esc(FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td>'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td>'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td>'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
+    '</tr>'
+  );
+  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen now uses the imported workbook Activity Log. It shows the event type from column B; the TRUE / FALSE Assignment Flag is displayed separately and is never treated as an event.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+    '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(all.length)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not recorded by source</b></span></div>'+
+    kpiGrid([
+      kpi("Activity events",fmt(visible.length),"Rows in the selected inbox / search","◷"),
+      kpi("Tickets affected",fmt(totalTickets),"Pseudonymous ticket references","▤"),
+      kpi("Automatic / manual",fmt(automatic)+" / "+fmt(manual),"Recorded first-allocation event categories","↗"),
+      kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
+    ])+
+    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner are shown as references; they are not claimed to be the person who performed the action.</p></div><span class="subtle-tag">'+(sourceAvailable?"WORKBOOK ACTIVITY LOG":"ACTIVITY SOURCE NOT SUPPLIED")+'</span></div>'+
+    '<div class="audit-filter-toolbar"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or agent…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label><span class="audit-result-count">Showing '+visible.length+' of '+all.length+' Activity Log rows</span></div>'+
+    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+(sourceAvailable?"No Activity Log entries match the current inbox and search.":"No Activity Log data was included in this snapshot. Re-select Activity Log for both history inputs in Reporting Studio.")+'</div>')+
+    '</section>'+
+    '<div class="prototype-warning"><strong>Source limitations.</strong> The workbook does not record the authenticated person who changed an Outlook category, the reason beyond free-text notes, or a verified completion / resolution event. Free-text Details / Notes are intentionally excluded from the shared snapshot because they can contain subjects or personal data. This page is an Activity Log viewer, not a tamper-evident security audit.</div>';
+}
 function renderAudit(){
+  if(state.importedSnapshot){renderImportedActivityAudit();return;}
   const base=auditBaseEvents();
   for(const [key,field] of [["auditCategory","category"],["auditOutcome","outcome"],["auditActor","actor"]]){
     if(state[key]!=="all"&&!base.some(event=>event[field]===state[key]))state[key]="all";
@@ -2565,9 +2879,10 @@ function exportSummary(){
     ["Inbox",scopeName()],
     [imported?"Ticket records":"Received",t.received],
     ["Initially assigned",assignmentsAvailable?t.assigned:"Not supplied"],
-    ["Resolved / closed",t.resolved],
+    ["Resolved / closed",!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"?t.resolved:"Not tracked"],
     ["Outstanding",t.open],
     ["Currently unassigned",t.unassigned],
+    ["Average elapsed resolution",imported?formatDurationMinutes(state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes):"Not available"],
     ["Source mode",imported?"Sanitised aggregate · local browser memory":"Synthetic demonstration"]
   ]);
 }
@@ -2600,7 +2915,7 @@ function handleAction(action){
   if(action==="export-folders"){exportFolders();return;}
   if(action==="export-team"){exportTeam();return;}
   if(action==="export-roster"){exportRoster();return;}
-  if(action==="export-audit"){exportAuditHistory();return;}
+  if(action==="export-audit"){if(state.importedSnapshot)exportImportedActivityLog();else exportAuditHistory();return;}
   if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.selectedAuditEvent=null;renderAudit();return;}
   if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}
   if(action==="reset-admin-review"){state.adminRequestSearch="";state.adminRequestStatus="all";state.adminRole="operations_manager";state.selectedAdminRequest="ACCESS-SAMPLE-004";renderAdmin();return;}
@@ -2616,6 +2931,13 @@ function handleAction(action){
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
 document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
+document.getElementById("importAgentLookupButton").addEventListener("click",()=>document.getElementById("agentLookupFileInput").click());
+document.getElementById("agentLookupFileInput").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];if(!file)return;
+  try{await loadPrivateAgentLookup(file);}
+  catch(error){showToast("Could not import private names: "+error.message);}
+  finally{event.target.value="";}
+});
 document.getElementById("snapshotFileInput").addEventListener("change",async event=>{
   const file=event.target.files?.[0];
   if(!file)return;
@@ -2673,7 +2995,12 @@ document.addEventListener("input",event=>{
   const auditSearch=event.target.closest("[data-audit-search]");
   if(auditSearch){
     state.auditSearch=auditSearch.value;
-    refreshAuditPanels();
+    if(state.importedSnapshot){
+      const start=auditSearch.selectionStart,end=auditSearch.selectionEnd;
+      renderAudit();
+      const next=document.querySelector("[data-audit-search]");
+      if(next){next.focus();next.setSelectionRange(start,end);}
+    }else refreshAuditPanels();
     return;
   }
   const reliabilitySearch=event.target.closest("[data-reliability-search]");
@@ -2723,7 +3050,7 @@ document.addEventListener("input",event=>{
     const count=document.getElementById("rosterDirectoryCount");
     if(state.selectedRosterAgent&&!profiles.some(agent=>agent.id===state.selectedRosterAgent))state.selectedRosterAgent=null;
     if(rows)rows.innerHTML=rosterDirectoryRows(profiles);
-    if(count)count.textContent="Showing "+profiles.length+" of "+AGENTS.length+" sample profiles";
+    if(count)count.textContent="Showing "+profiles.length+" of "+rosterProfiles().length+(state.importedSnapshot?" imported roster profiles":" sample profiles");
     const detail=document.getElementById("rosterAgentDetail");
     if(detail)detail.innerHTML=state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):"";
   }
