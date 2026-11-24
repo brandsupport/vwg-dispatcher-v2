@@ -533,6 +533,9 @@ function validateAndSanitiseSnapshot(raw){
     outstanding:count(overall.outstanding,"overall outstanding count"),
     unassigned:count(overall.unassigned,"overall unassigned count")
   };
+  const resolutionTracking=raw.tickets.resolution_tracking??"not_captured";
+  if(!["not_captured","source_status_present"].includes(resolutionTracking))fail("The resolution-tracking metadata is invalid.");
+  const brandFieldMapped=raw.tickets.brand_field_mapped===true;
   const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
   for(const key of Object.keys(cleanOverall)){
     if(sum(byInbox,key)!==cleanOverall[key])fail("Inbox totals do not reconcile with the overall "+key+" value.");
@@ -634,13 +637,42 @@ function validateAndSanitiseSnapshot(raw){
   if(!sources.some(row=>row.source==="Ticket snapshot"))fail("The data-quality section does not identify the ticket snapshot source.");
   const sourceSet=new Set(sources.map(row=>row.source));
   if(sourceSet.size!==sources.length)fail("Duplicate data-quality source rows were found.");
+  const methodsRaw=raw.assignment_methods||{automatic:cleanOverall.initially_assigned,manual:0,other:0};
+  const assignmentMethods={
+    automatic:count(methodsRaw.automatic??0,"automatic first-assignment count"),
+    manual:count(methodsRaw.manual??0,"manual first-assignment count"),
+    other:count(methodsRaw.other??0,"other first-assignment count")
+  };
+  if(assignmentMethods.automatic+assignmentMethods.manual+assignmentMethods.other!==cleanOverall.initially_assigned){
+    fail("Automatic, manual and other first-assignment counts do not reconcile.");
+  }
+  const activityLogRaw=raw.activity_log??[];
+  if(!Array.isArray(activityLogRaw))fail("The Activity Log detail section is invalid.");
+  const activityLog=activityLogRaw.map(row=>{
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code)||
+       !/^Ref-[A-F0-9]{10}$/.test(String(row.ticket_ref||"")))fail("An Activity Log event contains an invalid reference or event type.");
+    if(row.event_time_utc!==null&&row.event_time_utc!==""&&(typeof row.event_time_utc!=="string"||!row.event_time_utc.endsWith("Z")||!Number.isFinite(Date.parse(row.event_time_utc))))fail("An Activity Log event contains an invalid timestamp.");
+    for(const key of ["original_agent_ref","current_agent_ref"]){
+      if(row[key]!==null&&row[key]!==undefined&&!/^Agent-[A-F0-9]{10}$/.test(String(row[key])))fail("An Activity Log event contains an invalid agent reference.");
+    }
+    if(typeof row.assignment_flag!=="boolean")fail("An Activity Log assignment flag is invalid.");
+    return {
+      event_time_egypt:typeof row.event_time_egypt==="string"?row.event_time_egypt:"",
+      event_time_utc:row.event_time_utc||null,
+      event_type:row.event_type,inbox_code:row.inbox_code,ticket_ref:row.ticket_ref,
+      original_agent_ref:row.original_agent_ref||null,current_agent_ref:row.current_agent_ref||null,
+      assignment_flag:row.assignment_flag,
+      incident_count:count(row.incident_count??0,"Activity Log incident count")
+    };
+  });
   return {
     schema_version:"dispatcher-reporting-snapshot-1",
     generated_at_utc:raw.generated_at_utc,
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
-    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-    allocations,team_roster:teamRoster,workflow,
+    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
+      resolution_tracking:resolutionTracking,brand_field_mapped:brandFieldMapped},
+    allocations,assignment_methods:assignmentMethods,team_roster:teamRoster,workflow,activity_log:activityLog,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
