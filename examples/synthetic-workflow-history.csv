@@ -1,0 +1,6 @@
+ticket_ref,event_type,inbox,occurred_at
+SAMPLE-001,Received,Agency Detags,2026-11-22T09:12:00Z
+SAMPLE-001,Flag raised,Agency Detags,2026-11-22T09:18:00Z
+SAMPLE-002,Handed over,Detags,2026-11-22T10:15:00Z
+SAMPLE-003,Resolved,Transfers,2026-11-22T10:46:00Z
+SAMPLE-005,Recovery requested,Detags,2026-11-22T11:20:00Z
