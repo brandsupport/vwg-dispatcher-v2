@@ -8,7 +8,7 @@ A standalone operations intelligence and management platform for the VWG Brand S
 
 The dashboard and standalone Reporting Studio share the Dispatcher **Cherry Glass** visual system: a black-cherry canvas, translucent cherry-tinted panels, vivid cherry-red and rose accents, and restrained plum highlights. The Studio keeps the same Knowledge Base home-page VW mark artwork and animated glass-tile construction, recoloured with the Cherry Glass accents. Typography remains deliberately enlarged across both interfaces.
 
-The dashboard provides a persistent **Reporting Studio** entry in its workspace navigation. The Studio header provides a matching **Dashboard** return link. Both pages remain independently loadable; the Studio retains its local-only processing boundary.
+The dashboard provides a persistent **Reporting Studio** entry in its workspace navigation. The Studio header provides a matching, always-visible **Dashboard** return button. Both pages remain independently loadable; the Studio retains its local-only processing boundary.
 
 ## Product direction
 
