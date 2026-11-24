@@ -45,28 +45,33 @@ Map these fields:
 |---|---:|---|
 | Ticket reference | Yes | A stable identifier used only in memory to join source rows. Never appears in outputs. |
 | Inbox / folder | Yes | One of Agency Detags, Detags, Transfers or Unadopts. |
-| Current status | Yes | Used only to distinguish resolved/closed from outstanding records. |
+| Current status | Yes | Operational dispatcher state. Values such as Assigned, Queued, Recovered or Handed Over are **not** proof that a ticket is resolved. |
 | Current owner | Yes | Used to calculate current open workload. Direct values are HMAC-pseudonymised before output. |
-| Brand | No | Must match an approved brand label; unknown values become Other / unclassified. |
-| Received timestamp | No | Date-only ISO format or an ISO timestamp with an explicit timezone. Used only for the reporting-period boundary. |
+| Brand | No today | The current workbook has no Brand column. Add an explicit approved Brand field to the tracker; until then all tickets remain unclassified. |
+| Received timestamp | No | Parsed as UK-local time because the source header explicitly identifies UK time. Invalid or ambiguous values are excluded from date metrics. |
+| Resolution status | No today | Proposed tracker field. Use explicit Open / Resolved / Closed / Reopened values; do not reuse the operational Assignment Status. |
+| Resolved timestamp | No today | Proposed tracker field. Required alongside Received At (UK) to calculate elapsed solve time. |
+| Resolved by | No today | Proposed exact Outlook category field so a completed ticket can be attributed to the resolver. Names stay in a separate private lookup. |
 
-The file should be a current-state ticket snapshot, not raw mailbox content. A blank or unfamiliar status is treated conservatively as open and is flagged in data quality.
+The current workbook cannot support a resolution rate or solve-time calculation: it has no explicit resolution status, resolved timestamp or resolver field. A future tracker build can populate these fields after the resolution workflow is agreed. The Studio will show **Not tracked** until those columns are present; it does not treat Recovered, Assigned or Handed Over as resolved.
 
 ### Assignment history — optional
 
 Map ticket reference, new owner / assigned agent, and assignment type. Inbox is optional when the ticket snapshot supplies the authoritative inbox.
 
-Only explicit values equivalent to **Initial**, **First assignment**, **Initial assignment**, **Initial allocation** or **First allocation** contribute to initial-allocation share. Manual assignments, handovers, reassignments and recoveries do not increase first-allocation share. A ticket must exist in the ticket snapshot and the assignment inbox must match the ticket's inbox. Multiple first-assignment rows for one ticket are excluded as ambiguous.
+For the VWG tracker, map **Event Type** (column B) as the assignment event type and **Original Assignee** as the colleague reference. **AUTO_ASSIGNMENT** contributes to automatic first allocations; **MANUAL_ASSIGNMENT_CAPTURED** contributes to manual first allocations. Identical duplicate first-allocation rows for the same ticket, agent, inbox and method are de-duplicated; genuinely conflicting first-assignment records are excluded as ambiguous. **Assignment Flag** (column G) is a Boolean marker and must not be mapped as the event type.
 
 ### Workflow / activity history — optional
 
-For the VWG tracker, select the **Activity Log** worksheet a second time as the workflow input. It is the same tab in the same workbook, not a second file. Map `Email Key / ID` to ticket reference, `Assignment Flag` to workflow event type, `Source Inbox` to inbox and `Event Time (Egypt)` to the optional event timestamp. Do **not** map `Event Type`: its `true` / `false` values are Boolean markers, not workflow categories. The sanitiser maps the supplied Assignment Flag labels (auto assigned, handover, manual assignment captured, category removal detected, category restored, pending item not found and MULTIPLE_CATEGORIES_PENDING) to fixed safe event types. Baseline registered and queued are state markers, not workflow events, and are excluded.
+For the VWG tracker, select the **Activity Log** worksheet a second time as the workflow input. It is the same tab in the same workbook, not a second file. Map **Email Key / ID** to ticket reference, **Event Type** (column B) to workflow event type, **Source Inbox** to inbox and **Event Time (Egypt)** to the optional event timestamp. Map **Original Assignee** and **Current Owner** as optional person references; map **Assignment Flag** (column G) separately as a Boolean and **Incident Count** when present. Never map **Details / Notes**: it can contain free text or personal data and is not exported.
+
+The sanitiser recognises the dispatcher's explicit event values, including AUTO_ASSIGNMENT, MANUAL_ASSIGNMENT_CAPTURED, HANDOVER, category-removal/review events, recovery/restoration events, and known failure/exception events. The Boolean Assignment Flag is never treated as an event label. Event involvement is not claimed to be the authenticated person who performed the action.
 
 ### Team & Shifts roster — optional
 
-Select the **Team & Shifts** worksheet from the same workbook. Map `Outlook Category (exact)` as the join identity, then `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The `Colleague` label is not needed as a second key. The category value is used only in browser memory to join with the pseudonymised Current Owner / Original Assignee values; the snapshot contains only the keyed agent reference, Early/Late group, Egypt-local start/end times and active-fortnight Boolean. Names and Outlook category values are not exported.
+Select the **Team & Shifts** worksheet from the same workbook. Map **Outlook Category (exact)** as the join identity, then **Shift Group**, **Shift Start (Egypt)**, **Shift End (Egypt)** and **Active This Fortnight**. Map **Colleague** as an optional display name for the **separate private lookup export**. The public JSON still contains only pseudonymous references and shift metadata; colleague names and Outlook categories are not included. In the dashboard, import the JSON first, then the separate private name-lookup CSV on the approved device if colleague names are needed.
 
-Use the **same private workspace key** for the Assignments, Activity Log and Team & Shifts worksheets on each reporting run so that pseudonymous references match across the workbook sources. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
+Use the **same private workspace key** for Assignments, Activity Log and Team & Shifts on every run. Download both the sanitised JSON and the private agent-name lookup; keep the latter separate and do not upload it to GitHub or share it with the JSON. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
 
 ## Import the aggregate snapshot into Dispatcher 2.0
 
@@ -112,7 +117,7 @@ Ticket references and source rows are used only in memory to join and deduplicat
 - Current open workload is a state snapshot. It is not historical allocation volume.
 - First-assignment share uses distinct tickets with one unambiguous initial-assignment event as the denominator, per inbox. Handover, reassignment and recovery are separate workflow activity.
 - Workflow event count and distinct tickets affected are different measures and may overlap across event types.
-- The tool does not estimate first response, elapsed resolution, active handling time, SLA performance, reopen rate, productivity ranking or hours-adjusted fairness. Shift coverage is scheduled headcount from the supplied Egypt-local roster only, not a live capacity or availability measure.
+- First response, active handling time, SLA performance, reopen rate and hours-adjusted fairness remain unavailable. Elapsed solve time and per-agent resolved counts are calculated only after explicit Resolution Status, Resolved At (UK) and Resolved By fields are present in the source. A formal resolution rate still requires an agreed per-agent denominator and reliable ownership history. Shift coverage is scheduled headcount from the supplied Egypt-local roster only, not a live capacity or availability measure.
 - Date-only values are treated as UTC dates. Datetimes without an explicit timezone are not interpreted; they are counted as ambiguous.
 - Duplicate ticket rows are skipped after the first matching ticket reference, and the quality report warns about them. Review the source export before relying on the totals.
 - Assignment rows that are missing required values, do not join to the ticket snapshot, conflict with the ticket inbox, or contain ambiguous first-assignment duplicates are excluded and reported.
