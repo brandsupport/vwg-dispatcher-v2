@@ -619,7 +619,7 @@ async function sanitise(){
       let durationMinutes=null;
       if(ticket.receivedAtUtc&&ticket.resolvedAtUtc){
         const elapsed=(Date.parse(ticket.resolvedAtUtc)-Date.parse(ticket.receivedAtUtc))/60000;
-        if(Number.isFinite(elapsed)&&elapsed>=0)durationMinutes=elapsed;
+        if(Number.isFinite(elapsed)&&elapsed>=0)durationMinutes=Math.round(elapsed);
       }
       if(durationMinutes!==null)resolutionRows.push({inbox_code:ticket.inbox,minutes:durationMinutes});
       if(ticket.resolvedByRef){
