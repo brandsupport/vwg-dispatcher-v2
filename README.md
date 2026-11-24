@@ -129,17 +129,17 @@ The local scenario preview lets a reader choose an inbox and vary the influence 
 
 The proposed change lifecycle is **Draft → Validate → Approve → Apply → Audit**. In the public prototype, only local drafting and scenario exploration are available. Validation and approval are blocked until trusted roster and availability sources plus authentication exist; Apply is blocked because there is no backend write path; persistent Audit is not configured. A button click or local calculation must never be reported as a successful operational change.
 
-### Audit History 2.0
+### Activity Log (imported)
 
-Audit History 2.0 is a **synthetic, read-only event investigation workspace**. The 20 example events are stored in the public front-end source and are not drawn from Outlook, Excel, an employee audit trail or a production service.
+In imported mode this screen shows recognised event rows from the workbook's `Activity Log` worksheet. It is a chronological, searchable, sanitised view of dispatcher events such as automatic assignment, manual assignment capture, handover, category removal/restoration, recovery reconciliation, queued state, dry-run preview and exceptions. Raw ticket IDs are replaced with keyed references; email subjects, message bodies and `Details / Notes` are not imported.
 
-The event ledger derives its counts from the same sample records it displays. It separates event count from distinct ticket count, and separates ticket-linked activity from configuration and access-governance examples. Inbox, category, outcome, actor and free-text filters apply to the same event set; the filtered CSV includes the event identity, UK-labelled sample timestamp, actor and role, entity, ticket and correlation IDs, outcome, reason, approval, before/after values, source and evidence note.
+The screen separates the original assignee from the current owner. The saved tracker schema has no `Actioned By` field, so neither owner is presented as proof of who performed the event. It also has no resolved timestamp or resolver identity, so individual resolution rate and time-to-resolve cannot be calculated.
 
-Selecting an event opens its details and the related ticket or correlation timeline. The detail view distinguishes the event's before/after values from its reason, approval record, evidence note and source label. The configuration example demonstrates draft, review and blocked-apply stages; an approval shown in a sample record does not activate a real setting. A timeout is represented as an **unknown outcome**, not silently converted into success or failure.
+This is an imported event register, **not a security audit ledger**. The static public dashboard has no authenticated actor identity, persistent audit store, server-side authorisation, cryptographic integrity chain or production event ingestion. When no snapshot is loaded, the screen asks for an Activity Log import rather than substituting fictional audit examples.
 
-The screen deliberately does not show an audit-completeness percentage. A static sample cannot establish completeness, authenticity, tamper resistance or retention. The “append-only model” wording describes a design requirement only: the public site has no persistent audit store, authenticated actor identity, server-side authorisation, cryptographic integrity chain, production event ingestion or real approval workflow. No event selection or export changes an assignment, permission, configuration or mailbox record.
+### Production audit requirements (not implemented)
 
-Before production use, the service must preserve stable event IDs, trusted actor and approver identities, timezone-aware timestamps, correlation and idempotency references, before/after values, reasons, approvals, verified execution outcomes and linked corrective events. Corrections must be appended with explicit references to the earlier record rather than silently overwriting history. Retention, access permissions, integrity verification and audit export controls must be enforced server-side.
+A future authenticated audit service must preserve stable event IDs, trusted actor and approver identities, timezone-aware timestamps, correlation and idempotency references, before/after values, reasons, approvals, verified execution outcomes and linked corrective events. Corrections should be appended with explicit references to the earlier record rather than silently overwriting history. Retention, access permissions, integrity verification and export controls must be enforced server-side.
 
 ### Reliability Centre 2.0
 
