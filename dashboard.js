@@ -1282,7 +1282,48 @@ function liveAttentionPanel(base){
     '<button class="live-attention-item" type="button" data-ticket="'+esc(ticket.ref)+'"><span class="live-attention-mark '+(ticket.status==="Overdue"?"danger":"warning")+'"></span><span class="live-attention-copy"><strong>'+esc(ticket.ref)+' · '+esc(ticket.status)+'</strong><small>'+esc(ticket.subject)+'</small></span><span class="live-attention-age">'+esc(ticket.age)+'</span></button>'
   ).join("")+'</div>';
 }
+function renderImportedLiveOperations(){
+  const folders=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
+  const team=allocationMatrix().filter(agent=>activeSearch(agent.name)).sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
+  const received=folders.reduce((sum,folder)=>sum+folder.received,0);
+  const assigned=folders.reduce((sum,folder)=>sum+folder.assigned,0);
+  const open=folders.reduce((sum,folder)=>sum+folder.open,0);
+  const unassigned=folders.reduce((sum,folder)=>sum+folder.unassigned,0);
+  const methods=state.importedSnapshot.assignment_methods;
+  const workflow=(state.importedSnapshot.workflow||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const statusRows=folders.map(folder=>
+    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(folder.open)+'</td><td>'+(resolutionTrackingAvailable()?fmt(folder.resolved):"Not tracked")+'</td></tr>'
+  );
+  const ownerRows=team.map(agent=>
+    '<tr><td>'+memberCell(agent.name,agent.shift||"Shift data not included")+'</td><td class="total-cell">'+fmt(agent.open)+'</td><td>'+fmt(agent.assigned)+'</td><td>'+esc(agent.availability||"Not supplied")+'</td></tr>'
+  );
+  const eventRows=workflow.map(row=>
+    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+  );
+  pageContent.innerHTML=heading("CURRENT-STATE OPERATIONS","Workstream control room","This is the operational summary for the imported point-in-time workbook snapshot. It is not a live Outlook connection and does not contain individual ticket details.",'<button class="btn btn-secondary" data-go="folders">Open folder share ↗</button>')+
+    '<div class="live-environment-strip local-snapshot-strip"><span class="live-env-tag"><i class="demo-dot"></i> SANITISED SNAPSHOT</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Not controlled from this dashboard</span><span><b>Records</b> '+fmt(received)+'</span></div>'+
+    kpiGrid([
+      kpi("Ticket records",fmt(received),"Current Assignments register rows","▤"),
+      kpi("Initial allocations",fmt(assigned),fmt(methods.automatic)+" automatic · "+fmt(methods.manual)+" manual","↗"),
+      kpi("Open workload",fmt(open),"Current owner / status snapshot","◷"),
+      kpi("Unassigned open",fmt(unassigned),"Rows without a current owner","＋",null,unassigned?"warning":"positive")
+    ])+
+    '<div class="grid-two live-import-primary">'+
+      panel("Inbox workstream status","Current row counts from Assignments, split by the four monitored Inbox folders",dataTable(["Inbox","Ticket records","First assigned","Unassigned","Open workload","Resolved / closed"],statusRows),'<span class="subtle-tag">SOURCE SNAPSHOT</span>')+
+      panel("Allocation method","Initial allocation events read from Activity Log column B",dataTable(["Method","Tickets","Share"],[
+        ["Automatic",fmt(methods.automatic),(assigned?methods.automatic/assigned*100:0).toFixed(1)+"%"],
+        ["Manual",fmt(methods.manual),(assigned?methods.manual/assigned*100:0).toFixed(1)+"%"],
+        ["Other / legacy",fmt(methods.other),(assigned?methods.other/assigned*100:0).toFixed(1)+"%"]
+      ]),'<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
+    '</div>'+
+    '<div class="grid-two live-import-secondary">'+
+      panel("Current owner workload","Open records grouped by the current owner captured in Assignments",team.length?dataTable(["Colleague","Open workload","First assigned","Fortnight status"],ownerRows):'<div class="empty-state">No owner counts are available in this snapshot.</div>','<button class="panel-action" data-go="team">Agent review ↗</button>')+
+      panel("Recent event categories","Activity Log event totals in the imported snapshot. Event counts are not live.",eventRows.length?dataTable(["Event","Inbox","Events","Tickets affected"],eventRows):'<div class="empty-state">No mapped Activity Log events are included.</div>','<button class="panel-action" data-go="workflow">Workflow insights ↗</button>')+
+    '</div>'+
+    '<div class="live-import-footer"><div><strong>Actions are deliberately read-only.</strong><span>The dashboard cannot assign, resolve, reassign or move Outlook messages. Use Classic Outlook and the dispatcher for operational actions; use this screen to review the imported state.</span></div><button class="btn btn-primary" type="button" data-go="audit">Review Activity Log ↗</button></div>';
+}
 function renderLive(){
+  if(state.importedSnapshot){renderImportedLiveOperations();return;}
   const base=liveBaseTickets();
   const open=base.filter(t=>!["Resolved","Closed"].includes(t.status));
   const unassigned=base.filter(t=>t.status==="Unassigned").length;
