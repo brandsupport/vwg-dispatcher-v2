@@ -9,6 +9,7 @@ on:
       - "reporting-studio.css"
       - "reporting-studio.js"
       - "examples/**"
+      - "tests/**"
       - "dashboard.css"
       - "index.html"
       - "README.md"
@@ -57,6 +58,8 @@ jobs:
         run: node --check dashboard.js
       - name: Check offline reporting studio JavaScript syntax
         run: node --check reporting-studio.js
+      - name: Test offline reporting sanitiser
+        run: node --test tests/reporting-studio.test.mjs
       - name: Validate local-only reporting studio boundary
         run: |
           node --input-type=module <<'NODE'
