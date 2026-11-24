@@ -949,7 +949,7 @@ function overviewInboxSnapshot(inboxes){
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
       '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(imported&&state.importedSnapshot.tickets.resolution_data_available===false?"Not recorded":fmt(folder.resolved))+'</b></span></div>'+
       '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
       '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
     '</article>';
@@ -1055,7 +1055,8 @@ function renderOverview(){
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
-  const resolutionRate=t.received?t.resolved/t.received*100:null;
+  const resolutionAvailable=!imported||state.importedSnapshot.tickets.resolution_data_available!==false;
+  const resolutionRate=resolutionAvailable&&t.received?t.resolved/t.received*100:null;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
     ? panel("Received-date coverage","Actual UTC received dates present in the imported ticket snapshot. Resolved-date history is not included.",overviewSnapshotTrendTable(),'<span class="subtle-tag">SOURCE DATES ONLY</span>')
@@ -1064,8 +1065,12 @@ function renderOverview(){
     ? '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Generated '+esc(new Date(state.importedSnapshot.generated_at_utc).toLocaleString("en-GB"))+'</span><span>In memory only · refresh clears import</span></div>'
     : '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Portfolio reporting view</span><span>All figures are synthetic and illustrative</span></div>';
   const allocationValue=assignmentsAvailable?fmt(t.assigned):"Not supplied";
+  const brandAvailable=!imported||state.importedSnapshot.tickets.brand_field_available!==false;
   const allocationRateValue=allocationRate===null?"Not available":allocationRate.toFixed(1)+"%";
-  const resolutionRateValue=resolutionRate===null?"—":resolutionRate.toFixed(1)+"%";
+  const resolutionRateValue=!resolutionAvailable?"Not recorded":resolutionRate===null?"—":resolutionRate.toFixed(1)+"%";
+  const brandDemandContent=imported&&!brandAvailable
+    ?'<div class="empty-state">Brand is not a field in the current Assignments register. All tickets remain unclassified until a Brand field is added and populated. The dashboard does not guess from the inbox or subject.</div>'
+    :brandBarList(brands);
   pageContent.innerHTML=
     heading("MANAGEMENT PERFORMANCE",imported?"Imported snapshot overview":"Performance overview",imported?"Explore aggregate ticket, inbox, brand and first-allocation data from the sanitised local snapshot. Individual tickets and source rows are not included.":"A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual sample work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
     banner+
@@ -1073,7 +1078,7 @@ function renderOverview(){
     kpiGrid([
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
-      kpi(imported?"Resolved / closed":"Tickets resolved",fmt(t.resolved),imported?"Current resolved state in the snapshot":"Recorded completed tickets in sample totals","✓"),
+      kpi(imported?"Resolved / closed":"Tickets resolved",resolutionAvailable?fmt(t.resolved):"Not recorded",imported?(resolutionAvailable?"Current resolved state in the snapshot":"No resolved status or completion event is recorded in the source"):"Recorded completed tickets in sample totals","✓"),
       kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
@@ -1089,16 +1094,16 @@ function renderOverview(){
     '<div class="section-heading overview-section-heading"><div><h2>Inbox performance</h2><p>'+(imported?"Current ticket records, first assignments, resolved and outstanding counts from the imported snapshot.":"Compare received, first-assigned, resolved and outstanding sample totals across the selected inbox scope.")+'</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
     overviewInboxSnapshot(inboxes)+
     '<div class="grid-two overview-secondary-grid">'+
-      panel("Brand demand",imported?"Approved brand classification across all inboxes; the snapshot does not include a brand-by-inbox cross-tab.":"Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
+      panel("Brand demand",imported?(brandAvailable?"Explicit brand classification across the imported tickets.":"Brand field not supplied by the current tracker export."):"Unique ticket mix by identified brand, including unclassified",brandDemandContent,'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
       panel("How to read this overview","Aggregate management measures — not a ticket workbench",'<div class="overview-guide-list">'+
         '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner. '+(imported&&!assignmentsAvailable?"No assignment-history file was included, so this measure is unavailable.":"")+'</span></div>'+
-        '<div><strong>Resolution ratio</strong><span>'+(imported?"Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate.":"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
+        '<div><strong>Resolution ratio</strong><span>'+(imported?(resolutionAvailable?"Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate.":"Not recorded: the tracker does not mark a terminal status or write a RESOLVED event."):"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
         '<div><strong>Outstanding workload</strong><span>'+(imported?"The current open-state snapshot, separate from historical allocation volume.":"A current-state sample snapshot, separate from historical allocation volume.")+'</span></div>'+
       '</div>','<span class="subtle-tag">MEASURE GUIDE</span>')+
     '</div>'+
     (imported?panel("Import data quality","Source-row checks from the Reporting Studio. Review skipped, duplicate and unmapped rows before interpreting the totals.",snapshotQualityPanel(),'<span class="subtle-tag">VALIDATION SUMMARY</span>'):"")+
     '<div class="overview-next-step"><div><span>NEED TO INSPECT OR WORK A TICKET?</span><strong>Live Operations remains a separate sample workbench. The sanitised aggregate snapshot intentionally contains no ticket references, subjects or individual source rows.</strong></div><button type="button" class="btn btn-primary" data-go="live">Open Live Operations ↗</button></div>'+
-    '<div class="overview-final-note"><strong>Data boundary:</strong> '+(imported?"This view uses only the imported sanitised aggregate snapshot. It is held in memory in this tab and is not uploaded or persisted. Date trends require valid timestamps; resolution timing, SLA performance and production health are not inferred.":"All figures are synthetic portfolio aggregates. Reopened tickets, active handling time, approved SLA performance and production health require validated event data before they can be reported.")+'</div>';
+    '<div class="overview-final-note"><strong>Data boundary:</strong> '+(imported?"This view uses only the imported sanitised aggregate snapshot. It is held in memory in this tab and is not uploaded or persisted. The current tracker build does not record completion, resolver or brand fields, so those measures are not reported.":"All figures are synthetic portfolio aggregates. Reopened tickets, active handling time, approved SLA performance and production health require validated event data before they can be reported.")+'</div>';
 }
 function overviewSnapshotTrendTable(){
   if(!state.importedSnapshot)return "";
@@ -1542,8 +1547,14 @@ function metricPanel(title,value,copy,note){
   return '<article class="metric-panel"><span>'+title+'</span><strong>'+value+'</strong><p>'+copy+'</p><small>'+note+'</small></article>';
 }
 function renderBrands(){
-  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
   const imported=Boolean(state.importedSnapshot);
+  if(imported&&state.importedSnapshot.tickets.brand_field_available===false){
+    pageContent.innerHTML=heading("BRAND INTELLIGENCE","Brand data is not in this export","The current Assignments register has no Brand field. The imported 2,591 records cannot be allocated to Volkswagen, Audi, Škoda, SEAT, CUPRA or VWCV without a recorded classification.")+
+      '<div class="prototype-warning"><strong>Not a zero count.</strong> Brand distribution is unavailable because the source field does not exist. No brand is inferred from email subject or inbox.</div>'+
+      '<div class="empty-state"><strong>Brand classification required</strong><span>Add a structured Brand field to the tracker and populate it with an approved brand value before this screen can calculate brand totals.</span></div>';
+    return;
+  }
+  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
   pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explore validated brand categories from the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
     (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Brand totals · all inboxes</span><span>No brand-by-inbox split supplied</span></div>':'')+
     kpiGrid([
@@ -1563,7 +1574,17 @@ function renderBrands(){
     '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
 }
 function brandFolderTable(){
-  if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
+  if(state.importedSnapshot){
+    if(state.importedSnapshot.tickets.brand_field_available===false)return '<div class="empty-state">Brand-by-inbox is not available because no Brand field was present in the Assignments export.</div>';
+    const rows=(state.importedSnapshot.tickets.brand_by_inbox||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    if(!rows.length)return '<div class="empty-state">No brand-by-inbox rows were supplied in this snapshot.</div>';
+    const brands=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
+    const byInbox=FOLDERS.filter(folder=>state.folder==="all"||folder.id===state.folder);
+    return dataTable(["Inbox","Volkswagen","Audi","Škoda","SEAT","CUPRA","VWCV","Other"],byInbox.map(folder=>{
+      const values=Object.fromEntries(rows.filter(row=>row.inbox_code===folder.id).map(row=>[row.brand_code,row.count]));
+      return '<tr><td>'+esc(folder.name)+'</td>'+brands.map(code=>'<td>'+fmt(values[code]||0)+'</td>').join("")+'</tr>';
+    }));
+  }
   const rows=FOLDERS.filter(f=>state.folder==="all"||f.id===state.folder);
   return dataTable(["Inbox","VW","Audi","Škoda","Other"],rows.map(f=>{
     const total=scaled(f.received),mix=BRAND_MIX[f.id],v=distribute(total,mix);
