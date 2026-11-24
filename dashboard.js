@@ -1004,18 +1004,27 @@ function overviewRiskSummary(tickets){
 function overviewInboxSnapshot(inboxes){
   if(!inboxes.length)return '<div class="empty-state">No inboxes match the selected scope.</div>';
   const imported=Boolean(state.importedSnapshot);
+  const lifecycle=state.importedSnapshot?.tickets.lifecycle_available===true;
   return '<div class="overview-inbox-grid">'+inboxes.map(folder=>{
     const allocationRate=folder.received?folder.assigned/folder.received*100:0;
-    const outstandingRate=folder.received?folder.open/folder.received*100:0;
+    const ownerRate=folder.received?folder.owner_records/folder.received*100:0;
+    const hasAssignments=!imported||importedSourceAvailable("Assignment history");
+    const primaryValue=lifecycle?fmt(folder.open):"Not recorded";
+    const primaryLabel=lifecycle?"Outstanding":"Resolution state";
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
-      '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
-      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
-      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
+      '<div class="overview-inbox-open"><strong>'+primaryValue+'</strong><span>'+primaryLabel+'</span></div>'+
+      '<div class="overview-inbox-metrics">'+
+        '<span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span>'+
+        '<span><small>FIRST ASSIGNED</small><b>'+(hasAssignments?fmt(folder.assigned):"Not supplied")+'</b></span>'+
+        '<span><small>'+(lifecycle?"RESOLVED":"CURRENT OWNER RECORDS")+'</small><b>'+(lifecycle?fmt(folder.resolved):fmt(folder.owner_records))+'</b></span>'+
+      '</div>'+
+      (lifecycle?'<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,(folder.received?folder.open/folder.received*100:0)).toFixed(1)+'%;background:'+folder.color+'"></span></div>':'')+
+      '<div class="overview-inbox-foot"><span>'+(hasAssignments?allocationRate.toFixed(1)+'% initially allocated':"First-assignment history not supplied")+'</span><span>'+(lifecycle?(folder.received?(folder.open/folder.received*100).toFixed(1):"0.0")+"% open / records":ownerRate.toFixed(1)+"% have a current owner")+'</span></div>'+
     '</article>';
   }).join("")+'</div>';
 }
+
 function overviewRiskPanel(summary,tickets){
   const rows=(summary.attention.length?summary.attention: tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status)).sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a))).slice(0,4);
   const ticketRows=rows.length?'<div class="overview-risk-list">'+rows.map(ticket=>{
@@ -1165,10 +1174,13 @@ function overviewSnapshotTrendTable(){
   if(!state.importedSnapshot)return "";
   const rows=state.importedSnapshot.tickets.daily_volume
     .filter(row=>state.folder==="all"||row.inbox_code===state.folder)
-    .slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30)
-    .map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.ticket_records)+'</td></tr>');
-  return rows.length?dataTable(["Received date · UTC","Inbox","Ticket records"],rows):'<div class="empty-state">No valid timezone-explicit received dates were supplied. No date trend is inferred.</div>';
+    .slice().sort((a,b)=>(b.date_local||b.date_utc).localeCompare(a.date_local||a.date_utc)).slice(0,30).map(row=>
+      '<tr><td>'+esc(row.date_local||row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.ticket_records)+'</td></tr>'
+    );
+  const dateLabel=state.importedSnapshot.reporting_period?.time_zone==="Europe/London"?"Received date · UK local":"Received date · source UTC";
+  return rows.length?dataTable([dateLabel,"Inbox","Ticket records"],rows):'<div class="empty-state">The source did not contain a usable received date. No date trend is inferred.</div>';
 }
+
 function snapshotQualityPanel(){
   if(!state.importedSnapshot)return "";
   const rows=state.importedSnapshot.data_quality.sources.map(source=>
@@ -1556,19 +1568,25 @@ function metricPanel(title,value,copy,note){
   return '<article class="metric-panel"><span>'+title+'</span><strong>'+value+'</strong><p>'+copy+'</p><small>'+note+'</small></article>';
 }
 function renderBrands(){
-  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
   const imported=Boolean(state.importedSnapshot);
-  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explore validated brand categories from the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Brand totals · all inboxes</span><span>No brand-by-inbox split supplied</span></div>':'')+
+  if(imported&&state.importedSnapshot.tickets.brand_available!==true){
+    pageContent.innerHTML=heading("BRAND INTELLIGENCE","Brand reporting is not yet supported by this workbook","The current Assignments worksheet has no explicit Brand field. This dashboard will not guess the brand from email subjects, ticket references or inbox names.")+
+      '<div class="prototype-warning"><strong>Source gap.</strong> Add a controlled Brand column to the tracker and have the dispatcher populate it from an approved source. Then regenerate the snapshot. No brand totals are being shown because the current data cannot support them.</div>'+
+      panel("Required source change","Brand values must be explicit and controlled",'<div class="team-evidence-list"><div><span>Assignments.Brand</span><strong>Missing</strong><small>The current workbook has no Brand column.</small></div><div><span>Approved brand values</span><strong>Required</strong><small>Volkswagen, Audi, Škoda, SEAT, CUPRA, VWCV and Other.</small></div><div><span>Population rule</span><strong>Not decided</strong><small>Must be sourced from validated intake metadata or an approved manual selection.</small></div></div>','<span class="subtle-tag">NOT IN SOURCE</span>');
+    return;
+  }
+  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
+  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explicit brand values from the imported ticket snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(total)+' tickets with explicit brand values</span><span>No brand-by-inbox split supplied</span></div>':'')+
     kpiGrid([
-      kpi(imported?"Ticket records":"Total tickets",fmt(total),imported?"Current-state snapshot records":"Distinct received tickets","▤"),
+      kpi(imported?"Tickets with brand data":"Total tickets",fmt(total),imported?"Distinct ticket references":"Distinct received tickets","▤"),
       kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
       kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
       kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
     ])+
     '<div class="grid-two">'+
       panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
-      panel("Brand mix by inbox",imported?"Not supplied by the aggregate snapshot. Clear the global inbox filter to review overall brand totals.":"The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">'+(imported?"NOT IN SOURCE":"SAMPLE COMPARISON")+'</span>')+
+      panel("Brand mix by inbox",imported?"Not supplied by the aggregate snapshot.":"The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">'+(imported?"NOT IN SOURCE":"SAMPLE COMPARISON")+'</span>')+
     '</div>'+
     panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],rows.map(b=>{
       const share=total?b.value/total*100:0;
@@ -1576,6 +1594,7 @@ function renderBrands(){
     })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
     '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
 }
+
 function brandFolderTable(){
   if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
   const rows=FOLDERS.filter(f=>state.folder==="all"||f.id===state.folder);
@@ -1586,32 +1605,55 @@ function brandFolderTable(){
 }
 function renderWorkflow(){
   const imported=Boolean(state.importedSnapshot);
-  const manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
   const sourceAvailable=!imported||importedSourceAvailable("Workflow history");
-  const summaries=workflowSummaryRows();
-  const actualRows=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
-    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
-  ):null;
-  const importedNote=sourceAvailable?"Event totals are aggregated; distinct-ticket counts remain visible by inbox below.":"No workflow-history file supplied";
-  const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
-  const allocationMethodPanel=imported
-    ? panel("Allocation method split","The snapshot distinguishes first allocations from workflow events but does not identify automatic versus manual allocation method.",'<div class="empty-state">Not available in this source export. No allocation method split is inferred.</div>','<span class="subtle-tag">NOT IN SOURCE</span>')
-    : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
-  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
+  const methods=state.importedSnapshot?.assignment_methods||[];
+  const methodRows=methods.filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const automatic=methodRows.reduce((sum,row)=>sum+row.automatic,0);
+  const manual=methodRows.reduce((sum,row)=>sum+row.manual,0);
+  const methodTotal=automatic+manual;
+  const definitions=[
+    {id:"handover",label:"Handover",codes:["handover"]},
+    {id:"flagged",label:"Category / state flags",codes:["flagged"]},
+    {id:"manual_assignment",label:"Manual first assignment",codes:["manual_assignment"]},
+    {id:"recovery",label:"Recovery events",codes:["recovery_requested","recovery_held","recovery_restored"]},
+    {id:"assigned",label:"Automatic first assignment",codes:["assigned"]},
+    {id:"exception",label:"Exceptions / failed verification",codes:["exception"]}
+  ];
+  const filteredWorkflow=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder):[];
+  const actualRows=filteredWorkflow.map(row=>
+    '<tr><td>'+esc(row.event_type.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+  );
+  const methodBody=imported
+    ?(sourceAvailable&&methodTotal
+      ?'<div class="workflow-method-grid"><div><span>Automatic first assignments</span><strong>'+fmt(automatic)+'</strong><small>'+(methodTotal?(automatic/methodTotal*100).toFixed(1):"0.0")+'% of first allocations in scope</small></div><div><span>Manual first assignments</span><strong>'+fmt(manual)+'</strong><small>'+(methodTotal?(manual/methodTotal*100).toFixed(1):"0.0")+'% of first allocations in scope</small></div><div><span>Total first allocations</span><strong>'+fmt(methodTotal)+'</strong><small>One first allocation per validated ticket</small></div></div>'
+      :'<div class="empty-state">'+(sourceAvailable?"No validated first-assignment events were found. Check the Event Type and Assignment Flag mappings.":"No Activity Log history was supplied.")+'</div>')
+    :donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]);
+  const methodPanel=panel("First-assignment method","Count successful automatic and manual first allocations separately",methodBody,'<span class="subtle-tag">'+(imported?"SOURCE EVENT FLAGS":"SAMPLE MODEL")+'</span>');
+  const workflowBody=imported
+    ?(actualRows.length?dataTable(["Event type","Inbox","Events recorded","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No recognised Activity Log events in this inbox scope. Check source event labels and filters.":"No Activity Log worksheet was included.")+'</div>')
+    :barRows(workflowSummaryRows().map(event=>({label:event.label,value:event.events,color:event.color})));
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Activity Log events are mapped from the Event Type column. Assignment Flag is treated as the TRUE/FALSE first-assignment marker, not the event name.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(filteredWorkflow.reduce((sum,row)=>sum+row.event_count,0))+' recognised activity events</span><span>Dates and names retained only in this local snapshot</span></div>':'')+
     kpiGrid([
-      kpi("Automatic allocation",imported?"Not available":"1,064",imported?"The source does not classify automatic versus manual first assignments":"89.5% of assigned tickets","↗"),
-      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",eventDescription(manual),"✎"),
-      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",eventDescription(handover),"⇄"),
-      kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",eventDescription(recovery),"↺")
+      kpi("Automatic first allocations",imported?fmt(automatic):"1,064",imported?"AUTO_ASSIGNMENT with a TRUE first-assignment flag":"89.5% of sample first assignments","↗"),
+      kpi("Manual first allocations",imported?fmt(manual):"55",imported?"MANUAL_ASSIGNMENT_CAPTURED with a TRUE flag":"Sample manual first-assignment count","✎"),
+      kpi("Handover events",imported?fmt(filteredWorkflow.filter(row=>row.event_type==="handover").reduce((sum,row)=>sum+row.event_count,0)):fmt(workflowEvent("handover").events),imported?"Handover events are separate from first allocations":"Sample handover events","⇄"),
+      kpi("Recovery / exception events",imported?fmt(filteredWorkflow.filter(row=>["recovery_requested","recovery_held","recovery_restored","exception"].includes(row.event_type)).reduce((sum,row)=>sum+row.event_count,0)):fmt(workflowEvent("recovery").events),imported?"Recovery and exception events from Activity Log":"Sample recovery events","↺")
     ])+
     '<div class="grid-two">'+
-      allocationMethodPanel+
-      panel("Workflow events",imported?"Event counts and distinct tickets affected by event type and inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No mapped workflow events in this inbox scope.":"No workflow-history file was supplied.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
+      methodPanel+
+      panel("Activity Log event totals","Counts and distinct tickets affected by event type and inbox",workflowBody,'<span class="subtle-tag">'+(imported?"ACTIVITY LOG":"DEMONSTRATION")+'</span>')+
     '</div>'+
-    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+(imported?"Not aggregated across inboxes":fmt(event.uniqueTickets))+'</td><td>'+(sourceAvailable?fmt(event.events):"Not supplied")+'</td><td>'+(imported?"Not available — distinct-ticket deduplication and denominators are not supplied":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
-    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in an inbox-level distinct-ticket measure and three times in the event count. The aggregate export does not include ticket IDs to deduplicate across inboxes, so cross-inbox unique-ticket totals are not calculated.</div>';
+    (imported?panel("Event interpretation","The reporting layer uses an allow-list of dispatcher event labels",dataTable(["Source Event","Reporting category","First allocation?","Meaning"],[
+      '<tr><td>AUTO_ASSIGNMENT</td><td>Automatic assignment</td><td>Yes, when Assignment Flag = TRUE</td><td>Successful automatic first allocation</td></tr>',
+      '<tr><td>MANUAL_ASSIGNMENT_CAPTURED</td><td>Manual assignment</td><td>Yes, when Assignment Flag = TRUE</td><td>Colleague manually claimed queued work</td></tr>',
+      '<tr><td>HANDOVER</td><td>Handover</td><td>No</td><td>Subsequent ownership transfer</td></tr>',
+      '<tr><td>CATEGORY_REMOVAL_DETECTED / CATEGORY_RESTORED</td><td>Flag / recovery</td><td>No</td><td>Category-removal or restoration activity</td></tr>',
+      '<tr><td>AUTO_ASSIGNMENT_PENDING_VERIFICATION</td><td>Exception / pending</td><td>No</td><td>Pending verification is not a successful allocation</td></tr>'
+    ])):panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],workflowSummaryRows().map(event=>'<tr><td>'+event.label+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+fmt(event.events)+'</td><td>'+event.rate+' of assigned / handled tickets</td></tr>'))) +
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in its inbox-level distinct-ticket measure and three times in event count. Current output does not infer resolved-rate or solve-time performance from assignment events.</div>';
 }
+
 function donutChart(items){
   let offset=0;
   const circles=items.map(item=>{
