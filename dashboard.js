@@ -523,7 +523,8 @@ function validateAndSanitiseSnapshot(raw){
       initially_assigned:count(row.initially_assigned,"first-assignment count"),
       resolved:count(row.resolved,"resolved count"),
       outstanding:count(row.outstanding,"outstanding count"),
-      unassigned:count(row.unassigned,"unassigned count")
+      unassigned:count(row.unassigned,"unassigned count"),
+      no_current_owner:count(row.no_current_owner??0,"no-current-owner count")
     };
   });
   if(byInbox.length!==4||new Set(byInbox.map(row=>row.inbox_code)).size!==4)fail("The snapshot must contain exactly one summary for each of the four inboxes.");
@@ -542,7 +543,8 @@ function validateAndSanitiseSnapshot(raw){
     initially_assigned:count(overall.initially_assigned,"overall first-assignment count"),
     resolved:count(overall.resolved,"overall resolved count"),
     outstanding:count(overall.outstanding,"overall outstanding count"),
-    unassigned:count(overall.unassigned,"overall unassigned count")
+    unassigned:count(overall.unassigned,"overall unassigned count"),
+    no_current_owner:count(overall.no_current_owner??0,"overall no-current-owner count")
   };
   const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
   for(const key of Object.keys(cleanOverall)){
@@ -832,7 +834,7 @@ function folderAssignedRows(){
         ...folder,received:row.ticket_records||0,assigned:row.initially_assigned||0,
         resolved:lifecycle?(row.resolved||0):null,
         open:lifecycle?(row.outstanding||0):ownerRecords,
-        owner_records:ownerRecords,unassigned:lifecycle?(row.unassigned||0):null
+        owner_records:ownerRecords,no_current_owner:row.no_current_owner||0,unassigned:lifecycle?(row.unassigned||0):null
       };
     });
   }
@@ -905,7 +907,8 @@ function totals(){
   const unassigned=lifecycleAvailable
     ?(state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned))
     :null;
-  return {received,assigned,resolved,open,unassigned,lifecycleAvailable};
+  const noOwner=folders.reduce((sum,folder)=>sum+(folder.no_current_owner||0),0);
+  return {received,assigned,resolved,open,unassigned,noOwner,lifecycleAvailable};
 }
 function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
 function heading(eyebrow,title,copy,actions){
@@ -1650,7 +1653,7 @@ function renderTickets(){
       '<td>'+(lifecycle?fmt(folder.resolved):"Not recorded")+'</td>'+
       '<td>'+(lifecycle?fmt(folder.open):"Not recorded")+'</td>'+
       '<td>'+(lifecycle?fmt(folder.unassigned):"Not recorded")+'</td>'+
-      '<td>'+fmt(folder.owner_records)+'</td></tr>'
+      '<td>'+fmt(folder.owner_records)+'</td><td>'+fmt(folder.no_current_owner||0)+'</td></tr>'
     );
     const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder)
       .slice().sort((a,b)=>(b.date_local||b.date_utc).localeCompare(a.date_local||a.date_utc)).slice(0,30).map(row=>
@@ -1668,7 +1671,7 @@ function renderTickets(){
         kpi(lifecycle?"Outstanding":"Current owner records",lifecycle?fmt(t.open):fmt(allocationMatrix().reduce((sum,row)=>sum+row.ownerRecords,0)),lifecycle?"Explicit open-state records":"Current Owner rows; not an open/closed measure","◷")
       ])+
       '<div class="grid-two ticket-analytics-primary">'+
-        panel("Ticket state by inbox","Snapshot counts with missing lifecycle states kept explicit",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned","Current owner records"],inboxRows),'<span class="subtle-tag">SOURCE COUNTS</span>')+
+        panel("Ticket state by inbox","Snapshot counts with missing lifecycle states kept explicit",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned","Current owner records","No current owner"],inboxRows),'<span class="subtle-tag">SOURCE COUNTS</span>')+
         panel("Metric availability","Do not turn missing fields into zero performance",'<div class="team-evidence-list">'+
           '<div><span>First allocation</span><strong>'+(assignmentAvailable?"Available":"Not supplied")+'</strong><small>Uses Event Type with Assignment Flag = TRUE.</small></div>'+
           '<div><span>Brand mix</span><strong>'+(brandAvailable?"Available":"Not recorded")+'</strong><small>'+(brandAvailable?"Explicit Brand source field is mapped.":"Brand is not a column in Assignments.")+'</small></div>'+
