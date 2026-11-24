@@ -310,18 +310,18 @@ function initialAssignmentMethod(value){
 function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
-    received:["received","ticket received","created"],
+    received:["received","ticket received","created","queued"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
-    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending","existing assignment needs review","ambiguous assignment","ambiguous categories review"],
+    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending","existing assignment needs review","new mail needs review","backlog needs review","ambiguous assignment","ambiguous categories review"],
     recovery_requested:["recovery requested","recovery request","recovery review opened"],
     recovery_held:["recovery held","held for recovery","recovery hold","recovery blocked","recovery requires review"],
     recovery_restored:["recovery restored","restored","assignment restored","category restored","restoration marker removed","recovery state reconciled","assignment state reconciled"],
     resolved:["resolved","closed","completed"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment pending verification","queued item not found","pending item not found","multiple categories pending","error"]
+    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment pending verification","queued item not found","queued item not mail","pending item not found","pending change cancelled","multiple categories pending","multiple categories review","error"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
@@ -500,9 +500,16 @@ async function sanitise(){
     }
     const validInitial=new Map();let ambiguousInitial=0;
     for(const [ticketKey,items] of initialRows.entries()){
-      if(items.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=items.length;quality.assignments.rows_skipped+=items.length;continue;}
+      const uniqueItems=[...new Map(items.map(item=>[norm(item.agent)+"|"+item.inbox+"|"+item.method,item])).values()];
+      const duplicateCount=items.length-uniqueItems.length;
+      if(duplicateCount>0){
+        quality.assignments.duplicate_rows+=duplicateCount;
+        quality.assignments.rows_accepted-=duplicateCount;
+        quality.assignments.rows_skipped+=duplicateCount;
+      }
+      if(uniqueItems.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=uniqueItems.length;quality.assignments.rows_skipped+=uniqueItems.length;continue;}
       const ticket=ticketMap.get(ticketKey);
-      if(ticket&&items[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(items[0].agent),inbox_code:items[0].inbox,method:items[0].method});
+      if(ticket&&uniqueItems[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(uniqueItems[0].agent),inbox_code:uniqueItems[0].inbox,method:uniqueItems[0].method});
       else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
