@@ -2403,6 +2403,53 @@ function refreshAuditPanels(){
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
 function renderAudit(){
+  if(state.importedSnapshot){
+    const base=(state.importedSnapshot.activity_summary||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    const types=[...new Set(base.map(row=>row.event_type))].sort();
+    const agents=[...new Set(base.map(row=>row.agent_name).filter(Boolean))].sort();
+    if(state.auditCategory!=="all"&&!types.includes(state.auditCategory))state.auditCategory="all";
+    if(state.auditActor!=="all"&&!agents.includes(state.auditActor))state.auditActor="all";
+    const term=String(state.auditSearch||"").trim().toLowerCase();
+    const filtered=base.filter(row=>
+      (state.auditCategory==="all"||row.event_type===state.auditCategory)&&
+      (state.auditActor==="all"||row.agent_name===state.auditActor)&&
+      (!term||[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt].join(" ").toLowerCase().includes(term))
+    );
+    const totalEvents=filtered.reduce((sum,row)=>sum+row.event_count,0);
+    const affectedOccurrences=filtered.reduce((sum,row)=>sum+row.distinct_tickets,0);
+    const eventTypes=new Set(filtered.map(row=>row.event_type)).size;
+    const attributed=filtered.filter(row=>row.agent_name).reduce((sum,row)=>sum+row.event_count,0);
+    const rows=filtered.slice().sort((a,b)=>(b.event_date_egypt||"").localeCompare(a.event_date_egypt||"")||
+      a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type)).map(row=>
+      '<tr><td>'+esc(row.event_date_egypt||"Date not supplied")+'</td>'+
+      '<td><strong>'+esc(row.event_type.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()))+'</strong></td>'+
+      '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
+      '<td>'+esc(row.agent_name||"Not attributed")+'</td>'+
+      '<td class="total-cell">'+fmt(row.event_count)+'</td>'+
+      '<td>'+fmt(row.distinct_tickets)+'</td></tr>'
+    );
+    const activityFilters='<div class="audit-filter-toolbar">'+
+      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search colleague, event, inbox or Egypt date…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+      '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditCategory">'+auditSelectOptions(types,state.auditCategory,"All event types")+'</select></label>'+
+      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditActor">'+auditSelectOptions(agents,state.auditActor,"All colleagues")+'</select></label>'+
+    '</div>';
+    pageContent.innerHTML=heading("ACTIVITY LOG","Dispatcher activity","A readable summary of recognised rows from the imported Activity Log worksheet. Times are Egypt-local calendar dates; raw ticket identifiers, email subjects and notes are removed.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> IMPORTED ACTIVITY LOG · READ ONLY</span><span>'+fmt(totalEvents)+' recognised event records</span><span>Agent attribution: '+fmt(attributed)+' events</span><span>Time zone: Africa/Cairo</span></div>'+
+      kpiGrid([
+        kpi("Events recorded",fmt(totalEvents),"After inbox, type and colleague filters","⌁"),
+        kpi("Event types",String(eventTypes),"Recognised dispatcher activity categories","▤"),
+        kpi("Attributed to colleague",fmt(attributed),"Matched to Team & Shifts display name","♧"),
+        kpi("Affected-ticket occurrences",fmt(affectedOccurrences),"Can overlap across event types; not globally unique","◎")
+      ])+
+      '<section class="panel activity-log-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">One row per event type, inbox, colleague and Egypt-local date. Event and ticket counts are preserved separately.</p></div><span class="subtle-tag">'+filtered.length+' GROUPED ROWS</span></div>'+
+      activityFilters+
+      '<div class="audit-result-count">Showing '+filtered.length+' of '+base.length+' grouped Activity Log rows in '+esc(state.folder==="all"?"all inboxes":scopeName())+'</div>'+
+      dataTable(["Event date · Egypt","Event type","Inbox","Colleague","Events","Tickets affected"],rows,"No Activity Log records match these filters.")+
+      '</section>'+
+      '<div class="prototype-warning"><strong>Important.</strong> This is the imported Activity Log, not a security audit ledger. `Details / Notes` and raw Email Key / ID values are deliberately excluded. Affected-ticket counts are deduplicated within each event/inbox/colleague/date group, but may overlap between groups.</div>';
+    return;
+  }
+
   const base=auditBaseEvents();
   for(const [key,field] of [["auditCategory","category"],["auditOutcome","outcome"],["auditActor","actor"]]){
     if(state[key]!=="all"&&!base.some(event=>event[field]===state[key]))state[key]="all";
@@ -2410,24 +2457,23 @@ function renderAudit(){
   const filtered=auditFilteredEvents(),stats=auditStats(base);
   if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
   const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
-  pageContent.innerHTML=heading("AUDIT HISTORY 2.0","Trace every change, decision and outcome.","Investigate sample ticket events, manager approvals, configuration history and exception evidence. This is a read-only demonstration ledger, not a production audit source.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export filtered ledger</button>')+
-    '<div class="audit-demo-strip"><span><i></i> SYNTHETIC AUDIT DATA · READ ONLY</span><span>Persistent audit store <b>Not configured</b></span><span>Verified actor identity <b>Not available</b></span><span>Event integrity <b>Not verified</b></span></div>'+
+  pageContent.innerHTML=heading("ACTIVITY LOG · DEMONSTRATION","Example event ledger","Synthetic examples only. Import a sanitised Activity Log snapshot to see the real dispatcher event summary.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export sample ledger</button>')+
+    '<div class="audit-demo-strip"><span><i></i> SYNTHETIC EXAMPLES · NOT FROM OUTLOOK</span><span>Events <b>Sample only</b></span><span>Approval history <b>Not supplied</b></span></div>'+
     kpiGrid([
-      kpi("Sample audit events",fmt(stats.eventCount),"Unique event records in this inbox scope","◷"),
-      kpi("Ticket timelines",fmt(stats.ticketCount),"Distinct ticket references represented","▤"),
-      kpi("Configuration records",fmt(stats.configurationCount),"Draft, review and blocked examples","⚙"),
-      kpi("Exceptions / holds",fmt(stats.exceptionCount),"Exception, hold or blocked outcomes","!")
+      kpi("Sample event records",fmt(stats.eventCount),"Illustrative rows only","⌁"),
+      kpi("Ticket timelines",fmt(stats.ticketCount),"Synthetic examples","▤"),
+      kpi("Configuration examples",fmt(stats.configurationCount),"Not production changes","⚙"),
+      kpi("Exceptions / holds",fmt(stats.exceptionCount),"Sample exception states","!")
     ])+
-    '<div class="audit-filter-wrap">'+auditFilterToolbar()+'<div class="audit-result-count" id="auditLedgerCount">Showing '+filtered.length+' of '+base.length+' sample events · '+(state.folder==="all"?"All four inboxes":esc(scopeName()))+'</div></div>'+
+    '<div class="audit-filter-wrap">'+auditFilterToolbar()+'<div class="audit-result-count" id="auditLedgerCount">Showing '+filtered.length+' of '+base.length+' synthetic examples</div></div>'+
     '<div class="audit-workspace"><div class="audit-ledger-column">'+
-      panel("Event ledger","Every row is one synthetic event record; repeated attempts are retained inside the record where relevant.",'<div id="auditLedgerRows">'+auditEventRows()+'</div>','<span class="subtle-tag">APPEND-ONLY MODEL · NOT PERSISTED</span>')+
+      panel("Sample event ledger","These are generated examples, not imported Activity Log rows.",'<div id="auditLedgerRows">'+auditEventRows()+'</div>','<span class="subtle-tag">SYNTHETIC</span>')+
     '</div><div class="audit-detail-column">'+
-      panel("Event investigation","Actor, context, approval and value changes",'<div id="auditEventDetail">'+auditDetailMarkup(selected)+'</div>','<span class="subtle-tag">READ ONLY</span>')+
+      panel("Sample event details","Illustrative actor, context and change evidence",'<div id="auditEventDetail">'+auditDetailMarkup(selected)+'</div>','<span class="subtle-tag">READ ONLY</span>')+
     '</div></div>'+
-    panel("Related ticket and correlation timeline","Follow the sequence for the selected ticket, or the correlation chain for a configuration or access record.",'<div id="auditRelatedTimeline">'+auditTimelineMarkup(selected)+'</div>')+
-    panel("Production audit contract","The fields the future authenticated audit service must preserve",'<div class="audit-contract-grid"><div><strong>Stable event identity</strong><span>Unique event ID, source ID and idempotency reference.</span></div><div><strong>Trusted actor attribution</strong><span>Authenticated principal, role, initiator and approver.</span></div><div><strong>Timezone-aware time</strong><span>UTC timestamp plus explicit UK mailbox or Egypt shift context.</span></div><div><strong>Change evidence</strong><span>Before / after values, reason, approval and source reference.</span></div><div><strong>Verified outcome</strong><span>Requested, approved, applied, acknowledged, reconciled or failed.</span></div><div><strong>Append-only corrections</strong><span>Corrections create linked events; earlier records are never silently overwritten.</span></div></div>','<span class="subtle-tag">DESIGN REQUIREMENTS</span>')+
-    '<div class="audit-final-note"><strong>Prototype boundary:</strong> this page does not provide a tamper-evident ledger, authenticated actor identity, persistent audit storage, real approval workflow or production event ingestion. The “append-only” label describes the model being demonstrated, not a guarantee enforced by this static public site.</div>';
+    '<div class="audit-final-note"><strong>Data boundary:</strong> this demonstration ledger is not an Outlook Activity Log or a durable security audit trail.</div>';
 }
+
 function renderReports(){
   const imported=Boolean(state.importedSnapshot);
   pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
@@ -2729,6 +2775,24 @@ function exportRoster(){
   csvDownload(imported?"dispatcher-local-snapshot-roster-coverage.csv":"dispatcher-sample-roster-coverage.csv",rows);
 }
 function exportAuditHistory(){
+  if(state.importedSnapshot){
+    const base=(state.importedSnapshot.activity_summary||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    const term=String(state.auditSearch||"").trim().toLowerCase();
+    const rowsFiltered=base.filter(row=>
+      (state.auditCategory==="all"||row.event_type===state.auditCategory)&&
+      (state.auditActor==="all"||row.agent_name===state.auditActor)&&
+      (!term||[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt].join(" ").toLowerCase().includes(term))
+    );
+    csvDownload("dispatcher-local-activity-log-summary.csv",[
+      ["ACTIVITY LOG SUMMARY — SANITISED LOCAL SNAPSHOT"],
+      ["Note","Names are from Team & Shifts. Ticket references are HMAC-pseudonymised in ticket queue data; raw Activity Log IDs, subjects and notes are not exported."],
+      ["Timestamp zone","Africa/Cairo · source local date"],
+      [],
+      ["Event date · Egypt","Event type","Inbox","Colleague","Agent reference","Events","Tickets affected"],
+      ...rowsFiltered.map(row=>[row.event_date_egypt||"Date not supplied",row.event_type,row.inbox_code,row.agent_name||"Not attributed",row.agent_ref||"",row.event_count,row.distinct_tickets])
+    ]);
+    return;
+  }
   const rows=[
     ["Event ID","Recorded time (UK sample)","Category","Event","Actor","Actor role","Affected entity","Inbox","Ticket","Correlation ID","Outcome","Reason","Approver","Approval","Before","After","Source","Evidence"],
     ...auditFilteredEvents().map(event=>[
@@ -2738,8 +2802,9 @@ function exportAuditHistory(){
       JSON.stringify(event.before),JSON.stringify(event.after),event.source,event.evidence
     ])
   ];
-  csvDownload("dispatcher-sample-audit-history.csv",rows);
+  csvDownload("dispatcher-sample-activity-log-examples.csv",rows);
 }
+
 function exportAdminSecurityBlueprint(){
   const rows=[["Section","Name","Scope / detail","Status / permission","Evidence / notes"]];
   ADMIN_ROLE_PROFILES.forEach(role=>rows.push(["Role",role.title,role.scope,role.permissions.join("; "),role.boundaries]));
