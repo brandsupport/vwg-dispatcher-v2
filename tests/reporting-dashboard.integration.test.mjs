@@ -98,7 +98,7 @@ function calculateDashboardViews(snapshot,folder="all"){
     extractFunction("workflowSummaryRows"),
     "const agents=allocationMatrix();",
     "const activeRoster=agents.filter(agent=>agent.activeThisFortnight===true);",
-    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===folder),agents,coverage:coverageSegments(activeRoster),brands:brandRows(),workflow:workflowSummaryRows()};"
+    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===state.folder),agents,coverage:coverageSegments(activeRoster),brands:brandRows(),workflow:workflowSummaryRows()};"
   ].join("\n");
   vm.runInContext(script,context);
   return JSON.parse(JSON.stringify(context.result));
@@ -287,6 +287,8 @@ test("the Team & Shifts roster is pseudonymised and drives actual imported shift
 
   const imported=validateWithDashboard(snapshot);
   assert.equal(imported.team_roster.length,8);
+  const rosterRefs=new Set(imported.team_roster.map(row=>row.agent_ref));
+  assert.ok(imported.allocations.every(row=>rosterRefs.has(row.agent_ref)),"allocation agents must join to the roster using the same pseudonym key");
   const views=calculateDashboardViews(imported);
   assert.equal(views.agents.length,8);
   assert.equal(views.agents.filter(row=>row.shift==="Early"&&row.activeThisFortnight===true).length,2);
