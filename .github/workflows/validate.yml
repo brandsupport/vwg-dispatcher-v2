@@ -279,7 +279,7 @@ jobs:
           const teamStart = js.indexOf('function renderTeam(){');
           const teamEnd = js.indexOf('\nfunction agentDetail(', teamStart);
           const teamView = teamStart >= 0 && teamEnd > teamStart ? js.slice(teamStart, teamEnd) : '';
-          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Member snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED']) {
+          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Colleague performance snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED']) {
             if (!teamView.includes(text)) throw new Error('Team Performance 2.0 section or disclosure missing: ' + text);
           }
           const teamEvidenceStart = js.indexOf('function teamEvidencePanel(');
