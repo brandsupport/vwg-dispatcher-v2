@@ -60,17 +60,35 @@ Current event interpretation in the sanitiser:
 
 There is no distinct reassignment flag in the values supplied so far. Do not infer reassignment from a handover or manual assignment. Counts for unknown/unmapped event labels remain excluded and appear in data-quality checks.
 
-## 4. Columns that must remain unmapped
+## 4. Team & Shifts roster — optional
+
+Export the **Team & Shifts** sheet as a separate approved CSV and select it in the new optional roster input.
+
+| Studio field | Required? | Exact source header | Rule |
+|---|---|---|---|
+| Agent identity | Yes | `Outlook Category (exact)` | Used only in browser memory to join with `Original Assignee` / `Current Owner`, then converted to the same keyed pseudonymous agent reference |
+| Shift group | Yes | `Shift Group` | Only `Early` and `Late` are accepted |
+| Shift start | Yes | `Shift Start (Egypt)` | Must be `HH:mm`; retained as Egypt-local schedule metadata |
+| Shift end | Yes | `Shift End (Egypt)` | Must be `HH:mm` and later than the shift start |
+| Active this fortnight | Yes | `Active This Fortnight` | Accepts Yes/No (or equivalent Boolean values) |
+
+`Colleague` is not required as a second identity field; the exact Outlook category is the join key. The roster may include inactive colleagues so the snapshot can distinguish the whole roster from the active-fortnight headcount. Shift metadata is included only as pseudonymous agent reference, shift group, start/end time and active-fortnight Boolean. Colleague names and Outlook category values are not written to the snapshot or public repository.
+
+**Use the same private workspace key** for the Assignments, Activity Log and Team & Shifts inputs in every reporting run. Otherwise the pseudonymous agent references will not join, and the Dashboard will flag roster entries that do not match the ticket or assignment data.
+
+The roster file must contain one unique row per Outlook category. Invalid shift groups, malformed times, duplicate categories or invalid Yes/No values are skipped and counted in data-quality checks. The source does not provide inbox eligibility, breaks, absence dates or minimum staffing targets; these must not be inferred from the shift schedule.
+
+## 5. Columns that must remain unmapped
 
 Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, VINs, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. The reporting schema has no destination for them. Do not add them to the JSON export, dashboard or this public repository.
 
 Other fields such as Incident Count, Last Incident At, Last Verified At, Record Updated At, Allocated At (Egypt), Roster Period Start, Pending Since (Egypt), Last Category State and Handover Count are not part of the current report mapping. They should remain unmapped until a separate, approved metric is defined.
 
-## 5. Timestamp handling
+## 6. Timestamp handling
 
 The Studio accepts date-only values or ISO timestamps with an explicit timezone offset. A value labelled UK or Egypt time but exported without an offset is not enough to infer a reliable UTC instant. Leave optional timestamp fields unmapped when the export has no explicit offset; do not silently assume the current UK/Egypt offset, because daylight-saving rules are date-dependent. No response-time, handling-time or resolution-duration metric is calculated.
 
-## 6. Approval and reconciliation sign-off
+## 7. Approval and reconciliation sign-off
 
 Complete this section outside the public repository, in the organisation's approved change/data-governance location.
 
@@ -80,7 +98,11 @@ Complete this section outside the public repository, in the organisation's appro
 | Source system and exact workbook sheet identified | |
 | Assignments export contains one current-state row per unique Email Key / ID | |
 | Current row is first where duplicate keys are present | |
-| Activity Log contains the relevant event history and stable ticket key | |
+| Activity Log contains the relevant event history and stable ticket key |
+| Team & Shifts roster export is approved and has one unique row per exact Outlook category |
+| Outlook category values join consistently to Original Assignee and Current Owner |
+| Shift groups, Egypt-local start/end values and active-fortnight status are confirmed |
+| Same private pseudonym key is used consistently for all exports | |
 | Original Assignee is confirmed to represent the original first allocation throughout the activity history | |
 | `auto assigned` is confirmed to represent an initial assignment, not an automated reassignment | |
 | Manual first assignments are either separately identified or explicitly excluded from allocation share | |
@@ -92,7 +114,7 @@ Complete this section outside the public repository, in the organisation's appro
 | Approved processing device/location and report retention confirmed | |
 | Data owner / security approval reference recorded in approved location | |
 
-## 7. First-run reconciliation
+## 8. First-run reconciliation
 
 Before accepting a report, compare the Studio's preview with the approved source totals. Confirm that ticket records equal the four inbox totals; resolved plus outstanding equals ticket records; first-assignment totals do not exceed ticket records; and current owner workload does not exceed outstanding work. Brand mix will remain unclassified until an approved brand field is added. Review every skipped, duplicate, unmapped and ambiguous row. Only then download the sanitised JSON and import it into Dispatcher 2.0.
 
