@@ -277,29 +277,29 @@ test("the Team & Shifts roster is pseudonymised and drives actual imported shift
     roster:read("examples/synthetic-team-roster.csv")
   })));
   const snapshot=run.snapshot;
-  assert.equal(snapshot.team_roster.length,14);
-  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Early"&&row.active_this_fortnight).length,5);
-  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Late"&&row.active_this_fortnight).length,8);
-  assert.equal(snapshot.team_roster.filter(row=>!row.active_this_fortnight).length,1);
+  assert.equal(snapshot.team_roster.length,8);
+  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Early"&&row.active_this_fortnight).length,2);
+  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Late"&&row.active_this_fortnight).length,4);
+  assert.equal(snapshot.team_roster.filter(row=>!row.active_this_fortnight).length,2);
   assert.ok(snapshot.team_roster.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
-  assert.ok(snapshot.team_roster.every(row=>row.shift_start_egypt==="10:00"||row.shift_start_egypt==="11:00"));
-  assert.ok(snapshot.team_roster.every(row=>row.shift_end_egypt==="19:00"||row.shift_end_egypt==="20:00"));
+  assert.ok(snapshot.team_roster.every(row=>row.shift_start_egypt==="09:00"||row.shift_start_egypt==="12:00"));
+  assert.ok(snapshot.team_roster.every(row=>row.shift_end_egypt==="17:00"||row.shift_end_egypt==="20:00"));
 
   const imported=validateWithDashboard(snapshot);
-  assert.equal(imported.team_roster.length,14);
+  assert.equal(imported.team_roster.length,8);
   const views=calculateDashboardViews(imported);
-  assert.equal(views.agents.length,14);
-  assert.equal(views.agents.filter(row=>row.shift==="Early"&&row.activeThisFortnight===true).length,5);
-  assert.equal(views.agents.filter(row=>row.shift==="Late"&&row.activeThisFortnight===true).length,8);
-  assert.equal(views.agents.filter(row=>row.activeThisFortnight===false).length,1);
+  assert.equal(views.agents.length,8);
+  assert.equal(views.agents.filter(row=>row.shift==="Early"&&row.activeThisFortnight===true).length,2);
+  assert.equal(views.agents.filter(row=>row.shift==="Late"&&row.activeThisFortnight===true).length,4);
+  assert.equal(views.agents.filter(row=>row.activeThisFortnight===false).length,2);
   assert.deepEqual(views.coverage.map(row=>[
     row.start,row.end,row.early,row.late,row.headcount
   ]),[
-    [600,660,5,0,5],
-    [660,1140,5,8,13],
-    [1140,1200,0,8,8]
+    [540,720,2,0,2],
+    [720,1020,2,4,6],
+    [1020,1200,0,4,4]
   ]);
-  assert.equal(views.coverage.filter(row=>row.early>0&&row.late>0).reduce((sum,row)=>sum+row.duration,0),480);
+  assert.equal(views.coverage.filter(row=>row.early>0&&row.late>0).reduce((sum,row)=>sum+row.duration,0),300);
 
   const serialised=JSON.stringify(imported);
   for(const name of Array.from({length:14},(_,i)=>"Sample Agent "+String.fromCharCode(65+i))){
