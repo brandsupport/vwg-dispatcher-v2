@@ -1581,23 +1581,25 @@ function metricPanel(title,value,copy,note){
 function renderBrands(){
   const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
   const imported=Boolean(state.importedSnapshot);
-  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explore validated brand categories from the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Brand totals · all inboxes</span><span>No brand-by-inbox split supplied</span></div>':'')+
+  const brandSourceAvailable=!imported||state.importedSnapshot.tickets.brand_field_mapped===true;
+  const displayRows=brandSourceAvailable?rows:[{...rows.find(row=>row.id==="other"),id:"unclassified",name:"Brand not recorded",value:total}];
+  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?(brandSourceAvailable?"Explore brand values supplied in the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"The current tracker export contains no Brand field. All "+fmt(total)+" tickets remain unclassified until the dispatcher records brand explicitly."):"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+(brandSourceAvailable?"Brand totals · all inboxes":"BRAND FIELD NOT CAPTURED")+'</span><span>No brand-by-inbox split supplied</span></div>':'')+
     kpiGrid([
       kpi(imported?"Ticket records":"Total tickets",fmt(total),imported?"Current-state snapshot records":"Distinct received tickets","▤"),
-      kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
-      kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
-      kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
+      kpi("Identified brand",brandSourceAvailable?fmt(known):"Not captured",brandSourceAvailable?(total?(known/total*100).toFixed(1)+"% classified":"—"):"The tracker has no Brand column","◈"),
+      kpi("Audi tickets",brandSourceAvailable?fmt(rows.find(b=>b.id==="audi").value):"Not captured",brandSourceAvailable?"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%":"No brand source","A"),
+      kpi("Škoda tickets",brandSourceAvailable?fmt(rows.find(b=>b.id==="skoda").value):"Not captured",brandSourceAvailable?"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%":"No brand source","Š")
     ])+
     '<div class="grid-two">'+
-      panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
+      panel("Brand distribution",brandSourceAvailable?"Share of unique tickets in the current scope":"All records retained as unclassified because the source does not record brand",brandBarList(displayRows),'<span class="subtle-tag">'+(brandSourceAvailable?"7 CATEGORIES":"NOT CAPTURED")+'</span>')+
       panel("Brand mix by inbox",imported?"Not supplied by the aggregate snapshot. Clear the global inbox filter to review overall brand totals.":"The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">'+(imported?"NOT IN SOURCE":"SAMPLE COMPARISON")+'</span>')+
     '</div>'+
-    panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],rows.map(b=>{
+    panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],displayRows.map(b=>{
       const share=total?b.value/total*100:0;
       return '<tr><td><span class="brand-register-name"><i style="background:'+b.color+'"></i>'+b.name+'</span></td><td class="total-cell">'+fmt(b.value)+'</td><td>'+share.toFixed(1)+'%</td><td>'+statusPill(b.id==="other"?"Review required":"Identified")+'</td><td>'+(b.id==="other"?"Retain until confirmed":"Explicit / validated mapping")+'</td></tr>';
     })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
-    '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
+    '<div class="prototype-warning"><strong>Classification safeguard.</strong> '+(brandSourceAvailable?"Brand identity comes from an explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.":"The Assignments sheet currently has no Brand column, so the dashboard cannot count Audi, Volkswagen, Škoda, SEAT, CUPRA or VWCV separately. A source field and dispatcher write path are required; no guesses are made from email subjects.")+'</div>';
 }
 function brandFolderTable(){
   if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
