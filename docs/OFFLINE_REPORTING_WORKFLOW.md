@@ -63,7 +63,7 @@ The imported snapshot is used in these aggregate workspaces:
 
 **Live Operations remains a synthetic demonstration workbench.** The sanitised snapshot contains no ticket references, subjects, message details or individual source rows, so it cannot populate a real ticket queue or open real ticket timelines. Roster, shift coverage, SLA, response time, handling time, audit history, reliability incidents and dispatch controls are not populated by this import.
 
-The snapshot is point-in-time: the dashboard disables the period selector while it is loaded. The imported data exists only in JavaScript memory for the current tab. It is not uploaded, written to browser storage or connected to a backend. **Use demo** returns to synthetic sample data; refreshing or closing the tab clears the import.
+**Access and approval:** the GitHub Pages dashboard is public and unauthenticated. Import is a browser-memory convenience, not an access-control or confidentiality boundary. Only use company-approved, sanitised aggregate snapshots on an approved device and in line with the data owner's/security team's instructions. Do not import customer-level exports, raw ticket IDs, subjects, message content or direct colleague identifiers. The snapshot is point-in-time: the dashboard disables the period selector while it is loaded. The imported data exists only in JavaScript memory for the current tab. It is not uploaded, written to browser storage or connected to a backend. **Use demo** returns to synthetic sample data; refreshing or closing the tab clears the import.
 
 ## Pseudonym key
 
