@@ -50,7 +50,7 @@ function loadStudio(){
         files.tickets={...ticketData,rowCount:ticketData.records.length};
         files.assignments={...activityData,rowCount:activityData.records.length};
         files.workflow={...activityData,rowCount:activityData.records.length};
-        mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",received_at:"Received At (UK)",current_owner:"Current Owner"};
+        mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",received_at:"Received At (UK)",current_owner:"Current Owner",resolution_status:ticketData.headers.includes("Resolution Status")?"Resolution Status":"",resolved_at:ticketData.headers.includes("Resolved At (UK)")?"Resolved At (UK)":"",resolved_by:ticketData.headers.includes("Resolved By")?"Resolved By":""};
         mappings.assignments={ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"};
         mappings.workflow={ticket_ref:"Email Key / ID",event_type:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",original_assignee:"Original Assignee",current_owner:"Current Owner",assignment_flag:"Assignment Flag",incident_count:"Incident Count"};
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -148,6 +148,36 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
   assert.ok(result.privateLookup.some(row=>row.display_name==="Belal"));
   assert.ok(result.privateLookup.some(row=>row.display_name==="Balqees"));
   assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
+});
+
+test("uses explicit resolution status, resolver and timestamps for solve-time metrics",async()=>{
+  const hooks=loadStudio();
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner,Resolution Status,Resolved At (UK),Resolved By",
+    "KEY-RES-01,Detags,Assigned,Audi,2026-11-24 08:30:00,Belal,Resolved,2026-11-24 10:30:00,Belal",
+    "KEY-RES-02,Detags,Assigned,Volkswagen,2026-11-24 09:00:00,Balqees,Open,,"
+  ].join("\r\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    "2026-11-24 10:30:00,AUTO_ASSIGNMENT,KEY-RES-01,Detags,Belal,Belal,TRUE,0,",
+    "2026-11-24 11:00:00,MANUAL_ASSIGNMENT_CAPTURED,KEY-RES-02,Detags,Balqees,Balqees,TRUE,0,"
+  ].join("\r\n");
+  const {snapshot,privateLookup}=await hooks.processVwg(tickets,activity);
+  assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
+  assert.equal(snapshot.tickets.overall.resolved,1);
+  assert.equal(snapshot.tickets.overall.outstanding,1);
+  assert.equal(snapshot.tickets.resolution_metrics.overall.timed_tickets,1);
+  assert.equal(snapshot.tickets.resolution_metrics.overall.average_minutes,120);
+  assert.equal(snapshot.tickets.resolution_by_agent.length,1);
+  assert.equal(snapshot.tickets.resolution_by_agent[0].resolved_tickets,1);
+  assert.equal(snapshot.tickets.resolution_by_agent[0].timed_tickets,1);
+  assert.equal(snapshot.tickets.resolution_by_agent[0].total_resolution_minutes,120);
+  assert.ok(privateLookup.some(row=>row.display_name==="Belal"));
+  assert.equal(snapshot.tickets.brand_field_mapped,true);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="audi").count,1);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="volkswagen").count,1);
+  const json=JSON.stringify(snapshot);
+  for(const raw of ["KEY-RES-01","KEY-RES-02","Belal","Balqees"])assert.equal(json.includes(raw),false,"raw value leaked into snapshot: "+raw);
 });
 
 test("the same local workspace key keeps agent references stable between runs",async()=>{
