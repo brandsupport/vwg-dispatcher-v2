@@ -124,8 +124,23 @@ jobs:
           for (const selector of ['.intro {','.step-card {','.button-primary {','.results-section {','.guardrails {','.workspace-nav-button']) {
             if (!studioCss.includes(selector)) throw new Error('Reporting Studio Cherry Glass styling missing: ' + selector);
           }
+          if (!css.includes('Balanced typography and resilient dashboard layout') || !css.includes('font-size:15.2px !important')) {
+            throw new Error('Dashboard balanced type scale is missing.');
+          }
+          if (!studioCss.includes('Balanced Studio type scale and overflow-safe content') || !studioCss.includes('font-size:15.8px !important')) {
+            throw new Error('Reporting Studio balanced type scale is missing.');
+          }
+          if (!html.includes('© Designed and coded by') || !html.includes('class="footer-author">Momo</strong>')) {
+            throw new Error('Dashboard signature footer or neon Momo credit is missing.');
+          }
+          if (!studioHtml.includes('© Designed and coded by') || !studioHtml.includes('class="studio-footer-author">Momo</strong>')) {
+            throw new Error('Reporting Studio signature footer or neon Momo credit is missing.');
+          }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
-            if (!sheet.includes('font-size: 17px !important')) throw new Error(name + ' is missing the larger base typography override.');
+            if (!sheet.includes('linear-gradient(100deg,#ff174f 0%,#ff8eae 52%,#c2a0ff 100%)')) {
+              throw new Error(name + ' footer author neon gradient is missing.');
+            }
+            if (!sheet.includes('overflow-wrap:anywhere')) throw new Error(name + ' overflow-safe text wrapping is missing.');
           }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
             const sizes = [...sheet.matchAll(/font-size\s*:\s*([\d.]+)px/g)].map(match => Number(match[1]));
