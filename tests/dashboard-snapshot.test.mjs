@@ -26,13 +26,16 @@ function snapshotFixture() {
         initially_assigned: 2,
         resolved: 1,
         outstanding: 2,
-        unassigned: 1
+        unassigned: 1,
+        no_current_owner: 0
       },
+      brand_available: true,
+      lifecycle_available: true,
       by_inbox: [
-        { inbox_code: "agency", ticket_records: 2, initially_assigned: 1, resolved: 1, outstanding: 1, unassigned: 0 },
-        { inbox_code: "detags", ticket_records: 1, initially_assigned: 1, resolved: 0, outstanding: 1, unassigned: 1 },
-        { inbox_code: "transfers", ticket_records: 0, initially_assigned: 0, resolved: 0, outstanding: 0, unassigned: 0 },
-        { inbox_code: "unadopts", ticket_records: 0, initially_assigned: 0, resolved: 0, outstanding: 0, unassigned: 0 }
+        { inbox_code: "agency", ticket_records: 2, initially_assigned: 1, resolved: 1, outstanding: 1, unassigned: 0, no_current_owner: 0 },
+        { inbox_code: "detags", ticket_records: 1, initially_assigned: 1, resolved: 0, outstanding: 1, unassigned: 1, no_current_owner: 0 },
+        { inbox_code: "transfers", ticket_records: 0, initially_assigned: 0, resolved: 0, outstanding: 0, unassigned: 0, no_current_owner: 0 },
+        { inbox_code: "unadopts", ticket_records: 0, initially_assigned: 0, resolved: 0, outstanding: 0, unassigned: 0, no_current_owner: 0 }
       ],
       by_brand: [
         { brand_code: "audi", count: 1 },

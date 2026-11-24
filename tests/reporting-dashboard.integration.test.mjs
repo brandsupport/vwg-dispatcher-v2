@@ -133,15 +133,17 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
   assert.equal(studio.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(studio.tickets.total,5);
   assert.deepEqual(JSON.parse(JSON.stringify(studio.tickets.overall)),{
-    ticket_records:5,initially_assigned:4,resolved:1,outstanding:4,unassigned:1
+    ticket_records:5,initially_assigned:4,resolved:0,outstanding:0,unassigned:0,no_current_owner:1
   });
+  assert.equal(studio.tickets.lifecycle_available,false);
+  assert.equal(studio.tickets.brand_available,false);
   assert.deepEqual(studio.tickets.by_inbox.map(row=>[
-    row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned
+    row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned,row.no_current_owner
   ]),[
-    ["agency",1,1,0,1,0],
-    ["detags",2,2,0,2,0],
-    ["transfers",1,1,1,0,0],
-    ["unadopts",1,0,0,1,1]
+    ["agency",1,1,0,0,0,0],
+    ["detags",2,2,0,0,0,0],
+    ["transfers",1,1,0,0,0,0],
+    ["unadopts",1,0,0,0,0,1]
   ]);
   assert.equal(studio.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
 
@@ -153,23 +155,22 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
 
   const overall=calculateDashboardViews(imported);
   assert.deepEqual(overall.totals,{
-    received:5,assigned:4,resolved:1,open:4,unassigned:1
+    received:5,assigned:4,resolved:null,open:null,unassigned:null,noOwner:1,lifecycleAvailable:false
   });
   assert.deepEqual(overall.folders.map(row=>[
-    row.id,row.received,row.assigned,row.resolved,row.open,row.unassigned
+    row.id,row.received,row.assigned,row.resolved,row.open,row.unassigned,row.no_current_owner
   ]),[
-    ["agency",1,1,0,1,0],
-    ["detags",2,2,0,2,0],
-    ["transfers",1,1,1,0,0],
-    ["unadopts",1,0,0,1,1]
+    ["agency",1,1,null,null,null,0],
+    ["detags",2,2,null,null,null,0],
+    ["transfers",1,1,null,null,null,0],
+    ["unadopts",1,0,null,null,null,1]
   ]);
 
-  const brandCounts=Object.fromEntries(overall.brands.map(row=>[row.id,row.value]));
-  assert.deepEqual(brandCounts,{vw:1,audi:1,skoda:1,seat:0,cupra:1,vwcv:0,other:1});
-  assert.equal(Object.values(brandCounts).reduce((sum,value)=>sum+value,0),5);
+  assert.ok(overall.brands.every(row=>row.value===null),"brand totals are unavailable without an explicit Brand field");
 
   assert.equal(overall.agents.reduce((sum,agent)=>sum+agent.assigned,0),4);
-  assert.equal(overall.agents.reduce((sum,agent)=>sum+agent.open,0),3);
+  assert.equal(overall.agents.reduce((sum,agent)=>sum+agent.open,0),0);
+  assert.equal(overall.agents.reduce((sum,agent)=>sum+agent.ownerRecords,0),3);
   assert.ok(overall.agents.every(agent=>/^Agent-[A-F0-9]{10}$/.test(agent.name)));
   assert.ok(overall.agents.every(agent=>agent.shift==="Shift data not included"));
 
@@ -178,7 +179,7 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
 
   const detags=calculateDashboardViews(imported,"detags");
   assert.deepEqual(detags.totals,{
-    received:2,assigned:2,resolved:0,open:2,unassigned:0
+    received:2,assigned:2,resolved:null,open:null,unassigned:null,noOwner:0,lifecycleAvailable:false
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
     ["handover",1],["flag",0],["manual",0],["recovery",1],["reassignment",0]
@@ -249,7 +250,7 @@ test("the committed synthetic inputs are the three documented sample files",()=>
 });
 
 
-test("real tracker sheet headers map safely and Assignment Flag drives activity categorisation",async()=>{
+test("real five-tab tracker fields map correctly: Event Type is the event, Assignment Flag is Boolean",async()=>{
   const assignmentsHeaders=[
     "Email Key / ID","Received At (UK)","Source Inbox","Email Subject","Original Assignee","Current Owner","Assignment Flag",
     "Incident Count","Last Incident At","Status","Handover Notes","Last Verified At","LoginUserEmail (optional)",
@@ -260,6 +261,7 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
     "Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner",
     "Assignment Flag","Incident Count","Details / Notes"
   ];
+  const rosterHeaders=["Colleague","Outlook Category (exact)","Shift Group","Shift Start (Egypt)","Shift End (Egypt)","Active This Fortnight"];
   const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
   const makeCsv=(headers,rows)=>[
     headers.map(quote).join(","),
@@ -267,67 +269,101 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
   ].join("\n");
 
   const assignments=makeCsv(assignmentsHeaders,[
-    {"Email Key / ID":"SYN-101","Received At (UK)":"2026-11-22T09:12:00+00:00","Source Inbox":"Agency Detags","Email Subject":"SYNTHETIC SUBJECT - DO NOT EXPORT","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"handover","Status":"In progress","Handover Notes":"SYNTHETIC PRIVATE NOTE","LoginUserEmail (optional)":"agent-a@example.invalid","Outlook Entry ID":"SYNTHETIC-ENTRY-A","Outlook Store ID":"SYNTHETIC-STORE-A"},
-    {"Email Key / ID":"SYN-102","Received At (UK)":"2026-11-22T09:40:00+00:00","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"manual assignment captured","Status":"Waiting","LoginUserEmail (optional)":"agent-c@example.invalid"},
-    {"Email Key / ID":"SYN-103","Received At (UK)":"2026-11-22T10:05:00+00:00","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"category restored","Status":"Resolved"},
-    {"Email Key / ID":"SYN-104","Received At (UK)":"2026-11-22T10:20:00+00:00","Source Inbox":"Unadopts","Assignment Flag":"queued","Status":"Received"}
+    {"Email Key / ID":"SYN-101","Received At (UK)":"23/Nov/2026 09:12:00","Source Inbox":"Agency Detags","Email Subject":"SYNTHETIC SUBJECT - DO NOT EXPORT","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"TRUE","Status":"Assigned","Handover Notes":"SYNTHETIC PRIVATE NOTE","LoginUserEmail (optional)":"agent-a@example.invalid","Outlook Entry ID":"SYNTHETIC-ENTRY-A","Outlook Store ID":"SYNTHETIC-STORE-A"},
+    {"Email Key / ID":"SYN-102","Received At (UK)":"23/Nov/2026 09:40:00","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"TRUE","Status":"Queued","LoginUserEmail (optional)":"agent-c@example.invalid"},
+    {"Email Key / ID":"SYN-103","Received At (UK)":"23/Nov/2026 10:05:00","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"TRUE","Status":"Recovered"},
+    {"Email Key / ID":"SYN-104","Received At (UK)":"23/Nov/2026 10:20:00","Source Inbox":"Unadopts","Assignment Flag":"FALSE","Status":"Queued"}
   ]);
   const activity=makeCsv(activityHeaders,[
-    {"Event Time (Egypt)":"2026-11-22T11:14:00+02:00","Event Type":"true","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"auto assigned"},
-    {"Event Time (Egypt)":"2026-11-22T11:30:00+02:00","Event Type":"false","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"handover"},
-    {"Event Time (Egypt)":"2026-11-22T11:40:00+02:00","Event Type":"true","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"category removal detected"},
-    {"Event Time (Egypt)":"2026-11-22T11:45:00+02:00","Event Type":"false","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"category restored"},
-    {"Event Time (Egypt)":"2026-11-22T12:00:00+02:00","Event Type":"true","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"manual assignment captured"},
-    {"Event Time (Egypt)":"2026-11-22T12:05:00+02:00","Event Type":"false","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"pending item not found"},
-    {"Event Time (Egypt)":"2026-11-22T12:20:00+02:00","Event Type":"true","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"auto assigned"},
-    {"Event Time (Egypt)":"2026-11-22T12:25:00+02:00","Event Type":"false","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"MULTIPLE_CATEGORIES_PENDING"},
-    {"Event Time (Egypt)":"2026-11-22T12:30:00+02:00","Event Type":"false","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"baseline registered"},
-    {"Event Time (Egypt)":"2026-11-22T12:35:00+02:00","Event Type":"false","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"queued"}
+    {"Event Time (Egypt)":"23/Nov/2026 11:14:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"23/Nov/2026 11:30:00","Event Type":"HANDOVER","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 11:40:00","Event Type":"CATEGORY_REMOVAL_DETECTED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 11:45:00","Event Type":"CATEGORY_RESTORED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:00:00","Event Type":"MANUAL_ASSIGNMENT_CAPTURED","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:05:00","Event Type":"PENDING_ITEM_NOT_FOUND","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:20:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:25:00","Event Type":"MULTIPLE_CATEGORIES_PENDING","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:30:00","Event Type":"BASELINE_REGISTERED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"23/Nov/2026 12:35:00","Event Type":"NEW_MAIL_QUEUED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"}
+  ]);
+  const roster=makeCsv(rosterHeaders,[
+    {"Colleague":"Synthetic Agent A","Outlook Category (exact)":"Synthetic Agent A","Shift Group":"Early","Shift Start (Egypt)":"10:00","Shift End (Egypt)":"19:00","Active This Fortnight":"Yes"},
+    {"Colleague":"Synthetic Agent B","Outlook Category (exact)":"Synthetic Agent B","Shift Group":"Late","Shift Start (Egypt)":"11:00","Shift End (Egypt)":"20:00","Active This Fortnight":"Yes"},
+    {"Colleague":"Synthetic Agent C","Outlook Category (exact)":"Synthetic Agent C","Shift Group":"Early","Shift Start (Egypt)":"10:00","Shift End (Egypt)":"19:00","Active This Fortnight":"Yes"},
+    {"Colleague":"Synthetic Agent D","Outlook Category (exact)":"Synthetic Agent D","Shift Group":"Late","Shift Start (Egypt)":"11:00","Shift End (Egypt)":"20:00","Active This Fortnight":"No"}
   ]);
 
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
-    tickets:assignments,assignments:activity,workflow:activity
+    tickets:assignments,assignments:activity,workflow:activity,roster
   })));
   const snapshot=run.snapshot;
 
   assert.deepEqual(run.mappings.tickets,{
     ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"",
-    received_at:"Received At (UK)",current_owner:"Current Owner"
+    received_at:"Received At (UK)",current_owner:"Current Owner",lifecycle_status:"",
+    resolved_at:"",resolved_by:""
   });
   assert.deepEqual(run.mappings.assignments,{
-    ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Assignment Flag",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
+    ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",
+    first_assignment_flag:"Assignment Flag",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
   });
   assert.deepEqual(run.mappings.workflow,{
-    ticket_ref:"Email Key / ID",event_type:"Assignment Flag",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
+    ticket_ref:"Email Key / ID",event_type:"Event Type",
+    original_assignee:"Original Assignee",current_owner:"Current Owner",
+    first_assignment_flag:"Assignment Flag",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
   });
 
   assert.equal(snapshot.tickets.total,4);
   assert.deepEqual(snapshot.tickets.overall,{
-    ticket_records:4,initially_assigned:2,resolved:1,outstanding:3,unassigned:1
+    ticket_records:4,initially_assigned:3,resolved:0,outstanding:0,unassigned:0,no_current_owner:1
   });
-  const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,(snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0))]));
+  assert.equal(snapshot.tickets.lifecycle_available,false);
+  assert.equal(snapshot.tickets.brand_available,false);
+  assert.equal(snapshot.team_roster.length,4);
+  assert.equal(snapshot.team_roster.find(row=>row.agent_name==="Synthetic Agent A").shift_group,"Early");
+  assert.equal(snapshot.tickets.daily_volume[0].date_local,"2026-11-23");
+  assert.equal(snapshot.tickets.daily_volume[0].time_zone,"Europe/London");
+
+  const methods=Object.fromEntries(snapshot.assignment_methods.map(row=>[row.inbox_code,{automatic:row.automatic,manual:row.manual,total:row.total}]));
+  assert.deepEqual(methods.agency,{automatic:1,manual:0,total:1});
+  assert.deepEqual(methods.detags,{automatic:0,manual:1,total:1});
+  assert.deepEqual(methods.transfers,{automatic:1,manual:0,total:1});
+  assert.deepEqual(methods.unadopts,{automatic:0,manual:0,total:0});
+
+  const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0)]));
   assert.deepEqual(events,{
     assigned:2,handover:1,flagged:1,recovery_restored:1,
-    manual_assignment:1,exception:2
+    manual_assignment:1,exception:2,baseline_registered:1,received:1
   });
-  assert.equal(snapshot.workflow.some(row=>row.event_type==="baseline_registered"),false);
-  assert.equal(snapshot.workflow.some(row=>row.event_type==="queued"),false);
+  assert.ok(snapshot.activity_summary.some(row=>row.agent_name==="Synthetic Agent B"&&row.event_type==="handover"));
+  assert.ok(snapshot.activity_summary.every(row=>row.time_zone==="Africa/Cairo"));
+  assert.equal(snapshot.activity_rows.length,10);
+  assert.ok(snapshot.activity_rows.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
+  assert.equal(snapshot.activity_rows[0].event_time_egypt,"23/Nov/2026 11:14:00");
+  assert.equal(snapshot.activity_rows[0].event_type,"assigned");
+  assert.equal(snapshot.activity_rows[0].first_assignment_flag,true);
+  assert.equal(snapshot.activity_rows[0].original_assignee_name,"Synthetic Agent A");
+  assert.ok(snapshot.activity_rows.every(row=>row.time_zone==="Africa/Cairo"));
 
   const imported=validateWithDashboard(snapshot);
   const views=calculateDashboardViews(imported);
   const visibleEvents=Object.fromEntries(views.workflow.map(row=>[row.id,row.events]));
   assert.deepEqual(visibleEvents,{handover:1,flag:1,manual:1,recovery:1,reassignment:0});
+  assert.equal(views.agents.length,4);
+  assert.ok(views.agents.some(row=>row.name==="Synthetic Agent A"));
+  assert.equal(imported.activity_rows.length,10);
+  assert.ok(imported.activity_rows.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
 
   const serialised=JSON.stringify(imported);
   for(const prohibited of [
     "SYN-101","SYN-102","SYN-103","SYN-104",
     "SYNTHETIC SUBJECT - DO NOT EXPORT","SYNTHETIC PRIVATE NOTE",
     "agent-a@example.invalid","agent-c@example.invalid",
-    "SYNTHETIC-ENTRY-A","SYNTHETIC-STORE-A",
-    "Synthetic Agent A","Synthetic Agent B","Synthetic Agent C","Synthetic Agent D"
+    "SYNTHETIC-ENTRY-A","SYNTHETIC-STORE-A"
   ]) assert.equal(serialised.includes(prohibited),false,"unmapped sensitive value leaked: "+prohibited);
+  for(const allowedName of ["Synthetic Agent A","Synthetic Agent B","Synthetic Agent C","Synthetic Agent D"]){
+    assert.ok(serialised.includes(allowedName),"approved roster display name should remain available locally: "+allowedName);
+  }
 });
 
 
@@ -367,7 +403,7 @@ test("the Team & Shifts roster is pseudonymised and drives actual imported shift
   assert.equal(views.coverage.filter(row=>row.early>0&&row.late>0).reduce((sum,row)=>sum+row.duration,0),300);
 
   const serialised=JSON.stringify(imported);
-  for(const name of Array.from({length:14},(_,i)=>"Sample Agent "+String.fromCharCode(65+i))){
-    assert.equal(serialised.includes(name),false,"raw roster identity leaked: "+name);
-  }
+  assert.ok(serialised.includes("Sample Agent A"),"colleague display name should be retained for the local manager view");
+  assert.ok(imported.team_roster.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
+  assert.ok(imported.team_roster.every(row=>row.agent_name&&row.agent_name.startsWith("Sample Agent ")));
 });

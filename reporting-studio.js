@@ -28,35 +28,43 @@ const SOURCE_CONFIG={
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","item id","reference","ticketid"]},
       {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","inbox","folder","mailbox folder","queue","folder name"]},
-      {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
-      {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
-      {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
-      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]}
+      {id:"status",label:"Tracker assignment status",required:true,aliases:["status","tracker status","assignment status","current state","state","work status"]},
+      {id:"brand",label:"Explicit brand field",aliases:["brand","brand name","make","marque"]},
+      {id:"received_at",label:"Received timestamp (UK local)",aliases:["received at uk","received at","received date","date received","created at","created date","received timestamp"]},
+      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]},
+      {id:"lifecycle_status",label:"Ticket lifecycle status (not tracker status)",aliases:["lifecycle status","ticket lifecycle","resolution status","closure status"]},
+      {id:"resolved_at",label:"Resolved timestamp",aliases:["resolved at","closed at","completed at","resolution timestamp"]},
+      {id:"resolved_by",label:"Resolved by",aliases:["resolved by","closed by","completed by"]}
     ]
   },
   assignments:{
     title:"Assignment history export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"agent",label:"New owner / assigned agent",required:true,aliases:["original assignee","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
-      {id:"kind",label:"Assignment type",required:true,aliases:["assignment flag","assignment kind","assignment type","event type","type","action","allocation type"]},
+      {id:"agent",label:"Original assignee / first owner",required:true,aliases:["original assignee","first assignee","initial owner","current owner","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
+      {id:"kind",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","assignment type","assignment kind","type"]},
+      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",required:true,aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Assignment timestamp",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
+      {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
   },
   workflow:{
     title:"Workflow / activity export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"event_type",label:"Workflow event type",required:true,aliases:["assignment flag","workflow event","event type","event","activity","action","type"]},
+      {id:"event_type",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","type"]},
+      {id:"original_assignee",label:"Original assignee",aliases:["original assignee","first assignee","initial owner"]},
+      {id:"current_owner",label:"Current owner recorded at event",aliases:["current owner","owner","assigned to","assignee","agent","colleague"]},
+      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
+      {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
   },
   roster:{
     title:"Team & shifts roster",
     fields:[
-      {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","colleague"]},
+      {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","category"]},
+      {id:"display_name",label:"Colleague display name",aliases:["colleague","display name","agent name","name"]},
       {id:"shift_group",label:"Shift group",required:true,aliases:["shift group"]},
       {id:"shift_start",label:"Shift start (Egypt)",required:true,aliases:["shift start egypt","shift start"]},
       {id:"shift_end",label:"Shift end (Egypt)",required:true,aliases:["shift end egypt","shift end"]},
@@ -291,25 +299,47 @@ function normaliseActiveFlag(value){
   if(["no","n","false","0","inactive"].includes(key))return false;
   return null;
 }
-function isInitialKind(value){
+function firstAssignmentMethod(value){
   const key=norm(value);
-  return key==="initial"||key==="first"||key==="first assignment"||key==="initial assignment"||key==="initial allocation"||key==="first allocation"||key==="auto assigned";
+  if(["auto assignment","auto assigned","automatic assignment","initial automatic assignment","first automatic assignment","initial","first","first assignment","initial assignment","initial allocation","first allocation"].includes(key))return "automatic";
+  if(["manual assignment captured","manual assignment","manually assigned","manual allocation","initial manual assignment","first manual assignment"].includes(key))return "manual";
+  return null;
+}
+function isInitialKind(value){return Boolean(firstAssignmentMethod(value));}
+function normaliseTrueFalse(value){
+  const key=norm(value);
+  if(["true","yes","y","1"].includes(key))return true;
+  if(["false","no","n","0"].includes(key))return false;
+  return null;
+}
+function normaliseTrackerStatus(value){
+  const key=norm(value);
+  const known={
+    unassigned:"Unassigned",queued:"Queued",assigning:"Assigning",assigned:"Assigned",
+    recovered:"Recovered","recovered review":"Recovered","needs review":"Needs Review",
+    "handover pending":"Handover Pending","handed over":"Handed Over",
+    "recovery failed":"Recovery Failed","dry run recovery pending":"Dry Run - Recovery Pending",
+    "recovery pending":"Recovery Pending"
+  };
+  return known[key]||"Other / review";
 }
 function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
-    received:["received","ticket received","created"],
+    received:["received","ticket received","created","new mail queued"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
+    assignment_pending:["auto assignment pending verification","assignment pending verification","initial assignment pending verification"],
+    baseline_registered:["baseline registered","backlog discovery complete","baseline state registered"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
-    flagged:["flagged","flag","flag raised","flagged for review","category removal detected"],
+    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending"],
     recovery_requested:["recovery requested","recovery request","recovery review opened"],
-    recovery_held:["recovery held","held for recovery","recovery hold"],
-    recovery_restored:["recovery restored","restored","assignment restored","category restored"],
-    resolved:["resolved","closed","completed"],
+    recovery_held:["recovery held","held for recovery","recovery hold","recovery requires review"],
+    recovery_restored:["recovery restored","restored","assignment restored","category restored","restoration marker removed"],
+    resolved:["resolved","closed","completed","ticket resolved"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","error","pending item not found","multiple categories pending"]
+    exception:["exception","write failed","assignment failed","assignment confirmation failed","recovery failed","pending item not found","multiple categories pending","ambiguous assignment","queued item not found"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
@@ -324,6 +354,37 @@ function parseExplicitDate(value){
   if(!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw))return null;
   const parsed=new Date(raw);
   return Number.isNaN(parsed.getTime())?null:parsed.toISOString().slice(0,10);
+}
+function parseSourceCalendarDate(value,zone){
+  const raw=String(value??"").trim();
+  if(!raw)return null;
+  const dateMatch=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(dateMatch){
+    const date=new Date(Date.UTC(Number(dateMatch[1]),Number(dateMatch[2])-1,Number(dateMatch[3])));
+    if(date.getUTCFullYear()!==Number(dateMatch[1])||date.getUTCMonth()+1!==Number(dateMatch[2])||date.getUTCDate()!==Number(dateMatch[3]))return null;
+    if(/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)){
+      const parsed=new Date(raw);if(Number.isNaN(parsed.getTime()))return null;
+      const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(parsed).map(part=>[part.type,part.value]));
+      return parts.year+"-"+parts.month+"-"+parts.day;
+    }
+    return date.toISOString().slice(0,10);
+  }
+  const uk=raw.match(/^(\d{1,2})[\/-]([A-Za-z]{3}|\d{1,2})[\/-](\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+  if(uk){
+    const monthNames=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const month=/^\d+$/.test(uk[2])?Number(uk[2]):monthNames.indexOf(uk[2].toLowerCase())+1;
+    const day=Number(uk[1]),year=Number(uk[3]);
+    const date=new Date(Date.UTC(year,month-1,day));
+    if(month<1||month>12||date.getUTCFullYear()!==year||date.getUTCMonth()+1!==month||date.getUTCDate()!==day)return null;
+    return date.toISOString().slice(0,10);
+  }
+  if(/^\d+(?:\.\d+)?$/.test(raw)){
+    const serial=Number(raw);
+    if(serial<20000||serial>80000)return null;
+    const date=new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000);
+    return date.toISOString().slice(0,10);
+  }
+  return null;
 }
 function makeHmacKey(secret){
   return crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
@@ -354,19 +415,19 @@ function downloadBlob(name,content,type){
 function renderSnapshot(snapshot){
   $("resultsSection").hidden=false;
   const overall=snapshot.tickets.overall;
-  $("resultScope").textContent="Snapshot generated "+snapshot.generated_at_utc+" · "+snapshot.tickets.total+" unique ticket records · aggregate output only";
+  $("resultScope").textContent="Snapshot generated "+snapshot.generated_at_utc+" · "+snapshot.tickets.total+" ticket records · pseudonymised references and colleague names included in local snapshot";
   $("kpiResults").innerHTML=[
     ["Ticket records",overall.ticket_records],
     ["Initially assigned",overall.initially_assigned],
-    ["Resolved / closed",overall.resolved],
-    ["Outstanding",overall.outstanding],
-    ["Unassigned open",overall.unassigned]
-  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
+    ["Resolved / closed",snapshot.tickets.lifecycle_available?overall.resolved:"Not recorded"],
+    ["Outstanding",snapshot.tickets.lifecycle_available?overall.outstanding:"Not recorded"],
+    ["Unassigned open",snapshot.tickets.lifecycle_available?overall.unassigned:"Not recorded"]
+  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+(typeof value==="number"?value.toLocaleString("en-GB"):escapeHtml(value))+'</strong></div>').join("");
   $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
-  $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
-  $("dailyResults").innerHTML=buildTable(["UTC date","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
-  $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
-  $("rosterResults").innerHTML=buildTable(["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
+  $("brandResults").innerHTML=snapshot.tickets.brand_available?buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"])):'<p class="muted-cell">Brand is not a field in the current tracker export. Add an explicit Brand field before reporting brand volumes.</p>';
+  $("dailyResults").innerHTML=buildTable(["Received date · UK local","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_local||row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
+  $("agentResults").innerHTML=buildTable(["Colleague","Agent reference","Inbox","First assignments","Share","Current owner records"],snapshot.allocations.map(row=>[row.agent_name||"Name not matched",row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_owner_records??row.current_open_workload]));
+  $("rosterResults").innerHTML=buildTable(["Colleague","Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_name||"Name not matched",row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
   const warnings=snapshot.data_quality.warnings;
@@ -387,10 +448,14 @@ async function sanitise(){
       workflow:files.workflow?newQuality("Workflow history",files.workflow.rowCount):null,
       roster:files.roster?newQuality("Team & Shifts roster",files.roster.rowCount):null
     };
-    const rosterMap=new Map();const teamRoster=[];
+
+    // Roster names are used only in this browser session and the explicitly requested
+    // local JSON export. Agent references remain the stable join key.
+    const rosterMap=new Map(),rosterAliases=new Map(),teamRoster=[];
     if(files.roster){
       for(const row of files.roster.records){
         const identity=selectedValue(row,"roster","identity");
+        const displayName=selectedValue(row,"roster","display_name");
         const shiftGroup=normaliseShiftGroup(selectedValue(row,"roster","shift_group"));
         const shiftStart=selectedValue(row,"roster","shift_start");
         const shiftEnd=selectedValue(row,"roster","shift_end");
@@ -403,134 +468,305 @@ async function sanitise(){
         }
         const agentRef=await pseudonym(key,"agent",identity);
         const entry={
-          agent_ref:agentRef,shift_group:shiftGroup,
+          agent_ref:agentRef,agent_name:displayName,shift_group:shiftGroup,
           shift_start_egypt:shiftStart,shift_end_egypt:shiftEnd,
           active_this_fortnight:active
         };
-        rosterMap.set(norm(identity),entry);teamRoster.push(entry);
+        rosterMap.set(norm(identity),entry);
+        rosterAliases.set(norm(identity),{identity,displayName,agentRef});
+        if(displayName)rosterAliases.set(norm(displayName),{identity,displayName,agentRef});
+        teamRoster.push(entry);
         quality.roster.rows_accepted++;
       }
     }
-    const ticketMap=new Map();const dateSet=new Set();
+    const agentInfo=async value=>{
+      const raw=String(value??"").trim();
+      if(isUnassigned(raw))return null;
+      const roster=rosterAliases.get(norm(raw));
+      const identity=roster?.identity||raw;
+      return {
+        agent_ref:roster?.agentRef||await pseudonym(key,"agent",identity),
+        agent_name:roster?.displayName||null
+      };
+    };
+
+    const ticketMap=new Map(),dateSet=new Set(),ticketRows=[];
+    let anyBrandValue=false,brandValuesComplete=true,anyLifecycleValue=false,lifecycleValuesComplete=true;
+    const lifecycleMapped=Boolean(mappings.tickets.lifecycle_status||mappings.tickets.resolved_at);
     for(const row of files.tickets.records){
-      const ref=selectedValue(row,"tickets","ticket_ref");const inboxRaw=selectedValue(row,"tickets","inbox");const inbox=normaliseInbox(inboxRaw);
+      const ref=selectedValue(row,"tickets","ticket_ref");
+      const inboxRaw=selectedValue(row,"tickets","inbox");
+      const inbox=normaliseInbox(inboxRaw);
       if(!ref||!inbox){quality.tickets.rows_skipped++;if(ref&&!inbox)quality.tickets.unknown_inbox++;continue;}
       const id=norm(ref);
       if(ticketMap.has(id)){quality.tickets.rows_skipped++;quality.tickets.duplicate_rows++;continue;}
-      const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;const brandRaw=selectedValue(row,"tickets","brand");const brand=normaliseBrand(brandRaw);
-      if(brand==="unclassified"&&norm(brandRaw)&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
-      const receivedRaw=selectedValue(row,"tickets","received_at");const receivedDate=parseExplicitDate(receivedRaw);
+
+      const trackerStatusRaw=selectedValue(row,"tickets","status");
+      const trackerStatus=normaliseTrackerStatus(trackerStatusRaw);
+      if(trackerStatus==="Other / review"&&trackerStatusRaw)quality.tickets.unknown_status++;
+
+      const brandRaw=selectedValue(row,"tickets","brand");
+      const brand=normaliseBrand(brandRaw);
+      if(norm(brandRaw))anyBrandValue=true;
+      else brandValuesComplete=false;
+      if(brand==="unclassified"&&mappings.tickets.brand)quality.tickets.unknown_brand++;
+
+      const receivedRaw=selectedValue(row,"tickets","received_at");
+      const receivedDate=parseSourceCalendarDate(receivedRaw,"Europe/London");
       if(receivedRaw&&!receivedDate)quality.tickets.ambiguous_time++;
       if(receivedDate)dateSet.add(receivedDate);
+
+      const lifecycleRaw=selectedValue(row,"tickets","lifecycle_status");
+      const resolvedAtRaw=selectedValue(row,"tickets","resolved_at");
+      const resolvedByRaw=selectedValue(row,"tickets","resolved_by");
+      const resolvedDate=resolvedAtRaw?parseSourceCalendarDate(resolvedAtRaw,"Europe/London"):null;
+      const lifecycleValue=norm(lifecycleRaw);
+      if(lifecycleRaw||resolvedAtRaw)anyLifecycleValue=true;
+      else lifecycleValuesComplete=false;
+      const resolved=lifecycleMapped&&(isResolved(lifecycleRaw)||Boolean(resolvedAtRaw));
       const owner=selectedValue(row,"tickets","current_owner");
-      const ownerRef=isUnassigned(owner)?null:await pseudonym(key,"agent",owner);
-      ticketMap.set(id,{inbox,brand,resolved:isResolved(status),ownerRef,unassigned:isUnassigned(owner),receivedDate});
+      const ownerInfo=await agentInfo(owner);
+      const ticketRef=await pseudonym(key,"ticket",ref);
+      const status=resolved?"Resolved":trackerStatus;
+      const resolvedByInfo=resolvedByRaw?await agentInfo(resolvedByRaw):null;
+      const record={
+        inbox,brand,resolved:resolved,ownerRef:ownerInfo?.agent_ref||null,
+        ownerName:ownerInfo?.agent_name||null,unassigned:isUnassigned(owner),
+        receivedDate,resolvedDate,trackerStatus,lifecycleValue,
+        resolvedByRef:resolvedByInfo?.agent_ref||null,resolvedByName:resolvedByInfo?.agent_name||null
+      };
+      ticketMap.set(id,{...record,ticketRef,rawRef:id});
+      ticketRows.push({
+        ticket_ref:ticketRef,inbox_code:inbox,tracker_status:status,
+        brand_code:brand,owner_ref:ownerInfo?.agent_ref||null,
+        owner_name:ownerInfo?.agent_name||null,
+        received_date_uk:receivedDate,
+        resolved_date_uk:resolvedDate,
+        resolved_by_ref:resolvedByInfo?.agent_ref||null,
+        resolved_by_name:resolvedByInfo?.agent_name||null,
+        lifecycle_status:lifecycleValue||null
+      });
       quality.tickets.rows_accepted++;
     }
+    const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue&&lifecycleValuesComplete;
+    const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue&&brandValuesComplete;
+    if(!brandAvailable&&mappings.tickets.brand)quality.tickets.unknown_brand+=ticketRows.length;
+
+    // Event Type is the actual event name in the tracker. Assignment Flag is a
+    // Boolean field and must never be interpreted as the event category.
     const initialRows=new Map();
     if(files.assignments){
       const q=quality.assignments;
       for(const row of files.assignments.records){
-        const ref=selectedValue(row,"assignments","ticket_ref");const agent=selectedValue(row,"assignments","agent");const kind=selectedValue(row,"assignments","kind");
-        const inboxRaw=selectedValue(row,"assignments","inbox");const inbox=inboxRaw?normaliseInbox(inboxRaw):"";
-        if(!ref||!agent||isUnassigned(agent)||!kind){q.rows_skipped++;continue;}
-        const ticketKey=norm(ref);const ticket=ticketMap.get(ticketKey);
+        const ref=selectedValue(row,"assignments","ticket_ref");
+        const agent=selectedValue(row,"assignments","agent");
+        const eventName=selectedValue(row,"assignments","kind");
+        const flagHeader=mappings.assignments.first_assignment_flag;
+        const firstFlag=flagHeader?normaliseTrueFalse(selectedValue(row,"assignments","first_assignment_flag")):null;
+        const method=firstAssignmentMethod(eventName);
+        const inboxRaw=selectedValue(row,"assignments","inbox");
+        const inbox=inboxRaw?normaliseInbox(inboxRaw):"";
+        if(!ref||!eventName){q.rows_skipped++;continue;}
+        const ticketKey=norm(ref),ticket=ticketMap.get(ticketKey);
         if(!ticket){q.rows_skipped++;continue;}
         if(inboxRaw&&!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         if(inbox&&inbox!==ticket.inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
-        if(!isInitialKind(kind)){q.rows_accepted++;continue;}
+        q.rows_accepted++;
+        if(!method)continue;
+        if(!agent||isUnassigned(agent)||(flagHeader&&firstFlag!==true))continue;
         const resolvedInbox=inbox||ticket.inbox;
         if(!resolvedInbox){q.rows_skipped++;q.unknown_inbox++;continue;}
-        q.rows_accepted++;
+        const info=await agentInfo(agent);
+        if(!info){q.rows_skipped++;continue;}
         const list=initialRows.get(ticketKey)||[];
-        list.push({agent,inbox:resolvedInbox});initialRows.set(ticketKey,list);
+        list.push({agentRef:info.agent_ref,agentName:info.agent_name,inbox:resolvedInbox,method});
+        initialRows.set(ticketKey,list);
       }
     }
     const validInitial=new Map();let ambiguousInitial=0;
     for(const [ticketKey,items] of initialRows.entries()){
-      if(items.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=items.length;quality.assignments.rows_skipped+=items.length;continue;}
-      const ticket=ticketMap.get(ticketKey);
-      if(ticket&&items[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await pseudonym(key,"agent",items[0].agent),inbox_code:items[0].inbox});
-      else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
+      const distinct=new Map(items.map(item=>[item.method+"|"+item.agentRef,item]));
+      const unique=[...distinct.values()];
+      if(unique.length!==1){
+        ambiguousInitial++;quality.assignments.rows_skipped+=unique.length;
+        quality.assignments.rows_accepted=Math.max(0,quality.assignments.rows_accepted-(unique.length-1));
+        continue;
+      }
+      const ticket=ticketMap.get(ticketKey),item=unique[0];
+      if(ticket&&item.inbox===ticket.inbox)validInitial.set(ticketKey,item);
+      else if(ticket){quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
     }
-    const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
+
+    const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{
+      ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0,no_current_owner:0
+    }]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
-    const agentCounts=new Map();const workload=new Map();const dailyMap=new Map();
+    const agentCounts=new Map(),workload=new Map(),ownerRecordsByAgent=new Map(),dailyMap=new Map();
+    const methodStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{automatic:0,manual:0}]));
     for(const [ticketKey,ticket] of ticketMap.entries()){
       const stats=inboxStats[ticket.inbox];stats.ticket_records++;
-      if(ticket.receivedDate){const dailyKey=ticket.receivedDate+"|"+ticket.inbox;const daily=dailyMap.get(dailyKey)||{date_utc:ticket.receivedDate,inbox_code:ticket.inbox,ticket_records:0};daily.ticket_records++;dailyMap.set(dailyKey,daily);}
-      if(ticket.resolved)stats.resolved++;else{stats.outstanding++;if(ticket.unassigned)stats.unassigned++;}
+      if(ticket.unassigned)stats.no_current_owner++;
+      if(ticket.receivedDate){
+        const dailyKey=ticket.receivedDate+"|"+ticket.inbox;
+        const daily=dailyMap.get(dailyKey)||{date_local:ticket.receivedDate,time_zone:"Europe/London",inbox_code:ticket.inbox,ticket_records:0};
+        daily.ticket_records++;dailyMap.set(dailyKey,daily);
+      }
+      if(lifecycleAvailable){
+        if(ticket.resolved)stats.resolved++;
+        else {stats.outstanding++;if(ticket.unassigned)stats.unassigned++;}
+      }
       brandStats[ticket.brand]=(brandStats[ticket.brand]||0)+1;
-      if(ticket.ownerRef&&!ticket.resolved){const workloadKey=ticket.ownerRef+"|"+ticket.inbox;workload.set(workloadKey,(workload.get(workloadKey)||0)+1);}
+      if(ticket.ownerRef){
+        const workloadKey=ticket.ownerRef+"|"+ticket.inbox;
+        ownerRecordsByAgent.set(workloadKey,(ownerRecordsByAgent.get(workloadKey)||0)+1);
+        if(lifecycleAvailable&&!ticket.resolved)workload.set(workloadKey,(workload.get(workloadKey)||0)+1);
+      }
       const initial=validInitial.get(ticketKey);
       if(initial){
         stats.initially_assigned++;
-        const group=initial.agentRef+"|"+initial.inbox_code;
+        methodStats[initial.inbox][initial.method]++;
+        const group=initial.agentRef+"|"+initial.inbox;
         agentCounts.set(group,(agentCounts.get(group)||0)+1);
       }
     }
     const allocations=[];
-    const allocationGroups=new Set([...agentCounts.keys(),...workload.keys()]);
+    const allocationGroups=new Set([...agentCounts.keys(),...workload.keys(),...ownerRecordsByAgent.keys()]);
     for(const group of allocationGroups){
-      const [agent_ref,inbox_code]=group.split("|");const count=agentCounts.get(group)||0;const total=inboxStats[inbox_code].initially_assigned;
-      allocations.push({agent_ref,inbox_code,initial_assignments:count,allocation_share_pct:total?count/total*100:0,current_open_workload:workload.get(group)||0});
+      const [agent_ref,inbox_code]=group.split("|");
+      const count=agentCounts.get(group)||0;
+      const total=inboxStats[inbox_code].initially_assigned;
+      const roster=[...teamRoster].find(row=>row.agent_ref===agent_ref);
+      allocations.push({
+        agent_ref,agent_name:roster?.agent_name||null,inbox_code,
+        initial_assignments:count,
+        allocation_share_pct:total?count/total*100:0,
+        current_open_workload:lifecycleAvailable?(workload.get(group)||0):0,
+        current_owner_records:ownerRecordsByAgent.get(group)||0
+      });
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
-    const workflowMap=new Map();
+
+    const workflowMap=new Map(),activityMap=new Map(),activityRows=[];
     if(files.workflow){
       const q=quality.workflow;
       for(const row of files.workflow.records){
-        const ref=selectedValue(row,"workflow","ticket_ref");const eventRaw=selectedValue(row,"workflow","event_type");const inboxRaw=selectedValue(row,"workflow","inbox");
+        const ref=selectedValue(row,"workflow","ticket_ref");
+        const eventRaw=selectedValue(row,"workflow","event_type");
+        const inboxRaw=selectedValue(row,"workflow","inbox");
         if(!ref||!eventRaw){q.rows_skipped++;continue;}
-        const ticket=ticketMap.get(norm(ref));if(!ticket){q.rows_skipped++;continue;}
+        const ticketKey=norm(ref),ticket=ticketMap.get(ticketKey);
+        if(!ticket){q.rows_skipped++;continue;}
         const inbox=inboxRaw?normaliseInbox(inboxRaw):ticket.inbox;
         if(!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         const event=normaliseWorkflowEvent(eventRaw);
         if(!event){q.rows_skipped++;continue;}
         q.rows_accepted++;
-        const keyName=event+"|"+inbox;const record=workflowMap.get(keyName)||{event_type:event,inbox_code:inbox,event_count:0,tickets:new Set()};
-        record.event_count++;record.tickets.add(norm(ref));workflowMap.set(keyName,record);
-        const timeRaw=selectedValue(row,"workflow","occurred_at");if(timeRaw&&!parseExplicitDate(timeRaw))q.ambiguous_time++;
+        const keyName=event+"|"+inbox;
+        const record=workflowMap.get(keyName)||{event_type:event,inbox_code:inbox,event_count:0,tickets:new Set()};
+        record.event_count++;record.tickets.add(ticketKey);workflowMap.set(keyName,record);
+
+        const originalAssignee=selectedValue(row,"workflow","original_assignee");
+        const currentOwner=selectedValue(row,"workflow","current_owner");
+        const originalInfo=originalAssignee?await agentInfo(originalAssignee):null;
+        const currentInfo=currentOwner?await agentInfo(currentOwner):null;
+        const timeRaw=selectedValue(row,"workflow","occurred_at");
+        const eventDate=timeRaw?parseSourceCalendarDate(timeRaw,"Africa/Cairo"):null;
+        if(timeRaw&&!eventDate)q.ambiguous_time++;
+        const firstFlag=selectedValue(row,"workflow","first_assignment_flag");
+        const firstAssignmentFlag=mappings.workflow.first_assignment_flag?normaliseTrueFalse(firstFlag):null;
+        const activityKey=[event,inbox,currentInfo?.agent_ref||"unattributed",eventDate||"undated"].join("|");
+        const activity=activityMap.get(activityKey)||{
+          event_type:event,inbox_code:inbox,agent_ref:currentInfo?.agent_ref||null,
+          agent_name:currentInfo?.agent_name||null,event_date_egypt:eventDate,
+          time_zone:"Africa/Cairo",event_count:0,tickets:new Set()
+        };
+        activity.event_count++;activity.tickets.add(ticketKey);activityMap.set(activityKey,activity);
+        activityRows.push({
+          ticket_ref:ticket.ticketRef,event_time_egypt:timeRaw||null,
+          event_date_egypt:eventDate,event_type:event,inbox_code:inbox,
+          original_assignee_ref:originalInfo?.agent_ref||null,
+          original_assignee_name:originalInfo?.agent_name||null,
+          current_owner_ref:currentInfo?.agent_ref||null,
+          current_owner_name:currentInfo?.agent_name||null,
+          first_assignment_flag:firstAssignmentFlag,time_zone:"Africa/Cairo"
+        });
       }
     }
-    const workflow=[...workflowMap.values()].map(row=>({event_type:row.event_type,inbox_code:row.inbox_code,event_count:row.event_count,distinct_tickets:row.tickets.size})).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
+    const workflow=[...workflowMap.values()].map(row=>({
+      event_type:row.event_type,inbox_code:row.inbox_code,
+      event_count:row.event_count,distinct_tickets:row.tickets.size
+    })).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
+    const activitySummary=[...activityMap.values()].map(row=>({
+      event_type:row.event_type,inbox_code:row.inbox_code,agent_ref:row.agent_ref,
+      agent_name:row.agent_name,event_date_egypt:row.event_date_egypt,
+      time_zone:row.time_zone,event_count:row.event_count,distinct_tickets:row.tickets.size
+    })).sort((a,b)=>(a.event_date_egypt||"").localeCompare(b.event_date_egypt||"")||
+      a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
+
     const byInbox=Object.keys(INBOXES).map(inbox_code=>({inbox_code,...inboxStats[inbox_code]}));
-    const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code));
-    const overall={ticket_records:ticketMap.size,initially_assigned:validInitial.size,resolved:byInbox.reduce((sum,row)=>sum+row.resolved,0),outstanding:byInbox.reduce((sum,row)=>sum+row.outstanding,0),unassigned:byInbox.reduce((sum,row)=>sum+row.unassigned,0)};
-    const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
+    const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_local.localeCompare(b.date_local)||a.inbox_code.localeCompare(b.inbox_code));
+    const overall={
+      ticket_records:ticketMap.size,
+      initially_assigned:validInitial.size,
+      resolved:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.resolved,0):0,
+      outstanding:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.outstanding,0):0,
+      unassigned:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.unassigned,0):0,
+      no_current_owner:byInbox.reduce((sum,row)=>sum+row.no_current_owner,0)
+    };
+    const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({
+      brand_code,count:brandStats[brand_code]||0
+    })).filter(row=>row.count||row.brand_code==="unclassified");
+    const methods=Object.keys(INBOXES).map(inbox_code=>({
+      inbox_code,...methodStats[inbox_code],
+      total:methodStats[inbox_code].automatic+methodStats[inbox_code].manual
+    }));
     const warnings=[];
     if(quality.tickets.duplicate_rows)warnings.push(quality.tickets.duplicate_rows+" duplicate ticket row(s) were skipped; only the first occurrence per ticket reference was retained.");
     if(quality.tickets.unknown_inbox)warnings.push(quality.tickets.unknown_inbox+" ticket row(s) had an unmapped inbox and were excluded.");
-    if(quality.tickets.unknown_brand)warnings.push(quality.tickets.unknown_brand+" ticket row(s) had an unrecognised brand and were classified as Other / unclassified.");
-    if(quality.tickets.unknown_status)warnings.push(quality.tickets.unknown_status+" ticket row(s) had an unmapped or blank status; those rows were conservatively treated as open.");
-    if(quality.tickets.ambiguous_time)warnings.push(quality.tickets.ambiguous_time+" ticket timestamp(s) were not ISO dates or timezone-explicit timestamps; no date grouping was inferred.");
-    if(ambiguousInitial)warnings.push(ambiguousInitial+" ticket(s) had multiple initial-assignment records; those allocation records were excluded as ambiguous.");
+    if(!brandAvailable)warnings.push("Brand is not recorded in the current Assignments worksheet. Brand totals are unavailable; no inference is made from email subjects or folder names.");
+    if(!lifecycleAvailable)warnings.push("Resolved date/status is not recorded in the current Assignments worksheet. Resolution rate and solve time are unavailable; tracker assignment states are not treated as open/closed lifecycle states.");
+    if(quality.tickets.unknown_status)warnings.push(quality.tickets.unknown_status+" tracker-status value(s) were not in the known assignment-status list and were grouped as Other / review.");
+    if(quality.tickets.ambiguous_time)warnings.push(quality.tickets.ambiguous_time+" received timestamp(s) could not be read as UK-local calendar dates.");
+    if(ambiguousInitial)warnings.push(ambiguousInitial+" ticket(s) had more than one distinct first-assignment record; those allocation records were excluded as ambiguous.");
     if(quality.assignments?.unknown_inbox)warnings.push(quality.assignments.unknown_inbox+" assignment row(s) had an inbox mismatch or unknown inbox and were excluded.");
     if(quality.workflow?.unknown_inbox)warnings.push(quality.workflow.unknown_inbox+" workflow row(s) had an unknown inbox and were excluded.");
     if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
     if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
-    if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Imported agents will not have shift-group or active-fortnight metadata.");
+    if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Colleague names and shift metadata are unavailable.");
     if(files.roster){
       const usedAgentRefs=new Set();
       for(const ticket of ticketMap.values())if(ticket.ownerRef)usedAgentRefs.add(ticket.ownerRef);
       for(const row of validInitial.values())usedAgentRefs.add(row.agentRef);
       const rosterRefs=new Set(teamRoster.map(row=>row.agent_ref));
       const unmatched=[...usedAgentRefs].filter(ref=>!rosterRefs.has(ref));
-      if(unmatched.length)warnings.push(unmatched.length+" pseudonymised agent reference(s) used in ticket or assignment data were not matched to the supplied roster.");
+      if(unmatched.length)warnings.push(unmatched.length+" agent reference(s) used in ticket or event data were not matched to the supplied roster.");
     }
-    if(!files.assignments)warnings.push("No assignment-history file was supplied. First-assignment totals and allocation shares are incomplete and shown as zero.");
-    else if(validInitial.size===0)warnings.push("No validated first-assignment events were found. Allocation shares cannot be interpreted as complete.");
-    if(!files.workflow)warnings.push("No workflow-history file was supplied. Workflow event metrics are unavailable.");
+    if(!files.assignments)warnings.push("No assignment-history worksheet was supplied. First-assignment totals and shares are unavailable.");
+    else if(validInitial.size===0)warnings.push("No validated AUTO_ASSIGNMENT or MANUAL_ASSIGNMENT_CAPTURED first-allocation events were found. Check that Event Type (not Assignment Flag) is mapped.");
+    if(!files.workflow)warnings.push("No Activity Log worksheet was supplied. Workflow and Activity Log metrics are unavailable.");
+
+    const dateList=[...dateSet].sort();
+    const ticketRowsWithInitial=ticketRows;
     const snapshot={
       schema_version:"dispatcher-reporting-snapshot-1",
       generated_at_utc:new Date().toISOString(),
       source_mode:"offline_sanitised_aggregate",
-      reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
-      tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-      allocations,
-      team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
-      workflow,
-      data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
+      reporting_period:dateList.length?{
+        first_received_date_local:dateList[0],last_received_date_local:dateList[dateList.length-1],
+        time_zone:"Europe/London"
+      }:null,
+      tickets:{
+        total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
+        brand_available:brandAvailable,lifecycle_available:lifecycleAvailable,
+        ticket_rows:ticketRowsWithInitial
+      },
+      allocations,assignment_methods:methods,
+      team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||String(a.agent_name||"").localeCompare(String(b.agent_name||""))),
+      workflow,activity_summary:activitySummary,activity_rows:activityRows,
+      data_quality:{
+        sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),
+        ambiguous_initial_assignment_tickets:ambiguousInitial,warnings
+      }
     };
     currentSnapshot=snapshot;
     renderSnapshot(snapshot);
@@ -554,17 +790,42 @@ async function sanitise(){
 function downloadSnapshot(){if(!currentSnapshot)return;downloadBlob("dispatcher-reporting-snapshot.json",JSON.stringify(currentSnapshot,null,2),"application/json");}
 function downloadCSVs(){
   if(!currentSnapshot)return;
-  const s=currentSnapshot;
+  const snapshot=currentSnapshot;
+  const lifecycle=snapshot.tickets.lifecycle_available===true;
+  const brandAvailable=snapshot.tickets.brand_available===true;
   const filesToDownload=[
-    ["dispatcher-daily-volume.csv",["date_utc","inbox_code","ticket_records"],s.tickets.daily_volume.map(r=>[r.date_utc,r.inbox_code,r.ticket_records])],
-    ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","initially_assigned","resolved","outstanding","unassigned"],s.tickets.by_inbox.map(r=>[r.inbox_code,INBOX_LABELS[r.inbox_code],r.ticket_records,r.initially_assigned,r.resolved,r.outstanding,r.unassigned])],
-    ["dispatcher-brand-summary.csv",["brand_code","brand_name","ticket_count","share_pct"],s.tickets.by_brand.map(r=>[r.brand_code,BRAND_LABELS[r.brand_code],r.count,s.tickets.total?(r.count/s.tickets.total*100).toFixed(2):"0.00"])],
-    ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
-    ["dispatcher-team-roster.csv",["agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],(s.team_roster||[]).map(r=>[r.agent_ref,r.shift_group,r.shift_start_egypt,r.shift_end_egypt,r.active_this_fortnight?"Yes":"No"])],
-    ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],s.workflow.map(r=>[r.event_type,r.inbox_code,r.event_count,r.distinct_tickets])],
-    ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],s.data_quality.sources.map(r=>[r.source,r.rows_read,r.rows_accepted,r.rows_skipped,r.duplicate_rows,r.unknown_inbox,r.unknown_brand,r.unknown_status,r.ambiguous_time])]
+    ["dispatcher-daily-volume.csv",["received_date_uk","time_zone","inbox_code","ticket_records"],snapshot.tickets.daily_volume.map(row=>[row.date_local||row.date_utc,row.time_zone||"UTC",row.inbox_code,row.ticket_records])],
+    ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","first_assignments","resolved","outstanding","unassigned_open","current_owner_records_without_owner"],snapshot.tickets.by_inbox.map(row=>[
+      row.inbox_code,INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,
+      lifecycle?row.resolved:"Not recorded",lifecycle?row.outstanding:"Not recorded",
+      lifecycle?row.unassigned:"Not recorded",row.no_current_owner||0
+    ])],
+    ["dispatcher-brand-summary.csv",brandAvailable?["brand_code","brand_name","ticket_count","share_pct"]:["availability","message"],
+      brandAvailable?snapshot.tickets.by_brand.map(row=>[row.brand_code,BRAND_LABELS[row.brand_code],row.count,snapshot.tickets.total?(row.count/snapshot.tickets.total*100).toFixed(2):"0.00"]):
+      [["NOT RECORDED","The current Assignments worksheet does not contain an explicit Brand field."]]],
+    ["dispatcher-agent-allocation.csv",["colleague","agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_owner_records","current_open_workload"],
+      snapshot.allocations.map(row=>[row.agent_name||"Name not matched",row.agent_ref,row.inbox_code,row.initial_assignments,row.allocation_share_pct.toFixed(2),row.current_owner_records??0,lifecycle?row.current_open_workload:"Not recorded"])],
+    ["dispatcher-assignment-methods.csv",["inbox_code","automatic_first_assignments","manual_first_assignments","total_first_assignments"],
+      snapshot.assignment_methods.map(row=>[row.inbox_code,row.automatic,row.manual,row.total])],
+    ["dispatcher-team-roster.csv",["colleague","agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],
+      (snapshot.team_roster||[]).map(row=>[row.agent_name||"Name not supplied",row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"])],
+    ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],
+      snapshot.workflow.map(row=>[row.event_type,row.inbox_code,row.event_count,row.distinct_tickets])],
+    ["dispatcher-activity-log.csv",["event_time_egypt","event_date_egypt","event_type","inbox_code","original_assignee","current_owner","first_assignment_flag","ticket_ref_hmac"],
+      (snapshot.activity_rows||[]).map(row=>[row.event_time_egypt||"Not recorded",row.event_date_egypt||"Not recorded",row.event_type,row.inbox_code,row.original_assignee_name||"Not recorded",row.current_owner_name||"Not recorded",row.first_assignment_flag===null?"Not recorded":row.first_assignment_flag?"TRUE":"FALSE",row.ticket_ref])],
+    ["dispatcher-ticket-queue.csv",["ticket_ref_hmac","inbox_code","tracker_status","brand","current_owner","received_date_uk","lifecycle_status","resolved_date_uk","resolved_by"],
+      (snapshot.tickets.ticket_rows||[]).map(row=>[row.ticket_ref,row.inbox_code,row.tracker_status,
+        brandAvailable?BRAND_LABELS[row.brand_code]:"Not recorded",
+        row.owner_name||"Unassigned",row.received_date_uk||"Not recorded",
+        lifecycle?(row.lifecycle_status||"Resolved"): "Not recorded",
+        lifecycle?(row.resolved_date_uk||"Not recorded"):"Not recorded",
+        lifecycle?(row.resolved_by_name||"Not recorded"):"Not recorded"])],
+    ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],
+      snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time])]
   ];
-  filesToDownload.forEach(([name,headers,rows],index)=>setTimeout(()=>downloadBlob(name,makeCSV(headers,rows),"text/csv;charset=utf-8"),index*180));
+  filesToDownload.forEach(([name,headers,rows],index)=>
+    setTimeout(()=>downloadBlob(name,makeCSV(headers,rows),"text/csv;charset=utf-8"),index*180)
+  );
 }
 function generateKey(){
   if(!crypto?.getRandomValues){alert("Secure random key generation is not available in this browser.");return;}

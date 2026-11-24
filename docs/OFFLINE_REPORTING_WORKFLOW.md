@@ -45,26 +45,24 @@ Map these fields:
 |---|---:|---|
 | Ticket reference | Yes | A stable identifier used only in memory to join source rows. Never appears in outputs. |
 | Inbox / folder | Yes | One of Agency Detags, Detags, Transfers or Unadopts. |
-| Current status | Yes | Used only to distinguish resolved/closed from outstanding records. |
-| Current owner | Yes | Used to calculate current open workload. Direct values are HMAC-pseudonymised before output. |
-| Brand | No | Must match an approved brand label; unknown values become Other / unclassified. |
-| Received timestamp | No | Date-only ISO format or an ISO timestamp with an explicit timezone. Used only for the reporting-period boundary. |
+| Dispatcher status | Yes | Assignment/recovery workflow state only (e.g. Queued, Assigned, Recovered, Needs Review). It is not ticket lifecycle. |
+| Current owner | Yes | Used to count current-owner records. It is not treated as open work unless explicit lifecycle status exists. Agent identity is HMAC-pseudonymised and the separate roster display name is retained. |
+| Brand | No | Not present in the current workbook. Brand Insights shows Not recorded rather than inferring or treating all records as Other. |
+| Received timestamp | No | `Received At (UK)` is parsed as a UK-local calendar date (`Europe/London`) when the tracker format is recognised. |
 
-The file should be a current-state ticket snapshot, not raw mailbox content. A blank or unfamiliar status is treated conservatively as open and is flagged in data quality.
+The file should be a current-state ticket snapshot, not raw mailbox content. A blank `Current Owner` is counted as No current owner. A blank or unfamiliar dispatcher status is not reinterpreted as open/closed lifecycle state. The Studio does not find Brand, Lifecycle Status, Resolved At or Resolved By in the current workbook, so brand and resolution metrics are Not recorded until those fields are added.
 
-### Assignment history — optional
+### Assignment history — `Activity Log` worksheet
 
-Map ticket reference, new owner / assigned agent, and assignment type. Inbox is optional when the ticket snapshot supplies the authoritative inbox.
-
-Only explicit values equivalent to **Initial**, **First assignment**, **Initial assignment**, **Initial allocation** or **First allocation** contribute to initial-allocation share. Manual assignments, handovers, reassignments and recoveries do not increase first-allocation share. A ticket must exist in the ticket snapshot and the assignment inbox must match the ticket's inbox. Multiple first-assignment rows for one ticket are excluded as ambiguous.
+Map `Email Key / ID` to ticket reference, `Original Assignee` to the original first assignee, `Event Type` to actual event name and `Assignment Flag` to TRUE/FALSE first-assignment flag. Also map `Source Inbox` and `Event Time (Egypt)`. Only `AUTO_ASSIGNMENT` with a TRUE flag contributes an automatic first allocation; `MANUAL_ASSIGNMENT_CAPTURED` with a TRUE flag contributes a manual first allocation. Pending verification, handovers, category changes, recovery and baseline events do not count as first allocations. A ticket must exist in Assignments and the event inbox must match its current inbox. Multiple distinct first-allocation rows for one ticket are excluded as ambiguous.
 
 ### Workflow / activity history — optional
 
-For the VWG tracker, select the **Activity Log** worksheet a second time as the workflow input. It is the same tab in the same workbook, not a second file. Map `Email Key / ID` to ticket reference, `Assignment Flag` to workflow event type, `Source Inbox` to inbox and `Event Time (Egypt)` to the optional event timestamp. Do **not** map `Event Type`: its `true` / `false` values are Boolean markers, not workflow categories. The sanitiser maps the supplied Assignment Flag labels (auto assigned, handover, manual assignment captured, category removal detected, category restored, pending item not found and MULTIPLE_CATEGORIES_PENDING) to fixed safe event types. Baseline registered and queued are state markers, not workflow events, and are excluded.
+For workflow history, select the **same Activity Log worksheet again**. Map `Event Type` to the actual event name, `Assignment Flag` to TRUE/FALSE, `Original Assignee`, `Current Owner`, `Source Inbox` and `Event Time (Egypt)`. `Event Type` is not Boolean. The Studio produces grouped event totals and individual sanitised Activity Log rows. Each event row contains an HMAC ticket reference, source event, Egypt-local timestamp/date, inbox, original/current owner names and first-assignment flag. Raw Email Key / ID and Details / Notes are removed.
 
 ### Team & Shifts roster — optional
 
-Select the **Team & Shifts** worksheet from the same workbook. Map `Outlook Category (exact)` as the join identity, then `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The `Colleague` label is not needed as a second key. The category value is used only in browser memory to join with the pseudonymised Current Owner / Original Assignee values; the snapshot contains only the keyed agent reference, Early/Late group, Egypt-local start/end times and active-fortnight Boolean. Names and Outlook category values are not exported.
+Select the **Team & Shifts** worksheet from the same workbook. Map `Outlook Category (exact)` as the join identity and `Colleague` as the separate display name, then Shift Group, Shift Start (Egypt), Shift End (Egypt) and Active This Fortnight. The category is used only in browser memory to derive the HMAC agent reference and is removed. The Colleague display name is retained in the local JSON snapshot so the dashboard can identify agents. Store the downloaded file only in an approved private location.
 
 Use the **same private workspace key** for the Assignments, Activity Log and Team & Shifts worksheets on each reporting run so that pseudonymous references match across the workbook sources. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
 
@@ -72,18 +70,20 @@ Use the **same private workspace key** for the Assignments, Activity Log and Tea
 
 After sanitising approved extracts, use **Download JSON snapshot** in the Studio. Open the Dispatcher dashboard in another tab, select **Import snapshot** in the top bar, and choose the downloaded `dispatcher-reporting-snapshot.json` file.
 
-The dashboard accepts only the supported `dispatcher-reporting-snapshot-1` aggregate format. It checks the four inbox totals, overall totals, brand totals, allocation reconciliation, HMAC-style pseudonymous agent references, optional roster structure and shift values, workflow event allow-list and quality counters. Unknown properties (including any accidentally added raw ticket or colleague fields) are discarded when the dashboard rebuilds its in-memory data object.
+The dashboard accepts the supported `dispatcher-reporting-snapshot-1` sanitised snapshot. It validates the four inbox totals, optional Brand/lifecycle availability, HMAC ticket/agent references, ticket queue rows, assignment-method totals, row-level Activity Log events, roster display names/shift values and quality counters. Colleague display names are intentionally retained for the local manager view; raw Outlook categories and raw Email Key / ID are not.
 
 The imported snapshot is used in these aggregate workspaces:
 
-- Overview — inbox totals, brand demand, first assignments where supplied, open workload and source data-quality checks.
-- Brand Insights — brand totals across all inboxes. Brand-by-inbox detail is not included in this snapshot.
-- Workflow Analytics — mapped event totals and distinct tickets affected, where a workflow file was included.
-- Folder Share and Team Performance — first-allocation shares and current open workload grouped by pseudonymised agent reference, where assignment history was included. If Team & Shifts was supplied with the same key, the views also show pseudonymised shift group, Egypt-local scheduled hours and active-fortnight status.
-- Roster & Coverage — imported roster directory, Early/Late group totals, and scheduled headcount by Egypt-local shift interval. Inactive roster profiles remain visible but are excluded from coverage calculations. Inbox eligibility, live availability, breaks, absences and staffing targets are not inferred.
-- Ticket Analytics — aggregate-only snapshot view. It does not expose ticket references or individual ticket details.
+- Overview — ticket records, first assignments, no-current-owner counts, UK received-date coverage and data-quality warnings. Resolution/open figures remain Not recorded without lifecycle fields.
+- Live Operations — a distinct read-only queue from the sanitised snapshot with HMAC ticket references, inbox, tracker status, owner name and UK received date. No subject/body is included and this is not a live mailbox.
+- Ticket Analytics — state by inbox, received-date coverage and source-field availability.
+- Brand Insights — displays brand totals only when an explicit Brand field is present; otherwise it explains the missing source field.
+- Workflow Analytics — automatic/manual first-allocation split and actual Activity Log event totals.
+- Folder Share and Team Performance — named roster profiles, first-allocation shares and current-owner counts. Resolution rate and solve time remain unavailable until lifecycle fields are recorded.
+- Activity Log — individual sanitised event rows with Egypt-local time, event name, original/current owner, first-assignment flag and HMAC ticket reference.
+- Roster & Coverage — named directory, Early/Late group totals and scheduled headcount by Egypt-local interval. Inactive profiles remain visible but are excluded from coverage. Eligibility, live availability, breaks and absences are not inferred.
 
-**Live Operations remains a synthetic demonstration workbench.** The sanitised snapshot contains no ticket references, subjects, message details or individual source rows, so it cannot populate a real ticket queue or open real ticket timelines. SLA, response time, handling time, audit history, reliability incidents and dispatch controls are not populated by this import. Imported roster data is limited to the approved shift fields and does not establish live availability or capacity.
+The imported queue and Activity Log are point-in-time read-only views. They do not show subjects/bodies or provide assignment/restore actions. Resolver performance, solve time, SLA, response time, reopened rate and active handling time require additional approved source fields.
 
 **Access and approval:** the GitHub Pages dashboard is public and unauthenticated. Import is a browser-memory convenience, not an access-control or confidentiality boundary. Only use company-approved, sanitised aggregate snapshots on an approved device and in line with the data owner's/security team's instructions. Do not import customer-level exports, raw ticket IDs, subjects, message content or direct colleague identifiers. The snapshot is point-in-time: the dashboard disables the period selector while it is loaded. The imported data exists only in JavaScript memory for the current tab. It is not uploaded, written to browser storage or connected to a backend. **Use demo** returns to synthetic sample data; refreshing or closing the tab clears the import.
 
@@ -95,16 +95,7 @@ Do not commit, email, upload or include the key with any reporting file. The stu
 
 ## Outputs
 
-The studio produces one aggregate JSON snapshot and seven aggregate CSVs:
-
-- Inbox summary — ticket-record count, first assignments, resolved, open and unassigned.
-- Brand summary — approved brand counts and share.
-- Agent allocation — keyed agent reference, inbox, first assignments, first-assignment share and current open workload.
-- Workflow summary — event count and distinct tickets affected, separately.
-- Team roster — pseudonymous agent reference, shift group, Egypt-local start/end and active-fortnight status (only when a roster was supplied).
-- Data quality — row counts, skipped rows, duplicates and mapping warnings.
-
-Ticket references and source rows are used only in memory to join and deduplicate. They are not included in outputs. No subject, body, email address, vehicle identifier, attachment, note or free-text source field is exported.
+The Studio produces a sanitised JSON snapshot and CSV files for received-date volume, inbox summary, brand status/totals, agent allocation, automatic/manual first-assignment methods, named roster, grouped workflow events, individual sanitised Activity Log rows, sanitised ticket queue and data quality. Ticket/event references are HMAC pseudonyms. Raw Email Key / ID, Outlook category values, Outlook Entry ID, Outlook Store ID, subjects, bodies, Handover Notes and Details / Notes are excluded. Colleague display names are retained for local manager use, so exports must be stored in an approved private location.
 
 ## Interpretation and limits
 
@@ -113,7 +104,9 @@ Ticket references and source rows are used only in memory to join and deduplicat
 - First-assignment share uses distinct tickets with one unambiguous initial-assignment event as the denominator, per inbox. Handover, reassignment and recovery are separate workflow activity.
 - Workflow event count and distinct tickets affected are different measures and may overlap across event types.
 - The tool does not estimate first response, elapsed resolution, active handling time, SLA performance, reopen rate, productivity ranking or hours-adjusted fairness. Shift coverage is scheduled headcount from the supplied Egypt-local roster only, not a live capacity or availability measure.
-- Date-only values are treated as UTC dates. Datetimes without an explicit timezone are not interpreted; they are counted as ambiguous.
+- `Received At (UK)` is grouped as a UK-local calendar date (`Europe/London`); `Event Time (Egypt)` is grouped as an Egypt-local calendar date (`Africa/Cairo`). Source wall-clock values are preserved; no UTC offset is invented.
+- `Assignments.Status` is a dispatcher assignment/recovery state, not ticket lifecycle. Resolved/open totals, resolver rates and solve time remain Not recorded until explicit lifecycle fields exist.
+- Brand totals remain Not recorded until an explicit Brand field is added.
 - Duplicate ticket rows are skipped after the first matching ticket reference, and the quality report warns about them. Review the source export before relying on the totals.
 - Assignment rows that are missing required values, do not join to the ticket snapshot, conflict with the ticket inbox, or contain ambiguous first-assignment duplicates are excluded and reported.
 
