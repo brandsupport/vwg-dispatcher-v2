@@ -2,7 +2,7 @@
 
 A standalone operations intelligence and management platform for the VWG Brand Support ticket operation.
 
-> **Current status: synthetic-data dashboard plus local-only reporting studio and staging backend foundation.** The public dashboard remains synthetic-data-only and has no live Outlook or Excel connection. The Reporting Studio processes selected CSV files in the browser and exports pseudonymised aggregate reports; it does not upload files or connect to the API. A staging D1 database and staging Worker/version have been created separately, but the dashboard is not connected to them. No production database, approved identity integration, real operational data feed or operational write route is configured.
+> **Current status: synthetic-data dashboard with an optional local sanitised-snapshot import, local-only Reporting Studio and staging backend foundation.** The public dashboard has no live Outlook or Excel connection. The Studio processes selected CSV files in the browser and exports a pseudonymised aggregate JSON snapshot; the user can explicitly import that JSON into the dashboard tab for local aggregate analysis. Snapshot contents remain in memory only and are cleared by refreshing the page. Raw ticket references, subjects, source rows, direct colleague identifiers and customer data are not imported into the dashboard. The Live Operations ticket workbench remains synthetic-data-only. This is a public, unauthenticated preview rather than an access-control boundary; only company-approved sanitised aggregate snapshots should be imported, and only on an approved device. A staging D1 database and staging Worker/version have been created separately, but the dashboard is not connected to them. No production database, approved identity integration, real operational data feed or operational write route is configured.
 
 ## Cherry Glass design system and workspace navigation
 
@@ -52,7 +52,7 @@ These are deliberately different workspaces:
 - **Overview** is the management/performance view. It summarises selected-period ticket demand, first allocations, completions, inbox pressure, brand mix and allocation distribution. It avoids the individual ticket queue.
 - **Live Operations** is the ticket workbench. It is where an operator searches and filters individual sample tickets, checks unassigned or at-risk work, reviews the attention list, and inspects illustrative coverage and recent sample events.
 
-The public dashboard is still a synthetic-data prototype. The Live Operations page is not connected to Outlook or Excel and cannot assign, move, recover or update real tickets. The overview ratios and intervals are generated from sample totals and must not be interpreted as validated live performance.
+Without an imported snapshot, the public dashboard uses synthetic sample data. When a sanitised snapshot is explicitly imported, the aggregate analytics views use only the imported counts and pseudonymised agent references for the current tab session. This does not create a live feed or validate source quality beyond the checks displayed. The Live Operations page remains synthetic, is not connected to Outlook or Excel, and cannot assign, move, recover or update real tickets. SLA, response, resolution-time, roster and audit measures are not supplied by the aggregate import.
 
 ## Offline Reporting Studio
 
@@ -60,7 +60,7 @@ The standalone `reporting-studio.html` companion is available through the persis
 
 The initial inputs are a ticket/current-state snapshot (required), assignment history (optional) and workflow/activity history (optional). Source column headings are not assumed: users confirm the mapping. See [docs/OFFLINE_REPORTING_WORKFLOW.md](docs/OFFLINE_REPORTING_WORKFLOW.md) and the fictional CSVs under `examples/` before using any approved operational export.
 
-The studio does not upload data to D1 or feed the public dashboard automatically. The generated output is a local aggregate snapshot for controlled review. Real operational exports require approval from the relevant company data owner/security process.
+The studio does not upload data to D1, call the Worker or feed the dashboard automatically. It creates a local aggregate snapshot for controlled review. To use the aggregates in Dispatcher 2.0, download the JSON snapshot, return to the dashboard, choose **Import snapshot**, and select the downloaded JSON. The dashboard validates the schema, totals, inbox rollups, brand totals, pseudonymous agent references, allocation shares and event allow-list before rebuilding a safe in-memory snapshot. The imported data powers Overview, aggregate Ticket Analytics, Brand Insights, Workflow Analytics, Folder Share and Team Performance. Ticket-level Live Operations and ticket details remain demonstration data because the aggregate export deliberately removes ticket references and source rows. A snapshot is point-in-time, so the reporting-period selector is disabled while it is loaded. Use **Use demo** or refresh the page to clear it. Nothing is uploaded, persisted or connected to an operational API. Real operational exports still require approval from the relevant company data owner/security process.
 
 ## Backend & Database Foundation 1.0
 
