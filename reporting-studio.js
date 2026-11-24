@@ -516,8 +516,16 @@ async function sanitise(){
     }
     const validInitial=new Map();let ambiguousInitial=0;
     for(const [ticketKey,items] of initialRows.entries()){
-      const uniqueItems=[...new Map(items.map(item=>[norm(item.agent)+"|"+item.inbox+"|"+item.method+"|"+(item.occurredAtUtc||"") ,item])).values()];
-      const duplicateCount=items.length-uniqueItems.length;
+      const uniqueMap=new Map();
+      let duplicateCount=0;
+      for(const item of items){
+        const key=norm(item.agent)+"|"+item.inbox+"|"+item.method;
+        const prior=uniqueMap.get(key);
+        if(!prior){uniqueMap.set(key,item);continue;}
+        duplicateCount++;
+        if(item.occurredAtUtc&&(!prior.occurredAtUtc||item.occurredAtUtc<prior.occurredAtUtc))uniqueMap.set(key,item);
+      }
+      const uniqueItems=[...uniqueMap.values()];
       if(duplicateCount>0){
         quality.assignments.duplicate_rows+=duplicateCount;
         quality.assignments.rows_accepted-=duplicateCount;
