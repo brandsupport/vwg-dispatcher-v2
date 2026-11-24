@@ -133,17 +133,17 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
   assert.equal(studio.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(studio.tickets.total,5);
   assert.deepEqual(JSON.parse(JSON.stringify(studio.tickets.overall)),{
-    ticket_records:5,initially_assigned:4,resolved:0,outstanding:0,unassigned:0
+    ticket_records:5,initially_assigned:4,resolved:0,outstanding:0,unassigned:0,no_current_owner:1
   });
   assert.equal(studio.tickets.lifecycle_available,false);
   assert.equal(studio.tickets.brand_available,false);
   assert.deepEqual(studio.tickets.by_inbox.map(row=>[
-    row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned
+    row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned,row.no_current_owner
   ]),[
-    ["agency",1,1,0,0,0],
-    ["detags",2,2,0,0,0],
-    ["transfers",1,1,0,0,0],
-    ["unadopts",1,0,0,0,0]
+    ["agency",1,1,0,0,0,0],
+    ["detags",2,2,0,0,0,0],
+    ["transfers",1,1,0,0,0,0],
+    ["unadopts",1,0,0,0,0,1]
   ]);
   assert.equal(studio.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
 
@@ -155,15 +155,15 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
 
   const overall=calculateDashboardViews(imported);
   assert.deepEqual(overall.totals,{
-    received:5,assigned:4,resolved:null,open:null,unassigned:null,lifecycleAvailable:false
+    received:5,assigned:4,resolved:null,open:null,unassigned:null,noOwner:1,lifecycleAvailable:false
   });
   assert.deepEqual(overall.folders.map(row=>[
     row.id,row.received,row.assigned,row.resolved,row.open,row.unassigned
   ]),[
-    ["agency",1,1,null,null,null],
-    ["detags",2,2,null,null,null],
-    ["transfers",1,1,null,null,null],
-    ["unadopts",1,0,null,null,null]
+    ["agency",1,1,null,null,null,0],
+    ["detags",2,2,null,null,null,0],
+    ["transfers",1,1,null,null,null,0],
+    ["unadopts",1,0,null,null,null,1]
   ]);
 
   assert.ok(overall.brands.every(row=>row.value===null),"brand totals are unavailable without an explicit Brand field");
@@ -315,7 +315,7 @@ test("real five-tab tracker fields map correctly: Event Type is the event, Assig
 
   assert.equal(snapshot.tickets.total,4);
   assert.deepEqual(snapshot.tickets.overall,{
-    ticket_records:4,initially_assigned:3,resolved:0,outstanding:0,unassigned:0
+    ticket_records:4,initially_assigned:3,resolved:0,outstanding:0,unassigned:0,no_current_owner:1
   });
   assert.equal(snapshot.tickets.lifecycle_available,false);
   assert.equal(snapshot.tickets.brand_available,false);
