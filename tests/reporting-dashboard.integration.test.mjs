@@ -179,7 +179,8 @@ test("the committed synthetic inputs are the three documented sample files",()=>
   for(const path of [
     "examples/synthetic-ticket-snapshot.csv",
     "examples/synthetic-assignment-history.csv",
-    "examples/synthetic-workflow-history.csv"
+    "examples/synthetic-workflow-history.csv",
+    "examples/synthetic-team-roster.csv"
   ]){
     assert.ok(read(path).trim().length>0,"Missing synthetic input: "+path);
   }
