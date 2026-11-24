@@ -4,6 +4,10 @@ A standalone operations intelligence and management platform for the VWG Brand S
 
 > **Current status: synthetic-data dashboard plus local-only reporting studio and staging backend foundation.** The public dashboard remains synthetic-data-only and has no live Outlook or Excel connection. The Reporting Studio processes selected CSV files in the browser and exports pseudonymised aggregate reports; it does not upload files or connect to the API. A staging D1 database and staging Worker/version have been created separately, but the dashboard is not connected to them. No production database, approved identity integration, real operational data feed or operational write route is configured.
 
+## Readability & brand consistency
+
+The dashboard and Offline Reporting Studio use a shared inline Volkswagen roundel SVG rather than a text-letter substitute. Small interface text has been enlarged across both screens, including navigation, labels, tables and supporting notes. The UI validation workflow checks that both pages retain the VW mark and that compact text does not regress to very small sizes.
+
 ## Product direction
 
 Dispatcher 2.0 is being developed independently from the VWG Brand Support Knowledge Base. It will have its own repository, application deployment, authentication/authorisation model, data store and operational audit history.

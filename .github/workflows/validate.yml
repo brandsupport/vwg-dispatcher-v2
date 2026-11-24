@@ -94,6 +94,16 @@ jobs:
           const js = fs.readFileSync('dashboard.js', 'utf8');
           const css = fs.readFileSync('dashboard.css', 'utf8');
           const readme = fs.readFileSync('README.md', 'utf8');
+          const studioHtml = fs.readFileSync('reporting-studio.html', 'utf8');
+          const studioCss = fs.readFileSync('reporting-studio.css', 'utf8');
+          for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
+            if (!page.includes('class="vw-roundel"')) throw new Error(name + ' is missing the Volkswagen roundel.');
+            if (name === 'Offline Studio' && /class="brand-mark">V<\\/span>/.test(page)) throw new Error('Offline Studio reverted to a letter placeholder.');
+          }
+          for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
+            const sizes = [...sheet.matchAll(/font-size\\s*:\\s*([\\d.]+)px/g)].map(match => Number(match[1]));
+            if (sizes.length && Math.min(...sizes) < 11) throw new Error(name + ' contains very small text (' + Math.min(...sizes) + 'px).');
+          }
           const views = ['overview','live','tickets','brands','workflow','folders','team','my','roster','rules','reliability','audit','reports','admin'];
           for (const view of views) {
             const name = 'render' + view[0].toUpperCase() + view.slice(1);
