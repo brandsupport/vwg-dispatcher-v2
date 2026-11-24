@@ -1652,7 +1652,7 @@ function coverageSegments(agents){
     const onShift=scheduled.filter(item=>item.start<=start&&item.end>=end).map(item=>item.agent);
     const early=onShift.filter(agent=>agent.shift==="Early").length;
     const late=onShift.filter(agent=>agent.shift==="Late").length;
-    const label=onShift.length===0?"No sample shift coverage":early>0&&late>0?"Cross-shift overlap":early>0?"Early shift only":late>0?"Late shift only":"Other shift coverage";
+    const label=onShift.length===0?"No scheduled shift coverage":early>0&&late>0?"Cross-shift overlap":early>0?"Early shift only":late>0?"Late shift only":"Other shift coverage";
     segments.push({start,end,early,late,headcount:onShift.length,label,duration:end-start});
   }
   return segments;
@@ -2473,9 +2473,28 @@ function exportConfiguration(){
   csvDownload("dispatcher-sample-dispatch-configuration-proposal.csv",rows);
 }
 function exportRoster(){
-  const agents=rosterFilteredAgents();
-  const segments=coverageSegments(AGENTS);
-  const rows=[
+  const imported=Boolean(state.importedSnapshot);
+  const agents=imported?rosterProfiles():rosterFilteredAgents();
+  const coverageAgents=imported?agents.filter(agent=>agent.activeThisFortnight===true):AGENTS;
+  const segments=coverageSegments(coverageAgents);
+  const rows=imported?[
+    ["ROSTER & COVERAGE — SANITISED LOCAL SNAPSHOT"],
+    ["Note","Agent identities are pseudonymised with the local workspace key. Colleague names and Outlook category values are not included."],
+    ["Note","Coverage includes active-fortnight roster entries only. It is scheduled headcount, not a live availability or capacity measure."],
+    [],
+    ["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight","Current open workload","Initial assignments"],
+    ...agents.map(agent=>[
+      agent.name,agent.shift,agent.start,agent.end,agent.activeThisFortnight?"Yes":"No",agent.open,agent.assigned
+    ]),
+    [],
+    ["SCHEDULED COVERAGE SEGMENTS — ACTIVE ROSTER ONLY"],
+    ["Start (Egypt)","End (Egypt)","Early headcount","Late headcount","Total headcount","Segment"],
+    ...segments.map(segment=>[
+      rosterClockLabel(segment.start),rosterClockLabel(segment.end),segment.early,segment.late,segment.headcount,segment.label
+    ]),
+    [],
+    ["Not supplied","Inbox-specific eligibility","Timestamped break / absence events","Minimum staffing targets"]
+  ]:[
     ["ROSTER & COVERAGE — DEMONSTRATION DATA ONLY"],
     ["Note","Shift windows are illustrative Egypt-local placeholders, not approved scheduled hours."],
     ["Note","Availability snapshots have no timestamps and are not deducted from coverage."],
@@ -2494,7 +2513,7 @@ function exportRoster(){
     [],
     ["Unconfigured controls","Approved rota source","Minimum staffing targets","Timestamped availability","Authenticated roster writes"]
   ];
-  csvDownload("dispatcher-sample-roster-coverage.csv",rows);
+  csvDownload(imported?"dispatcher-local-snapshot-roster-coverage.csv":"dispatcher-sample-roster-coverage.csv",rows);
 }
 function exportAuditHistory(){
   const rows=[
