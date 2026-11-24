@@ -4,9 +4,11 @@ A standalone operations intelligence and management platform for the VWG Brand S
 
 > **Current status: synthetic-data dashboard plus local-only reporting studio and staging backend foundation.** The public dashboard remains synthetic-data-only and has no live Outlook or Excel connection. The Reporting Studio processes selected CSV files in the browser and exports pseudonymised aggregate reports; it does not upload files or connect to the API. A staging D1 database and staging Worker/version have been created separately, but the dashboard is not connected to them. No production database, approved identity integration, real operational data feed or operational write route is configured.
 
-## Readability and typography & brand consistency
+## Cherry Glass design system and workspace navigation
 
-The dashboard and Offline Reporting Studio use a shared inline Volkswagen roundel SVG rather than a text-letter substitute. Small interface text has been enlarged across both screens, including navigation, labels, tables and supporting notes. The UI validation workflow checks that both pages retain the VW mark and that compact text does not regress to very small sizes. Because the roundel is inline, it also appears when the Studio is opened from a local folder without a network connection.
+The dashboard and standalone Reporting Studio share the Dispatcher **Cherry Glass** visual system: a black-cherry canvas, translucent cherry-tinted panels, vivid cherry-red and rose accents, and restrained plum highlights. The Studio keeps the same Knowledge Base home-page VW mark artwork and animated glass-tile construction, recoloured with the Cherry Glass accents. Typography remains deliberately enlarged across both interfaces.
+
+The dashboard provides a persistent **Reporting Studio** entry in its workspace navigation. The Studio header provides a matching, always-visible **Dashboard** return button. Both pages remain independently loadable; the Studio retains its local-only processing boundary.
 
 ## Product direction
 
@@ -43,9 +45,18 @@ Global reporting-period, inbox and search controls are available across the dash
 
 All member names remain anonymised (Agent 01–Agent 14). Do not replace them with real team names until authentication, role permissions and the live data connection are ready.
 
+## Overview and Live Operations
+
+These are deliberately different workspaces:
+
+- **Overview** is the management/performance view. It summarises selected-period ticket demand, first allocations, completions, inbox pressure, brand mix and allocation distribution. It avoids the individual ticket queue.
+- **Live Operations** is the ticket workbench. It is where an operator searches and filters individual sample tickets, checks unassigned or at-risk work, reviews the attention list, and inspects illustrative coverage and recent sample events.
+
+The public dashboard is still a synthetic-data prototype. The Live Operations page is not connected to Outlook or Excel and cannot assign, move, recover or update real tickets. The overview ratios and intervals are generated from sample totals and must not be interpreted as validated live performance.
+
 ## Offline Reporting Studio
 
-The standalone `reporting-studio.html` companion is available from Reports & Exports. It reads selected CSV exports in the browser tab, applies explicit column mappings, HMAC-pseudonymises agent identifiers, and produces aggregate JSON/CSV reports. It makes no network calls and does not write source rows or keys to browser storage. The same three static files can be downloaded and opened locally for strict offline use.
+The standalone `reporting-studio.html` companion is available through the persistent dashboard workspace link and the dashboard's Reports & Exports area. It reads selected CSV exports in the browser tab, applies explicit column mappings, HMAC-pseudonymises agent identifiers, and produces aggregate JSON/CSV reports. It makes no network calls and does not write source rows or keys to browser storage. The same three static files can be downloaded and opened locally for strict offline use.
 
 The initial inputs are a ticket/current-state snapshot (required), assignment history (optional) and workflow/activity history (optional). Source column headings are not assumed: users confirm the mapping. See [docs/OFFLINE_REPORTING_WORKFLOW.md](docs/OFFLINE_REPORTING_WORKFLOW.md) and the fictional CSVs under `examples/` before using any approved operational export.
 
@@ -249,4 +260,4 @@ A GitHub Pages workflow is provided for a public, synthetic-data-only UI preview
 
 ## Original VW brand mark and readability
 
-The Dispatcher and standalone Offline Reporting Studio reuse the Knowledge Base home-page VW logo construction and the exact `src/vw-logo.png` artwork: a 46px translucent glass tile, 14px rounded corners, 30px masked glyph, dual drop-shadow glow and travelling conic edge. The Knowledge Base cyan-to-purple accent is translated into Dispatcher coral-to-copper. The Studio embeds its own copy so the page remains standalone. Both interfaces retain the enlarged responsive typography scale.
+The Dispatcher and standalone Offline Reporting Studio reuse the Knowledge Base home-page VW logo construction and exact `src/vw-logo.png` artwork: a 46px translucent glass tile, 14px rounded corners, 30px masked glyph, dual glow and travelling conic edge. Its original artwork is retained while the surrounding edge, glyph glow and wordmark accents use the Dispatcher Cherry Glass cherry-red and rose palette. The Studio embeds its own copy so it remains standalone. Both interfaces retain the enlarged responsive typography scale.
