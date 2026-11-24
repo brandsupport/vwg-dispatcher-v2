@@ -560,6 +560,22 @@ function validateAndSanitiseSnapshot(raw){
       current_open_workload:count(row.current_open_workload,"agent open-workload count")
     };
   });
+  if(raw.team_roster!==undefined&&!Array.isArray(raw.team_roster))fail("The Team & Shifts roster section is invalid.");
+  const teamRoster=(raw.team_roster||[]).map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||"")))fail("The roster contains an invalid pseudonymous agent reference.");
+    if(!["Early","Late"].includes(row.shift_group))fail("The roster contains an unsupported shift group.");
+    const validClock=value=>typeof value==="string"&&/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+    if(!validClock(row.shift_start_egypt)||!validClock(row.shift_end_egypt))fail("The roster contains an invalid Egypt-local shift time.");
+    const toMinutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
+    if(toMinutes(row.shift_end_egypt)<=toMinutes(row.shift_start_egypt))fail("A roster shift end must be later than its start.");
+    if(typeof row.active_this_fortnight!=="boolean")fail("The roster contains an invalid active-fortnight flag.");
+    return {
+      agent_ref:row.agent_ref,shift_group:row.shift_group,
+      shift_start_egypt:row.shift_start_egypt,shift_end_egypt:row.shift_end_egypt,
+      active_this_fortnight:row.active_this_fortnight
+    };
+  });
+  if(new Set(teamRoster.map(row=>row.agent_ref)).size!==teamRoster.length)fail("The roster contains duplicate pseudonymous agent references.");
   const allocationKeys=new Set();
   for(const row of allocations){
     const key=row.agent_ref+"|"+row.inbox_code;
@@ -588,7 +604,7 @@ function validateAndSanitiseSnapshot(raw){
     if(workflowKeys.has(key))fail("Duplicate workflow event and inbox rows were found.");
     workflowKeys.add(key);
   }
-  const sourceNames=["Ticket snapshot","Assignment history","Workflow history"];
+  const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
     if(!isObject(row)||!sourceNames.includes(row.source))fail("The data-quality section contains an unsupported source label.");
@@ -606,7 +622,7 @@ function validateAndSanitiseSnapshot(raw){
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
     tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-    allocations,workflow,
+    allocations,team_roster:teamRoster,workflow,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
@@ -685,11 +701,24 @@ function folderAssignedRows(){
 function allocationMatrix(){
   if(state.importedSnapshot){
     const agents=new Map();
-    state.importedSnapshot.allocations.forEach(item=>{
-      if(!agents.has(item.agent_ref)){
-        agents.set(item.agent_ref,{id:"snapshot-"+item.agent_ref,name:item.agent_ref,shift:"Shift data not included",availability:"Not supplied",start:"—",end:"—",eligibleFolders:[],assigned:0,open:0,cells:FOLDERS.map(()=>0),openByFolder:FOLDERS.map(()=>0),total:0});
+    const rosterByRef=new Map((state.importedSnapshot.team_roster||[]).map(item=>[item.agent_ref,item]));
+    const ensureAgent=agentRef=>{
+      if(!agents.has(agentRef)){
+        const roster=rosterByRef.get(agentRef);
+        agents.set(agentRef,{
+          id:"snapshot-"+agentRef,name:agentRef,
+          shift:roster?roster.shift_group:"Shift data not included",
+          availability:roster?(roster.active_this_fortnight?"Active this fortnight":"Inactive this fortnight"):"Not supplied",
+          activeThisFortnight:roster?roster.active_this_fortnight:null,
+          start:roster?roster.shift_start_egypt:"—",end:roster?roster.shift_end_egypt:"—",
+          eligibleFolders:[],assigned:0,open:0,cells:FOLDERS.map(()=>0),openByFolder:FOLDERS.map(()=>0),total:0
+        });
       }
-      const agent=agents.get(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
+      return agents.get(agentRef);
+    };
+    for(const agentRef of rosterByRef.keys())ensureAgent(agentRef);
+    state.importedSnapshot.allocations.forEach(item=>{
+      const agent=ensureAgent(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
       if(index>=0){agent.cells[index]=item.initial_assignments;agent.openByFolder[index]=item.current_open_workload;}
       agent.assigned+=item.initial_assignments;agent.open+=item.current_open_workload;agent.total+=item.initial_assignments;
     });
@@ -1468,7 +1497,7 @@ function teamProfileRows(){
     return matrix.map(agent=>{
       const firstAssignedByFolder=agent.cells.slice();
       const firstAssigned=folders.reduce((sum,folder)=>sum+firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)],0);
-      return {...agent,firstAssignedByFolder,firstAssigned,shift:"Shift data not included"};
+      return {...agent,firstAssignedByFolder,firstAssigned,shift:agent.shift||"Shift data not included"};
     });
   }
   return AGENTS.map(agent=>{
