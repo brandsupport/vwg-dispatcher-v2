@@ -8,7 +8,7 @@
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
   <link rel="stylesheet" href="./reporting-studio.css?v=20261124-balanced-footer-2">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js" defer></script>
+  <script src="./reporting-studio.js?v=20261124-source-mapping-1" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -26,7 +26,7 @@
       <p>Upload the complete five-tab Excel workbook once, choose the relevant worksheets, confirm the columns and create a pseudonymised reporting snapshot. You do not need to export or split the tabs.</p>
       <div class="privacy-banner" role="note">
         <span class="privacy-icon">✓</span>
-        <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API, and raw records are not saved to browser storage.</span></div>
+        <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API, and source rows are not saved to browser storage. The sanitised JSON includes approved Colleague display names for internal management views, but excludes exact Outlook category keys, raw ticket IDs, subjects and free-text notes. Keep that JSON in approved private storage.</span></div>
       </div>
     </section>
 
@@ -39,7 +39,7 @@
           <small id="workbookFileMeta">No workbook selected</small>
         </div>
         <div id="workbookSheetSelectors" class="mapping-panels" hidden></div>
-        <p class="field-note">Upload the whole workbook containing all five tabs. The Studio will suggest Assignments for current ticket state, Activity Log for both history inputs, and Team & Shifts for the roster. The other tabs can remain in the workbook and will be ignored.</p>
+        <p class="field-note">Upload the whole workbook containing all five tabs. The Studio will suggest Assignments for ticket state and first-allocation fields, Activity Log for workflow events, and Team & Shifts for the roster. The same Assignments tab is selected twice. The other tabs can remain in the workbook and will be ignored.</p>
         <details class="schema-details">
           <summary>Alternative: use separate CSV files</summary>
           <p class="field-note">Use this only when separate CSV exports are available. For your normal five-tab workbook export, use the single workbook upload above.</p>
@@ -89,7 +89,7 @@
     </section>
 
     <section id="resultsSection" class="results-section" hidden>
-      <div class="results-heading"><div><div class="eyebrow">SANITISED RESULT</div><h2>Reporting snapshot</h2><p id="resultScope">Aggregate reporting only · no ticket references or raw colleague names</p></div><span class="result-status">LOCAL PREVIEW</span></div>
+      <div class="results-heading"><div><div class="eyebrow">SANITISED RESULT</div><h2>Reporting snapshot</h2><p id="resultScope">Aggregate metrics and pseudonymised activity events · no raw ticket IDs or Outlook category keys</p></div><span class="result-status">LOCAL PREVIEW</span></div>
       <div id="qualityWarnings" class="quality-warnings" hidden></div>
       <div id="kpiResults" class="result-kpis"></div>
       <div class="result-grid">

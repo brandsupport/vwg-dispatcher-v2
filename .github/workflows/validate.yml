@@ -176,7 +176,7 @@ jobs:
             if (!js.includes(text)) throw new Error('Missing dashboard category: ' + text);
           }
           if (!readme.toLowerCase().includes('first assignment') || !readme.toLowerCase().includes('first assigned to member')) throw new Error('Initial allocation-share definition is missing.');
-          for (const text of ['Import snapshot','in memory only','ticket workbench remains synthetic-data-only','public, unauthenticated','Use demo']) {
+          for (const text of ['Import snapshot','in memory only','ticket workbench remains synthetic in demo mode','read-only Activity Log feed','public, unauthenticated','Use demo']) {
             if (!readme.includes(text)) throw new Error('Local snapshot import boundary is missing from README: ' + text);
           }
           if (!js.includes('DEMONSTRATION DATA') || !js.includes('READ ONLY') || !js.includes('Not connected')) {
@@ -279,7 +279,7 @@ jobs:
           const teamStart = js.indexOf('function renderTeam(){');
           const teamEnd = js.indexOf('\nfunction agentDetail(', teamStart);
           const teamView = teamStart >= 0 && teamEnd > teamStart ? js.slice(teamStart, teamEnd) : '';
-          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Member snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED']) {
+          for (const text of ['TEAM PERFORMANCE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Colleague performance snapshot','Current open-work distribution','First assignments by inbox','Member allocation matrix','Team-level workflow event ledger','NOT MEMBER-ATTRIBUTED']) {
             if (!teamView.includes(text)) throw new Error('Team Performance 2.0 section or disclosure missing: ' + text);
           }
           const teamEvidenceStart = js.indexOf('function teamEvidencePanel(');
@@ -486,54 +486,28 @@ jobs:
           const auditStart = js.indexOf('function renderAudit(){');
           const auditEnd = js.indexOf('\nfunction renderReports(){', auditStart);
           const auditView = auditStart >= 0 && auditEnd > auditStart ? js.slice(auditStart, auditEnd) : '';
-          for (const text of ['AUDIT HISTORY 2.0','SYNTHETIC AUDIT DATA · READ ONLY','Event ledger','Event investigation','Related ticket and correlation timeline','Production audit contract','Persistent audit store','Not configured','Event integrity','Not verified']) {
-            if (!auditView.includes(text)) throw new Error('Audit History 2.0 section or safety disclosure missing: ' + text);
+          for (const text of ['DISPATCHER ACTIVITY LOG','No imported Activity Log','Recognised event rows','Activity Log events','Details / Notes are deliberately excluded','actioned-by field']) {
+            if (!auditView.includes(text)) throw new Error('Imported Activity Log view or source limitation is missing: ' + text);
           }
-          for (const forbidden of ['100%','8,426','Audit completeness','data-action="apply-audit"','data-action="approve-audit"','data-action="delete-audit"']) {
-            if (auditView.includes(forbidden)) throw new Error('Audit History must not claim completeness or expose a non-existent operational action: ' + forbidden);
+          if (!auditView.includes('importedActivityRows(filtered)') || !auditView.includes('data-audit-search') || !auditView.includes('Export Activity Log')) {
+            throw new Error('Activity Log must show searchable imported event rows and a sanitised export.');
           }
-          for (const selector of ['.audit-demo-strip','.audit-filter-toolbar','.audit-workspace','.audit-detail-facts','.audit-diff-grid','.audit-timeline-list','.audit-contract-grid','.audit-final-note']) {
-            if (!css.includes(selector)) throw new Error('Audit History styling is missing: ' + selector);
+          const auditBaseStart = js.indexOf('function auditBaseEvents(){');
+          const auditBaseEnd = js.indexOf('\nfunction ', auditBaseStart + 10);
+          const auditBase = auditBaseStart >= 0 && auditBaseEnd > auditBaseStart ? js.slice(auditBaseStart, auditBaseEnd) : '';
+          if (!auditBase.includes('state.importedSnapshot.activity_events')) throw new Error('Activity Log must read imported events, not the synthetic ledger.');
+          const activityRowsStart = js.indexOf('function importedActivityRows(');
+          const activityRowsEnd = js.indexOf('\nfunction ', activityRowsStart + 10);
+          const activityRows = activityRowsStart >= 0 && activityRowsEnd > activityRowsStart ? js.slice(activityRowsStart, activityRowsEnd) : '';
+          for (const field of ['event_type','occurred_at_utc','ticket_ref','original_agent_name','current_agent_name','dry_run']) {
+            if (!activityRows.includes(field)) throw new Error('Activity Log display is missing source field: ' + field);
           }
-          for (const helper of ['auditBaseEvents','auditFilteredEvents','auditStats','auditEventRows','auditDetailMarkup','auditRelatedEvents','auditTimelineMarkup','refreshAuditPanels','exportAuditHistory']) {
-            if (!js.includes('function ' + helper + '(')) throw new Error('Audit History helper missing: ' + helper);
+          for (const selector of ['.activity-log-filter','.activity-log-empty','.table-wrap']) {
+            if (!css.includes(selector)) throw new Error('Activity Log styling is missing: ' + selector);
           }
-          for (const text of ['data-audit-search','data-audit-filter','data-audit-event','dispatcher-sample-audit-history.csv','if(action==="reset-audit-filters")','if(action==="export-audit"){exportAuditHistory();return;}']) {
-            if (!js.includes(text)) throw new Error('Audit History interaction or export is not wired: ' + text);
+          if (!readme.includes('Activity Log') || !readme.includes('not a security audit ledger') || !readme.includes('no resolver identity')) {
+            throw new Error('README must distinguish the imported Activity Log from an authenticated audit service and document missing resolver data.');
           }
-          const auditDataStart = js.indexOf('const AUDIT_LEDGER = [');
-          const auditDataEnd = js.indexOf('\n];', auditDataStart) + 3;
-          const auditData = auditDataStart >= 0 && auditDataEnd > auditDataStart ? js.slice(auditDataStart, auditDataEnd) : '';
-          const auditHelpersStart = js.indexOf('function auditBaseEvents(){');
-          const auditHelpersEnd = js.indexOf('\nfunction auditSelectOptions(', auditHelpersStart);
-          const auditHelpers = auditHelpersStart >= 0 && auditHelpersEnd > auditHelpersStart ? js.slice(auditHelpersStart, auditHelpersEnd) : '';
-          if (!auditData || !auditHelpers) throw new Error('Audit sample event data or filter helpers are missing.');
-          const auditCheck = vm.runInNewContext(
-            'const state={folder:"all",auditSearch:"",auditCategory:"all",auditOutcome:"all",auditActor:"all"};' +
-            auditData + auditHelpers +
-            '; const all=auditFilteredEvents();' +
-            'const stats=auditStats(auditBaseEvents());' +
-            'state.folder="agency";const agency=auditFilteredEvents();' +
-            'state.folder="all";state.auditCategory="Exception";const exceptions=auditFilteredEvents();' +
-            'state.auditCategory="all";state.auditActor="Agent 01";const actor=auditFilteredEvents();' +
-            'state.auditActor="all";state.auditSearch="CORR-CFG-ALLOC-02";const byCorrelation=auditFilteredEvents();' +
-            '({count:all.length,ids:new Set(all.map(e=>e.id)).size,stats,agencyCount:agency.length,exceptionCount:exceptions.length,actorCount:actor.length,correlationCount:byCorrelation.length,hasBeforeAfter:all.every(e=>e.before&&e.after),hasActor:all.every(e=>e.actor&&e.role),hasCorrelation:all.every(e=>e.correlation)})'
-          );
-          if (auditCheck.count !== 20 || auditCheck.ids !== 20 || auditCheck.stats.eventCount !== 20 ||
-              auditCheck.stats.ticketCount !== 4 || auditCheck.stats.configurationCount !== 3 ||
-              auditCheck.stats.exceptionCount !== 5 || auditCheck.agencyCount !== 4 ||
-              auditCheck.exceptionCount !== 3 || auditCheck.actorCount !== 3 || auditCheck.correlationCount !== 3 ||
-              !auditCheck.hasBeforeAfter || !auditCheck.hasActor || !auditCheck.hasCorrelation) {
-            throw new Error('Audit sample ledger counts, inbox scope, filters or evidence fields failed reconciliation: ' + JSON.stringify(auditCheck));
-          }
-          if (!readme.includes('### Audit History 2.0') ||
-              !readme.includes('The screen deliberately does not show an audit-completeness percentage') ||
-              !readme.includes('cryptographic integrity chain') ||
-              !readme.includes('Corrections must be appended')) {
-            throw new Error('Audit History governance and data-integrity limitations are missing from README.');
-          }
-
-
           const adminStart = js.indexOf('function renderAdmin(){');
           const adminEnd = js.indexOf('\nfunction render(){', adminStart);
           const adminView = adminStart >= 0 && adminEnd > adminStart ? js.slice(adminStart, adminEnd) : '';

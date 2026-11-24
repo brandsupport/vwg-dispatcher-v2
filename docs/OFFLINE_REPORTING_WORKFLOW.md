@@ -29,13 +29,13 @@ Choose the original tracker workbook in the main workbook input. The Studio sugg
 
 | Reporting input | Workbook tab | Use |
 |---|---|---|
-| Ticket / current state | `Assignments` | Required; current ticket state |
-| Assignment history | `Activity Log` | Optional; use this same tab for the assignment-history input |
-| Workflow / activity history | `Activity Log` | Optional; select the same tab a second time |
+| Ticket / current state | `Assignments` | Required; latest current-state row per ticket |
+| Initial-allocation history | `Assignments` | Optional; select the same tab a second time to read Original Assignee, Boolean Assignment Flag, Status and Allocated At (Egypt) |
+| Workflow / activity history | `Activity Log` | Optional; event names come from Event Type, not the Boolean Assignment Flag |
 | Team & Shifts roster | `Team & Shifts` | Optional; roster identity and shift metadata |
 | Other two tabs | Not selected | Retain them in the workbook; the Studio ignores them |
 
-The same `Activity Log` worksheet is deliberately selected in two different inputs because the assignment and workflow views use different column mappings. Check the worksheet selectors before mapping the columns below. You only select one workbook file.
+The same `Assignments` worksheet is selected twice by design: once for current ticket state and again for initial-allocation fields. `Activity Log` is selected for workflow events. Check the worksheet selectors before mapping the columns below. You only select one workbook file.
 
 ### Ticket / current-state snapshot — required
 
@@ -52,19 +52,17 @@ Map these fields:
 
 The file should be a current-state ticket snapshot, not raw mailbox content. A blank or unfamiliar status is treated conservatively as open and is flagged in data quality.
 
-### Assignment history — optional
+### Initial assignment history — optional
 
-Map ticket reference, new owner / assigned agent, and assignment type. Inbox is optional when the ticket snapshot supplies the authoritative inbox.
-
-Only explicit values equivalent to **Initial**, **First assignment**, **Initial assignment**, **Initial allocation** or **First allocation** contribute to initial-allocation share. Manual assignments, handovers, reassignments and recoveries do not increase first-allocation share. A ticket must exist in the ticket snapshot and the assignment inbox must match the ticket's inbox. Multiple first-assignment rows for one ticket are excluded as ambiguous.
+Select `Assignments` again. Map `Email Key / ID`, `Original Assignee`, `Assignment Flag`, `Source Inbox`, `Allocated At (Egypt)` and `Status`. TRUE/1 plus a successful status (`Assigned`, `Handed Over` or `Recovered`) counts once as an initial automatic allocation. FALSE, queued, pending, failed and review states are not counted. Handovers and recoveries do not create additional first allocations. `MANUAL_ASSIGNMENT_CAPTURED` is shown as a separate workflow event; it is not included in automatic first-allocation share because the current source does not reliably establish whether each manual event is a first allocation or a later reassignment.
 
 ### Workflow / activity history — optional
 
-For the VWG tracker, select the **Activity Log** worksheet a second time as the workflow input. It is the same tab in the same workbook, not a second file. Map `Email Key / ID` to ticket reference, `Assignment Flag` to workflow event type, `Source Inbox` to inbox and `Event Time (Egypt)` to the optional event timestamp. Do **not** map `Event Type`: its `true` / `false` values are Boolean markers, not workflow categories. The sanitiser maps the supplied Assignment Flag labels (auto assigned, handover, manual assignment captured, category removal detected, category restored, pending item not found and MULTIPLE_CATEGORIES_PENDING) to fixed safe event types. Baseline registered and queued are state markers, not workflow events, and are excluded.
+Select the `Activity Log` worksheet once. Map `Event Type` as the workflow category, plus `Email Key / ID`, `Source Inbox`, `Event Time (Egypt)`, `Original Assignee`, `Current Owner` and `Incident Count`. `Assignment Flag` is a TRUE/FALSE marker, not the event name. Do **not** map `Details / Notes`; it may contain subjects or free text. Event IDs and ticket IDs are HMAC-pseudonymised before export; timestamps are retained as UTC instants when the source value can be safely parsed.
 
 ### Team & Shifts roster — optional
 
-Select the **Team & Shifts** worksheet from the same workbook. Map `Outlook Category (exact)` as the join identity, then `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The `Colleague` label is not needed as a second key. The category value is used only in browser memory to join with the pseudonymised Current Owner / Original Assignee values; the snapshot contains only the keyed agent reference, Early/Late group, Egypt-local start/end times and active-fortnight Boolean. Names and Outlook category values are not exported.
+Select the **Team & Shifts** worksheet. Map `Outlook Category (exact)` as the private join key and `Colleague` as the approved display name, plus `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The category is pseudonymised and never exported. The approved display name is retained in the browser-local snapshot for internal Team Performance, Roster and Activity Log screens. Treat the JSON as an internal workforce report containing colleague display names; store and share it only through approved private channels.
 
 Use the **same private workspace key** for the Assignments, Activity Log and Team & Shifts worksheets on each reporting run so that pseudonymous references match across the workbook sources. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
 
@@ -72,7 +70,7 @@ Use the **same private workspace key** for the Assignments, Activity Log and Tea
 
 After sanitising approved extracts, use **Download JSON snapshot** in the Studio. Open the Dispatcher dashboard in another tab, select **Import snapshot** in the top bar, and choose the downloaded `dispatcher-reporting-snapshot.json` file.
 
-The dashboard accepts only the supported `dispatcher-reporting-snapshot-1` aggregate format. It checks the four inbox totals, overall totals, brand totals, allocation reconciliation, HMAC-style pseudonymous agent references, optional roster structure and shift values, workflow event allow-list and quality counters. Unknown properties (including any accidentally added raw ticket or colleague fields) are discarded when the dashboard rebuilds its in-memory data object.
+The dashboard accepts `dispatcher-reporting-snapshot-2` (and remains compatible with older v1 synthetic fixtures). It checks inbox and overall totals, brand reconciliation, keyed ticket/event/agent references, named roster structure, shifts, Activity Log event allow-list and quality counters. Unknown properties (including any accidentally added raw ticket or colleague fields) are discarded when the dashboard rebuilds its in-memory data object.
 
 The imported snapshot is used in these aggregate workspaces:
 
@@ -83,7 +81,7 @@ The imported snapshot is used in these aggregate workspaces:
 - Roster & Coverage — imported roster directory, Early/Late group totals, and scheduled headcount by Egypt-local shift interval. Inactive roster profiles remain visible but are excluded from coverage calculations. Inbox eligibility, live availability, breaks, absences and staffing targets are not inferred.
 - Ticket Analytics — aggregate-only snapshot view. It does not expose ticket references or individual ticket details.
 
-**Live Operations remains a synthetic demonstration workbench.** The sanitised snapshot contains no ticket references, subjects, message details or individual source rows, so it cannot populate a real ticket queue or open real ticket timelines. SLA, response time, handling time, audit history, reliability incidents and dispatch controls are not populated by this import. Imported roster data is limited to the approved shift fields and does not establish live availability or capacity.
+**Imported Live Operations is a source-activity feed, not a live queue.** It shows recognised Activity Log events from the imported workbook and does not refresh from Outlook or change categories. The Activity Log screen is a simple searchable event register, not a security audit ledger. The import still removes raw ticket IDs, email subjects, notes, mailbox entry/store IDs and customer content. The current source contains no Brand field, terminal resolved status, resolved timestamp or resolver identity; brand distribution, resolution time and individual resolution-rate metrics therefore remain unavailable. Without an imported snapshot, Live Operations remains the separate synthetic ticket workbench.
 
 **Access and approval:** the GitHub Pages dashboard is public and unauthenticated. Import is a browser-memory convenience, not an access-control or confidentiality boundary. Only use company-approved, sanitised aggregate snapshots on an approved device and in line with the data owner's/security team's instructions. Do not import customer-level exports, raw ticket IDs, subjects, message content or direct colleague identifiers. The snapshot is point-in-time: the dashboard disables the period selector while it is loaded. The imported data exists only in JavaScript memory for the current tab. It is not uploaded, written to browser storage or connected to a backend. **Use demo** returns to synthetic sample data; refreshing or closing the tab clears the import.
 
