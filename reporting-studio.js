@@ -53,7 +53,9 @@ const SOURCE_CONFIG={
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"event_type",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","type"]},
-      {id:"actor",label:"Owner recorded at this event",aliases:["current owner","owner","original assignee","actor","assigned to","agent","colleague"]},
+      {id:"original_assignee",label:"Original assignee",aliases:["original assignee","first assignee","initial owner"]},
+      {id:"current_owner",label:"Current owner recorded at event",aliases:["current owner","owner","assigned to","assignee","agent","colleague"]},
+      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
@@ -640,7 +642,7 @@ async function sanitise(){
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
 
-    const workflowMap=new Map(),activityMap=new Map();
+    const workflowMap=new Map(),activityMap=new Map(),activityRows=[];
     if(files.workflow){
       const q=quality.workflow;
       for(const row of files.workflow.records){
@@ -659,18 +661,31 @@ async function sanitise(){
         const record=workflowMap.get(keyName)||{event_type:event,inbox_code:inbox,event_count:0,tickets:new Set()};
         record.event_count++;record.tickets.add(ticketKey);workflowMap.set(keyName,record);
 
-        const actor=selectedValue(row,"workflow","actor");
-        const actorInfo=actor?await agentInfo(actor):null;
+        const originalAssignee=selectedValue(row,"workflow","original_assignee");
+        const currentOwner=selectedValue(row,"workflow","current_owner");
+        const originalInfo=originalAssignee?await agentInfo(originalAssignee):null;
+        const currentInfo=currentOwner?await agentInfo(currentOwner):null;
         const timeRaw=selectedValue(row,"workflow","occurred_at");
         const eventDate=timeRaw?parseSourceCalendarDate(timeRaw,"Africa/Cairo"):null;
         if(timeRaw&&!eventDate)q.ambiguous_time++;
-        const activityKey=[event,inbox,actorInfo?.agent_ref||"unattributed",eventDate||"undated"].join("|");
+        const firstFlag=selectedValue(row,"workflow","first_assignment_flag");
+        const firstAssignmentFlag=mappings.workflow.first_assignment_flag?normaliseTrueFalse(firstFlag):null;
+        const activityKey=[event,inbox,currentInfo?.agent_ref||"unattributed",eventDate||"undated"].join("|");
         const activity=activityMap.get(activityKey)||{
-          event_type:event,inbox_code:inbox,agent_ref:actorInfo?.agent_ref||null,
-          agent_name:actorInfo?.agent_name||null,event_date_egypt:eventDate,
+          event_type:event,inbox_code:inbox,agent_ref:currentInfo?.agent_ref||null,
+          agent_name:currentInfo?.agent_name||null,event_date_egypt:eventDate,
           time_zone:"Africa/Cairo",event_count:0,tickets:new Set()
         };
         activity.event_count++;activity.tickets.add(ticketKey);activityMap.set(activityKey,activity);
+        activityRows.push({
+          ticket_ref:ticket.ticketRef,event_time_egypt:timeRaw||null,
+          event_date_egypt:eventDate,event_type:event,inbox_code:inbox,
+          original_assignee_ref:originalInfo?.agent_ref||null,
+          original_assignee_name:originalInfo?.agent_name||null,
+          current_owner_ref:currentInfo?.agent_ref||null,
+          current_owner_name:currentInfo?.agent_name||null,
+          first_assignment_flag:firstAssignmentFlag,time_zone:"Africa/Cairo"
+        });
       }
     }
     const workflow=[...workflowMap.values()].map(row=>({
@@ -742,7 +757,7 @@ async function sanitise(){
       },
       allocations,assignment_methods:methods,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_name.localeCompare(b.agent_name)),
-      workflow,activity_summary:activitySummary,
+      workflow,activity_summary:activitySummary,activity_rows:activityRows,
       data_quality:{
         sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),
         ambiguous_initial_assignment_tickets:ambiguousInitial,warnings
