@@ -140,10 +140,10 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
   assert.deepEqual(studio.tickets.by_inbox.map(row=>[
     row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned
   ]),[
-    ["agency",1,1,0,1,0],
-    ["detags",2,2,0,2,0],
-    ["transfers",1,1,1,0,0],
-    ["unadopts",1,0,0,1,1]
+    ["agency",1,1,0,0,0],
+    ["detags",2,2,0,0,0],
+    ["transfers",1,1,0,0,0],
+    ["unadopts",1,0,0,0,0]
   ]);
   assert.equal(studio.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
 
@@ -308,8 +308,9 @@ test("real five-tab tracker fields map correctly: Event Type is the event, Assig
     first_assignment_flag:"Assignment Flag",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
   });
   assert.deepEqual(run.mappings.workflow,{
-    ticket_ref:"Email Key / ID",event_type:"Event Type",actor:"Current Owner",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
+    ticket_ref:"Email Key / ID",event_type:"Event Type",
+    original_assignee:"Original Assignee",current_owner:"Current Owner",
+    first_assignment_flag:"Assignment Flag",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
   });
 
   assert.equal(snapshot.tickets.total,4);
@@ -336,6 +337,13 @@ test("real five-tab tracker fields map correctly: Event Type is the event, Assig
   });
   assert.ok(snapshot.activity_summary.some(row=>row.agent_name==="Synthetic Agent B"&&row.event_type==="handover"));
   assert.ok(snapshot.activity_summary.every(row=>row.time_zone==="Africa/Cairo"));
+  assert.equal(snapshot.activity_rows.length,10);
+  assert.ok(snapshot.activity_rows.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
+  assert.equal(snapshot.activity_rows[0].event_time_egypt,"23/Nov/2026 11:14:00");
+  assert.equal(snapshot.activity_rows[0].event_type,"assigned");
+  assert.equal(snapshot.activity_rows[0].first_assignment_flag,true);
+  assert.equal(snapshot.activity_rows[0].original_assignee_name,"Synthetic Agent A");
+  assert.ok(snapshot.activity_rows.every(row=>row.time_zone==="Africa/Cairo"));
 
   const imported=validateWithDashboard(snapshot);
   const views=calculateDashboardViews(imported);
@@ -343,6 +351,8 @@ test("real five-tab tracker fields map correctly: Event Type is the event, Assig
   assert.deepEqual(visibleEvents,{handover:1,flag:1,manual:1,recovery:1,reassignment:0});
   assert.equal(views.agents.length,4);
   assert.ok(views.agents.some(row=>row.name==="Synthetic Agent A"));
+  assert.equal(imported.activity_rows.length,10);
+  assert.ok(imported.activity_rows.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
 
   const serialised=JSON.stringify(imported);
   for(const prohibited of [
