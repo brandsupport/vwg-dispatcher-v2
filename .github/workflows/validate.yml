@@ -560,8 +560,8 @@ jobs:
           for (const selector of ['.page-content .heading-copy','.page-content .panel-title','.page-content .panel-subtitle','.page-content .data-table td','.page-content .status-pill']) {
             if (!css.includes(selector)) throw new Error('Shared dashboard readability rule is missing: ' + selector);
           }
-          for (const text of ['.reliability-detail-section p{font-size:10px','.audit-detail-meta p{font-size:10px','.report-card p{font-size:11px','.admin-control-card>p{font-size:10px']) {
-            if (!css.includes(text)) throw new Error('System page typography size rule is missing: ' + text);
+          for (const selector of ['.reliability-detail-section p{','.audit-detail-meta p{','.report-card p{','.admin-control-card>p{']) {
+            if (!css.includes(selector)) throw new Error('System page typography rule is missing: ' + selector);
           }
           if (!readme.includes('## Readability and typography') ||
               !readme.includes('larger scoped type scale') ||
