@@ -61,6 +61,7 @@ const SOURCE_CONFIG={
     title:"Team & shifts roster",
     fields:[
       {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","colleague"]},
+      {id:"display_name",label:"Colleague display name (private lookup only)",aliases:["colleague","display name","agent name","name"]},
       {id:"shift_group",label:"Shift group",required:true,aliases:["shift group"]},
       {id:"shift_start",label:"Shift start (Egypt)",required:true,aliases:["shift start egypt","shift start"]},
       {id:"shift_end",label:"Shift end (Egypt)",required:true,aliases:["shift end egypt","shift end"]},
@@ -74,6 +75,7 @@ const workbookSelections={tickets:"",assignments:"",workflow:"",roster:""};
 let workbookData=null;
 let sourceMode="";
 let currentSnapshot=null;
+let privateAgentLookup=[];
 let savedWorkspaceKey="";
 const $=id=>document.getElementById(id);
 
@@ -427,10 +429,18 @@ async function sanitise(){
       workflow:files.workflow?newQuality("Workflow history",files.workflow.rowCount):null,
       roster:files.roster?newQuality("Team & Shifts roster",files.roster.rowCount):null
     };
-    const rosterMap=new Map();const teamRoster=[];
+    const rosterMap=new Map();const teamRoster=[];const privateNames=new Map();
+    const rememberAgent=async(rawName,preferredName="")=>{
+      const name=String(rawName??"").trim();
+      if(!name||isUnassigned(name))return null;
+      const ref=await pseudonym(key,"agent",name);
+      if(preferredName||!privateNames.has(ref))privateNames.set(ref,String(preferredName||name).trim());
+      return ref;
+    };
     if(files.roster){
       for(const row of files.roster.records){
         const identity=selectedValue(row,"roster","identity");
+        const displayName=selectedValue(row,"roster","display_name")||identity;
         const shiftGroup=normaliseShiftGroup(selectedValue(row,"roster","shift_group"));
         const shiftStart=selectedValue(row,"roster","shift_start");
         const shiftEnd=selectedValue(row,"roster","shift_end");
@@ -441,7 +451,7 @@ async function sanitise(){
         if(rosterMap.has(norm(identity))){
           quality.roster.rows_skipped++;quality.roster.duplicate_rows++;continue;
         }
-        const agentRef=await pseudonym(key,"agent",identity);
+        const agentRef=await rememberAgent(identity,displayName);
         const entry={
           agent_ref:agentRef,shift_group:shiftGroup,
           shift_start_egypt:shiftStart,shift_end_egypt:shiftEnd,
@@ -463,7 +473,7 @@ async function sanitise(){
       if(receivedRaw&&!receivedDate)quality.tickets.ambiguous_time++;
       if(receivedDate)dateSet.add(receivedDate);
       const owner=selectedValue(row,"tickets","current_owner");
-      const ownerRef=isUnassigned(owner)?null:await pseudonym(key,"agent",owner);
+      const ownerRef=isUnassigned(owner)?null:await rememberAgent(owner);
       const ticketRef=await pseudonym(key,"ticket",ref);
       ticketMap.set(id,{ticketRef,inbox,brand,status,resolved:isResolved(status),ownerRef,unassigned:isUnassigned(owner),receivedDate});
       quality.tickets.rows_accepted++;
@@ -484,6 +494,7 @@ async function sanitise(){
         if(!resolvedInbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         q.rows_accepted++;
         const list=initialRows.get(ticketKey)||[];
+        await rememberAgent(agent);
         list.push({agent,inbox:resolvedInbox,method:initialAssignmentMethod(kind)});initialRows.set(ticketKey,list);
       }
     }
@@ -491,7 +502,7 @@ async function sanitise(){
     for(const [ticketKey,items] of initialRows.entries()){
       if(items.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=items.length;quality.assignments.rows_skipped+=items.length;continue;}
       const ticket=ticketMap.get(ticketKey);
-      if(ticket&&items[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await pseudonym(key,"agent",items[0].agent),inbox_code:items[0].inbox,method:items[0].method});
+      if(ticket&&items[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(items[0].agent),inbox_code:items[0].inbox,method:items[0].method});
       else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
@@ -543,8 +554,8 @@ async function sanitise(){
         activityLog.push({
           event_time_egypt:timeRaw||"",event_time_utc:eventTime,
           event_type:event,inbox_code:inbox,ticket_ref:ticket.ticketRef,
-          original_agent_ref:originalName&&!isUnassigned(originalName)?await pseudonym(key,"agent",originalName):null,
-          current_agent_ref:currentName&&!isUnassigned(currentName)?await pseudonym(key,"agent",currentName):null,
+          original_agent_ref:originalName&&!isUnassigned(originalName)?await rememberAgent(originalName):null,
+          current_agent_ref:currentName&&!isUnassigned(currentName)?await rememberAgent(currentName):null,
           assignment_flag:flagRaw==="true"||flagRaw==="yes"||flagRaw==="1",
           incident_count:/^\d+$/.test(incidentRaw)?Number(incidentRaw):0
         });
@@ -579,6 +590,7 @@ async function sanitise(){
     if(!files.assignments)warnings.push("No assignment-history file was supplied. First-assignment totals and allocation shares are incomplete and shown as zero.");
     else if(validInitial.size===0)warnings.push("No validated first-assignment events were found. Allocation shares cannot be interpreted as complete.");
     if(!files.workflow)warnings.push("No workflow-history file was supplied. Workflow event metrics are unavailable.");
+    privateAgentLookup=[...privateNames.entries()].map(([agent_ref,display_name])=>({agent_ref,display_name})).sort((a,b)=>a.display_name.localeCompare(b.display_name));
     const snapshot={
       schema_version:"dispatcher-reporting-snapshot-1",
       generated_at_utc:new Date().toISOString(),
@@ -612,6 +624,11 @@ async function sanitise(){
   }finally{updateReadyState();}
 }
 function downloadSnapshot(){if(!currentSnapshot)return;downloadBlob("dispatcher-reporting-snapshot.json",JSON.stringify(currentSnapshot,null,2),"application/json");}
+function downloadPrivateAgentLookup(){
+  if(!privateAgentLookup.length){alert("No colleague display names were available for a private lookup.");return;}
+  const csv=makeCSV(["agent_ref","display_name"],privateAgentLookup.map(row=>[row.agent_ref,row.display_name]));
+  downloadBlob("dispatcher-private-agent-name-lookup.csv","\\uFEFF"+csv,"text/csv;charset=utf-8");
+}
 function downloadCSVs(){
   if(!currentSnapshot)return;
   const s=currentSnapshot;
@@ -672,5 +689,6 @@ $("downloadKey").addEventListener("click",saveKey);
 $("toggleKey").addEventListener("click",()=>{const field=$("workspaceKey");field.type=field.type==="password"?"text":"password";$("toggleKey").textContent=field.type==="password"?"Show":"Hide";});
 $("sanitiseButton").addEventListener("click",sanitise);
 $("downloadSnapshot").addEventListener("click",downloadSnapshot);
+$("downloadPrivateLookup").addEventListener("click",downloadPrivateAgentLookup);
 $("downloadAllCsv").addEventListener("click",downloadCSVs);
 updateReadyState();
