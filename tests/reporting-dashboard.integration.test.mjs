@@ -91,10 +91,14 @@ function calculateDashboardViews(snapshot,folder="all"){
     "const state={importedSnapshot:"+JSON.stringify(snapshot)+",folder:"+JSON.stringify(folder)+",period:'snapshot',search:''};",
     extractFunction("folderAssignedRows"),
     extractFunction("allocationMatrix"),
+    extractFunction("rosterClockMinutes"),
+    extractFunction("coverageSegments"),
     extractFunction("brandRows"),
     extractFunction("totals"),
     extractFunction("workflowSummaryRows"),
-    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===folder),agents:allocationMatrix(),brands:brandRows(),workflow:workflowSummaryRows()};"
+    "const agents=allocationMatrix();",
+    "const activeRoster=agents.filter(agent=>agent.activeThisFortnight===true);",
+    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===folder),agents,coverage:coverageSegments(activeRoster),brands:brandRows(),workflow:workflowSummaryRows()};"
   ].join("\n");
   vm.runInContext(script,context);
   return JSON.parse(JSON.stringify(context.result));
@@ -288,6 +292,14 @@ test("the Team & Shifts roster is pseudonymised and drives actual imported shift
   assert.equal(views.agents.filter(row=>row.shift==="Early"&&row.activeThisFortnight===true).length,5);
   assert.equal(views.agents.filter(row=>row.shift==="Late"&&row.activeThisFortnight===true).length,8);
   assert.equal(views.agents.filter(row=>row.activeThisFortnight===false).length,1);
+  assert.deepEqual(views.coverage.map(row=>[
+    row.start,row.end,row.early,row.late,row.headcount
+  ]),[
+    [600,660,5,0,5],
+    [660,1140,5,8,13],
+    [1140,1200,0,8,8]
+  ]);
+  assert.equal(views.coverage.filter(row=>row.early>0&&row.late>0).reduce((sum,row)=>sum+row.duration,0),480);
 
   const serialised=JSON.stringify(imported);
   for(const name of Array.from({length:14},(_,i)=>"Sample Agent "+String.fromCharCode(65+i))){
