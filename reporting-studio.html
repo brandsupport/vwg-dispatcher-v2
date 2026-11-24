@@ -32,14 +32,14 @@
 
     <section class="workflow-grid">
       <article class="step-card">
-        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment, workflow and Team & Shifts are optional.</p></div></div>
+        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Activity Log and Team & Shifts provide assignment, workflow and colleague reporting.</p></div></div>
         <div class="file-picker">
           <label for="workbookFile">Complete tracker workbook (.xlsx or .xls) <em>Required</em></label>
           <input id="workbookFile" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
           <small id="workbookFileMeta">No workbook selected</small>
         </div>
         <div id="workbookSheetSelectors" class="mapping-panels" hidden></div>
-        <p class="field-note">Upload the whole workbook containing all five tabs. The Studio will suggest Assignments for current ticket state, Activity Log for both history inputs, and Team & Shifts for the roster. The other tabs can remain in the workbook and will be ignored.</p>
+        <p class="field-note">Upload the whole workbook containing all five tabs. The Studio will suggest Assignments for ticket state, Activity Log for both first-assignment and workflow history, and Team & Shifts for named colleague and shift data. The other tabs remain untouched. The downloaded JSON includes colleague display names and a pseudonymised ticket queue; save it only in an approved private location. Raw Outlook category values, Email Key / ID, subjects, notes and message bodies are excluded.</p>
         <details class="schema-details">
           <summary>Alternative: use separate CSV files</summary>
           <p class="field-note">Use this only when separate CSV exports are available. For your normal five-tab workbook export, use the single workbook upload above.</p>
@@ -89,15 +89,15 @@
     </section>
 
     <section id="resultsSection" class="results-section" hidden>
-      <div class="results-heading"><div><div class="eyebrow">SANITISED RESULT</div><h2>Reporting snapshot</h2><p id="resultScope">Aggregate reporting only · no ticket references or raw colleague names</p></div><span class="result-status">LOCAL PREVIEW</span></div>
+      <div class="results-heading"><div><div class="eyebrow">SANITISED RESULT</div><h2>Reporting snapshot</h2><p id="resultScope">Sanitised local snapshot · pseudonymised ticket references and approved roster display names</p></div><span class="result-status">LOCAL PREVIEW</span></div>
       <div id="qualityWarnings" class="quality-warnings" hidden></div>
       <div id="kpiResults" class="result-kpis"></div>
       <div class="result-grid">
         <section class="result-panel"><h3>Inbox summary</h3><div id="inboxResults"></div></section>
         <section class="result-panel"><h3>Brand mix</h3><div id="brandResults"></div></section>
-        <section class="result-panel"><h3>Daily ticket records</h3><div id="dailyResults"></div><p class="table-note">Only dates parsed as date-only UTC values or timezone-explicit timestamps are included.</p></section>
+        <section class="result-panel"><h3>Daily ticket records</h3><div id="dailyResults"></div><p class="table-note">Received dates are interpreted as UK-local calendar dates; Activity Log dates are interpreted as Egypt-local calendar dates.</p></section>
         <section class="result-panel"><h3>Initial allocation by agent</h3><div id="agentResults"></div><p class="table-note">Shares use first assignments only. Handovers, reassignments and recoveries do not increase allocation share.</p></section>
-        <section class="result-panel"><h3>Team & shifts roster</h3><div id="rosterResults"></div><p class="table-note">The snapshot contains only keyed agent references, shift groups, Egypt-local shift times and active-fortnight status. Names and Outlook category values are removed.</p></section>
+        <section class="result-panel"><h3>Team & shifts roster</h3><div id="rosterResults"></div><p class="table-note">The local snapshot includes colleague display names and keyed agent references, shift groups, Egypt-local shift times and active-fortnight status. Outlook category values are removed.</p></section>
         <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
       </div>
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
