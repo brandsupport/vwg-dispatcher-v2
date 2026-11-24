@@ -475,6 +475,11 @@ function validateAndSanitiseSnapshot(raw){
   const inboxCodes=["agency","detags","transfers","unadopts"];
   const brandCodes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
   const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception"];
+  const validDate=value=>{
+    if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+    const parsed=new Date(value+"T00:00:00Z");
+    return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===value;
+  };
   if(!isObject(raw)||raw.schema_version!=="dispatcher-reporting-snapshot-1"||raw.source_mode!=="offline_sanitised_aggregate"){
     fail("This is not a supported sanitised Dispatcher reporting snapshot.");
   }
@@ -496,6 +501,11 @@ function validateAndSanitiseSnapshot(raw){
     };
   });
   if(byInbox.length!==4||new Set(byInbox.map(row=>row.inbox_code)).size!==4)fail("The snapshot must contain exactly one summary for each of the four inboxes.");
+  for(const row of byInbox){
+    if(row.resolved+row.outstanding!==row.ticket_records||row.unassigned>row.outstanding||row.initially_assigned>row.ticket_records){
+      fail("Inbox state counts do not reconcile for "+row.inbox_code+".");
+    }
+  }
   byInbox.sort((a,b)=>inboxCodes.indexOf(a.inbox_code)-inboxCodes.indexOf(b.inbox_code));
   const overall=raw.tickets.overall;
   const cleanOverall={
@@ -517,18 +527,27 @@ function validateAndSanitiseSnapshot(raw){
   });
   if(new Set(byBrand.map(row=>row.brand_code)).size!==byBrand.length||sum(byBrand,"count")!==total)fail("Brand totals are duplicated or do not reconcile with the ticket total.");
   const dailyVolume=raw.tickets.daily_volume.map(row=>{
-    if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||typeof row.date_utc!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(row.date_utc)||!Number.isFinite(Date.parse(row.date_utc+"T00:00:00Z"))){
+    if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||!validDate(row.date_utc)){
       fail("The snapshot contains an invalid daily-volume row.");
     }
     return {date_utc:row.date_utc,inbox_code:row.inbox_code,ticket_records:count(row.ticket_records,"daily ticket count")};
   });
+  const dailyKeys=new Set();
+  for(const row of dailyVolume){
+    const key=row.date_utc+"|"+row.inbox_code;
+    if(dailyKeys.has(key))fail("Duplicate daily-volume rows were found.");
+    dailyKeys.add(key);
+  }
+  if(sum(dailyVolume,"ticket_records")>total)fail("Dated ticket counts exceed the snapshot total.");
   if(!isObject(raw.reporting_period)&&raw.reporting_period!==null)fail("The reporting-period metadata is invalid.");
   let reportingPeriod=null;
   if(raw.reporting_period){
     const first=raw.reporting_period.first_received_date_utc,last=raw.reporting_period.last_received_date_utc;
-    if(typeof first!=="string"||typeof last!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(first)||!/^\d{4}-\d{2}-\d{2}$/.test(last)||first>last)fail("The reporting-period dates are invalid.");
+    if(!validDate(first)||!validDate(last)||first>last)fail("The reporting-period dates are invalid.");
     reportingPeriod={first_received_date_utc:first,last_received_date_utc:last};
-  }
+    const dates=dailyVolume.map(row=>row.date_utc).sort();
+    if(dates.length&&(dates[0]!==first||dates[dates.length-1]!==last))fail("Reporting-period dates do not match the dated ticket rows.");
+  }else if(dailyVolume.length)fail("Dated ticket rows require reporting-period metadata.");
   if(!Array.isArray(raw.allocations)||!Array.isArray(raw.workflow)||!isObject(raw.data_quality)||!Array.isArray(raw.data_quality.sources)){
     fail("The snapshot is missing allocation, workflow or data-quality sections.");
   }
@@ -560,9 +579,15 @@ function validateAndSanitiseSnapshot(raw){
     if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code))fail("The workflow contains an unsupported event or inbox code.");
     const eventCount=count(row.event_count,"workflow event count");
     const distinctTickets=count(row.distinct_tickets,"workflow distinct-ticket count");
-    if(distinctTickets>eventCount)fail("Workflow distinct-ticket counts cannot exceed event counts.");
+    if(distinctTickets>eventCount||distinctTickets>total)fail("Workflow distinct-ticket counts do not reconcile with event or ticket totals.");
     return {event_type:row.event_type,inbox_code:row.inbox_code,event_count:eventCount,distinct_tickets:distinctTickets};
   });
+  const workflowKeys=new Set();
+  for(const row of workflow){
+    const key=row.event_type+"|"+row.inbox_code;
+    if(workflowKeys.has(key))fail("Duplicate workflow event and inbox rows were found.");
+    workflowKeys.add(key);
+  }
   const sourceNames=["Ticket snapshot","Assignment history","Workflow history"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
