@@ -51,7 +51,7 @@ Current event interpretation in the sanitiser:
 | `auto assigned` | Assigned; also eligible for first-allocation count |
 | `handover` | Handover |
 | `manual assignment captured` | Manual assignment; not counted as first allocation |
-| `category removal detected` | Recovery requested (provisional mapping; confirm with the tracker owner) |
+| `category removal detected` | Flagged (a category-removal detection event; confirm the source meaning with the tracker owner) |
 | `category restored` | Recovery restored |
 | `pending item not found` | Exception |
 | `MULTIPLE_CATEGORIES_PENDING` | Exception |
@@ -86,7 +86,7 @@ Complete this section outside the public repository, in the organisation's appro
 | Manual first assignments are either separately identified or explicitly excluded from allocation share | |
 | Inbox/folder mapping confirmed against the four monitored workstreams | |
 | Status values and resolved/open interpretation confirmed | |
-| Category removal/restoration interpretation confirmed | |
+| Category removal is a flag/detection event and category restoration is a recovery event | |
 | Timestamp format and timezone offsets confirmed | |
 | Prohibited personal/customer/vehicle/internal mailbox identifiers excluded | |
 | Approved processing device/location and report retention confirmed | |
