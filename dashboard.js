@@ -700,7 +700,7 @@ function importedSourceAvailable(source){
 }
 async function loadLocalSnapshot(file){
   if(!file)return;
-  if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
+  if(file.size>25*1024*1024)throw new Error("Snapshot files must be smaller than 25 MB.");
   const parsed=JSON.parse(await file.text());
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
