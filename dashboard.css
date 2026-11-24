@@ -2498,3 +2498,69 @@ body { font-size:15.2px !important; line-height:1.52; }
 .local-snapshot-strip{border-color:rgba(255,92,145,.3)!important;background:linear-gradient(105deg,rgba(255,23,79,.105),rgba(194,160,255,.055))!important}
 .local-snapshot-strip .overview-demo-label{color:#ffb6c8}
 .local-snapshot-strip .overview-demo-label i{background:#ff174f!important;box-shadow:0 0 9px rgba(255,23,79,.7)}
+
+
+/* Reporting snapshot workspaces — bounded, wrap-safe member and table layouts */
+.member-cell{display:flex;align-items:center;gap:9px;min-width:0;max-width:100%;white-space:normal}
+.member-avatar{flex:0 0 28px;width:28px;height:28px;white-space:nowrap;overflow:hidden}
+.member-cell-copy{display:flex;flex:1 1 auto;flex-direction:column;gap:2px;min-width:0;max-width:100%;white-space:normal}
+.member-cell-copy .member-name{display:block;min-width:0;max-width:100%;white-space:normal!important;overflow-wrap:anywhere;word-break:normal;line-height:1.25}
+.member-cell-copy .member-role{display:block;min-width:0;max-width:100%;margin-top:0;white-space:normal!important;overflow-wrap:anywhere;line-height:1.3}
+.data-table th{white-space:normal;line-height:1.35;vertical-align:bottom}
+.data-table td{vertical-align:middle}
+.table-wrap{width:100%;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.roster-directory-panel,.team-profile-grid,.team-overview-grid,.team-secondary-grid,.roster-primary-grid,.team-event-ledger{min-width:0;max-width:100%}
+.roster-directory-panel .table-wrap{overflow-x:auto;max-width:100%}
+.roster-directory-panel .data-table{min-width:1120px;table-layout:auto}
+.roster-directory-panel .data-table th,.roster-directory-panel .data-table td{white-space:normal;line-height:1.35}
+.roster-directory-panel .data-table td:first-child{min-width:210px;width:230px}
+.roster-member-button{display:block;width:100%;min-width:0;max-width:100%;white-space:normal;text-align:left;overflow-wrap:anywhere}
+.roster-member-button .member-cell{min-width:0;width:100%;max-width:100%}
+.roster-member-button .member-cell-copy{max-width:155px}
+.roster-time-cell{white-space:nowrap!important;font-variant-numeric:tabular-nums}
+.matrix-table{min-width:1060px;table-layout:auto}
+.matrix-table th,.matrix-table td{white-space:normal;line-height:1.35}
+.matrix-table td:first-child{min-width:190px;width:210px}
+.matrix-table .member-cell{max-width:220px}
+.matrix-table .member-cell-copy{max-width:160px}
+.matrix-cell{min-width:100px}
+.team-profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.team-profile-card{display:block;width:100%;min-width:0;max-width:100%;overflow:hidden;text-align:left}
+.team-profile-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.team-profile-head .member-cell{flex:1 1 auto;min-width:0;max-width:calc(100% - 24px)}
+.team-profile-head .member-cell-copy{max-width:100%}
+.team-profile-metrics{min-width:0}
+.team-profile-metrics>div{min-width:0}
+.team-profile-metrics strong{overflow-wrap:anywhere}
+.team-workload-row{grid-template-columns:minmax(145px,1fr) minmax(90px,1.2fr) 42px;min-width:0}
+.team-workload-person,.team-workload-person .member-cell{min-width:0;max-width:100%}
+.team-workload-person .member-cell-copy{max-width:100%}
+.team-workload-person .member-name,.team-workload-person .member-role{white-space:normal;overflow-wrap:anywhere}
+.team-event-ledger .data-table{min-width:800px}
+.team-agent-activity .data-table{min-width:650px}
+.audit-filter-toolbar{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(2,minmax(150px,1fr));gap:10px;align-items:end;margin:12px 0}
+.activity-log-panel .data-table{min-width:860px}
+.workflow-method-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.workflow-method-grid>div{min-width:0;padding:13px;border:1px solid rgba(255,92,145,.18);border-radius:10px;background:rgba(255,255,255,.025)}
+.workflow-method-grid span,.workflow-method-grid strong,.workflow-method-grid small{display:block}
+.workflow-method-grid span{color:#c7a9b7;font-size:12px;line-height:1.4}
+.workflow-method-grid strong{margin:8px 0 3px;color:#fff0f5;font:800 25px Manrope,sans-serif}
+.workflow-method-grid small{color:#a98b99;font-size:11.5px;line-height:1.4}
+.live-export-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,92,145,.15)}
+.live-export-footer>span{color:#a98b99;font-size:11.5px;line-height:1.45}
+.live-export-footer .btn{flex:0 0 auto}
+.activity-log-panel .audit-filter-toolbar label{min-width:0}
+.team-scope-note{overflow-wrap:anywhere}
+@media(max-width:1000px){
+  .team-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .audit-filter-toolbar{grid-template-columns:1fr 1fr}
+  .audit-filter-toolbar .live-queue-search{grid-column:1/-1}
+}
+@media(max-width:720px){
+  .team-profile-grid{grid-template-columns:1fr}
+  .team-workload-row{grid-template-columns:minmax(110px,1fr) minmax(60px,1fr) 36px}
+  .roster-filter-toolbar{grid-template-columns:1fr}
+  .audit-filter-toolbar{grid-template-columns:1fr}
+  .workflow-method-grid{grid-template-columns:1fr}
+  .live-export-footer{align-items:flex-start;flex-direction:column}
+}
