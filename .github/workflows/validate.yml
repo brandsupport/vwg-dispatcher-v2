@@ -23,6 +23,7 @@ on:
       - "reporting-studio.css"
       - "reporting-studio.js"
       - "examples/**"
+      - "tests/**"
       - "dashboard.css"
       - "index.html"
       - "README.md"
