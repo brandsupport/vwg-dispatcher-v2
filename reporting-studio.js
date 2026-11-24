@@ -28,35 +28,41 @@ const SOURCE_CONFIG={
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","item id","reference","ticketid"]},
       {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","inbox","folder","mailbox folder","queue","folder name"]},
-      {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
-      {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
-      {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
-      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]}
+      {id:"status",label:"Tracker assignment status",required:true,aliases:["status","tracker status","assignment status","current state","state","work status"]},
+      {id:"brand",label:"Explicit brand field",aliases:["brand","brand name","make","marque"]},
+      {id:"received_at",label:"Received timestamp (UK local)",aliases:["received at uk","received at","received date","date received","created at","created date","received timestamp"]},
+      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]},
+      {id:"lifecycle_status",label:"Ticket lifecycle status (not tracker status)",aliases:["lifecycle status","ticket lifecycle","resolution status","closure status"]},
+      {id:"resolved_at",label:"Resolved timestamp",aliases:["resolved at","closed at","completed at","resolution timestamp"]},
+      {id:"resolved_by",label:"Resolved by",aliases:["resolved by","closed by","completed by"]}
     ]
   },
   assignments:{
     title:"Assignment history export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"agent",label:"New owner / assigned agent",required:true,aliases:["original assignee","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
-      {id:"kind",label:"Assignment type",required:true,aliases:["assignment flag","assignment kind","assignment type","event type","type","action","allocation type"]},
+      {id:"agent",label:"Owner recorded at this event",required:true,aliases:["current owner","new owner","assigned to","assignee","original assignee","agent","colleague","owner","allocated to"]},
+      {id:"kind",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","assignment type","assignment kind","type"]},
+      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Assignment timestamp",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
+      {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
   },
   workflow:{
     title:"Workflow / activity export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"event_type",label:"Workflow event type",required:true,aliases:["assignment flag","workflow event","event type","event","activity","action","type"]},
+      {id:"event_type",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","type"]},
+      {id:"actor",label:"Colleague recorded on event",aliases:["current owner","actor","assigned to","original assignee","agent","colleague"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
+      {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
   },
   roster:{
     title:"Team & shifts roster",
     fields:[
-      {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","colleague"]},
+      {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","category"]},
+      {id:"display_name",label:"Colleague display name",aliases:["colleague","display name","agent name","name"]},
       {id:"shift_group",label:"Shift group",required:true,aliases:["shift group"]},
       {id:"shift_start",label:"Shift start (Egypt)",required:true,aliases:["shift start egypt","shift start"]},
       {id:"shift_end",label:"Shift end (Egypt)",required:true,aliases:["shift end egypt","shift end"]},
@@ -291,25 +297,45 @@ function normaliseActiveFlag(value){
   if(["no","n","false","0","inactive"].includes(key))return false;
   return null;
 }
-function isInitialKind(value){
+function firstAssignmentMethod(value){
   const key=norm(value);
-  return key==="initial"||key==="first"||key==="first assignment"||key==="initial assignment"||key==="initial allocation"||key==="first allocation"||key==="auto assigned";
+  if(["auto assignment","auto assigned","automatic assignment","initial automatic assignment","first automatic assignment","initial","first","first assignment","initial assignment","initial allocation","first allocation"].includes(key))return "automatic";
+  if(["manual assignment captured","manual assignment","manually assigned","manual allocation","initial manual assignment","first manual assignment"].includes(key))return "manual";
+  return null;
+}
+function isInitialKind(value){return Boolean(firstAssignmentMethod(value));}
+function normaliseTrueFalse(value){
+  const key=norm(value);
+  if(["true","yes","y","1"].includes(key))return true;
+  if(["false","no","n","0"].includes(key))return false;
+  return null;
+}
+function normaliseTrackerStatus(value){
+  const key=norm(value);
+  const known={
+    unassigned:"Unassigned",queued:"Queued",assigning:"Assigning",assigned:"Assigned",
+    recovered:"Recovered","recovered review":"Recovered","needs review":"Needs Review",
+    "handover pending":"Handover Pending","handed over":"Handed Over",
+    "recovery failed":"Recovery Failed","dry run recovery pending":"Dry Run - Recovery Pending",
+    "recovery pending":"Recovery Pending"
+  };
+  return known[key]||"Other / review";
 }
 function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
-    received:["received","ticket received","created"],
+    received:["received","ticket received","created","new mail queued"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
-    flagged:["flagged","flag","flag raised","flagged for review","category removal detected"],
+    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending"],
     recovery_requested:["recovery requested","recovery request","recovery review opened"],
-    recovery_held:["recovery held","held for recovery","recovery hold"],
-    recovery_restored:["recovery restored","restored","assignment restored","category restored"],
-    resolved:["resolved","closed","completed"],
+    recovery_held:["recovery held","held for recovery","recovery hold","recovery requires review"],
+    recovery_restored:["recovery restored","restored","assignment restored","category restored","restoration marker removed"],
+    resolved:["resolved","closed","completed","ticket resolved"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","error","pending item not found","multiple categories pending"]
+    exception:["exception","write failed","assignment failed","assignment confirmation failed","recovery failed","pending item not found","multiple categories pending","ambiguous assignment","queued item not found"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
@@ -324,6 +350,36 @@ function parseExplicitDate(value){
   if(!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw))return null;
   const parsed=new Date(raw);
   return Number.isNaN(parsed.getTime())?null:parsed.toISOString().slice(0,10);
+}
+function parseSourceCalendarDate(value,zone){
+  const raw=String(value??"").trim();
+  if(!raw)return null;
+  const dateMatch=raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(dateMatch){
+    const date=new Date(Date.UTC(Number(dateMatch[1]),Number(dateMatch[2])-1,Number(dateMatch[3])));
+    if(date.getUTCFullYear()!==Number(dateMatch[1])||date.getUTCMonth()+1!==Number(dateMatch[2])||date.getUTCDate()!==Number(dateMatch[3]))return null;
+    if(/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)){
+      const parsed=new Date(raw);if(Number.isNaN(parsed.getTime()))return null;
+      return new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).format(parsed);
+    }
+    return date.toISOString().slice(0,10);
+  }
+  const uk=raw.match(/^(\d{1,2})[\/-]([A-Za-z]{3}|\d{1,2})[\/-](\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+  if(uk){
+    const monthNames=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+    const month=/^\d+$/.test(uk[2])?Number(uk[2]):monthNames.indexOf(uk[2].toLowerCase())+1;
+    const day=Number(uk[1]),year=Number(uk[3]);
+    const date=new Date(Date.UTC(year,month-1,day));
+    if(month<1||month>12||date.getUTCFullYear()!==year||date.getUTCMonth()+1!==month||date.getUTCDate()!==day)return null;
+    return date.toISOString().slice(0,10);
+  }
+  if(/^\d+(?:\.\d+)?$/.test(raw)){
+    const serial=Number(raw);
+    if(serial<20000||serial>80000)return null;
+    const date=new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000);
+    return date.toISOString().slice(0,10);
+  }
+  return null;
 }
 function makeHmacKey(secret){
   return crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
