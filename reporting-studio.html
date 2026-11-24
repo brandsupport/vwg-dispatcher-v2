@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1019">
+  <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
+  <meta name="description" content="Local-only CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
+  <link rel="stylesheet" href="./reporting-studio.css">
+  <script src="./reporting-studio.js" defer></script>
+</head>
+<body>
+  <header class="studio-topbar">
+    <a class="brand-lockup" href="./" aria-label="Return to Dispatcher 2.0">
+      <span class="brand-mark">V</span>
+      <span><strong>VWG DISPATCH INTELLIGENCE</strong><small>OFFLINE REPORTING STUDIO</small></span>
+    </a>
+    <a class="back-link" href="./">← Back to dashboard</a>
+  </header>
+
+  <main class="studio-shell">
+    <section class="intro">
+      <div class="eyebrow">LOCAL REPORTING WORKSPACE</div>
+      <h1>Turn tracker exports into safe management insight.</h1>
+      <p>Select approved CSV exports, map their columns, and create a pseudonymised reporting snapshot. Processing stays in this browser tab; No file is uploaded to a server.</p>
+      <div class="privacy-banner" role="note">
+        <span class="privacy-icon">✓</span>
+        <div><strong>Local-only processing</strong><span>Raw CSV contents stay on this device. This tool has no API connection, does not call the V2 Worker, and does not save raw records to browser storage.</span></div>
+      </div>
+    </section>
+
+    <section class="workflow-grid">
+      <article class="step-card">
+        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment and workflow history are optional.</p></div></div>
+        <div class="file-picker">
+          <label for="ticketsFile">Ticket / current-state export <em>Required</em></label>
+          <input id="ticketsFile" type="file" accept=".csv,text/csv">
+          <small id="ticketsFileMeta">No file selected</small>
+        </div>
+        <div class="file-picker">
+          <label for="assignmentsFile">Assignment history export <em>Optional</em></label>
+          <input id="assignmentsFile" type="file" accept=".csv,text/csv">
+          <small id="assignmentsFileMeta">No file selected</small>
+        </div>
+        <div class="file-picker">
+          <label for="workflowFile">Workflow / activity export <em>Optional</em></label>
+          <input id="workflowFile" type="file" accept=".csv,text/csv">
+          <small id="workflowFileMeta">No file selected</small>
+        </div>
+        <p class="field-note">Choose CSV exports only. Do not select the original Excel workbook, email files, attachments, or files containing message bodies. Test the workflow first with <a href="./examples/synthetic-ticket-snapshot.csv" download>synthetic tickets</a>, <a href="./examples/synthetic-assignment-history.csv" download>synthetic assignments</a> and <a href="./examples/synthetic-workflow-history.csv" download>synthetic workflow events</a>.</p>
+      </article>
+
+      <article class="step-card">
+        <div class="step-heading"><span class="step-number">02</span><div><h2>Confirm column mapping</h2><p>Auto-detection is only a suggestion. Check every required field before processing.</p></div></div>
+        <div id="mappingPanels" class="mapping-panels">
+          <div class="empty-mapping">Select a CSV above to inspect its column headings.</div>
+        </div>
+      </article>
+
+      <article class="step-card key-card">
+        <div class="step-heading"><span class="step-number">03</span><div><h2>Set your local pseudonym key</h2><p>The same key keeps agent codes consistent across reporting runs.</p></div></div>
+        <label for="workspaceKey">Local workspace key</label>
+        <div class="key-entry"><input id="workspaceKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste a saved key or generate one"><button id="toggleKey" class="button button-muted" type="button">Show</button></div>
+        <div class="key-actions"><button id="generateKey" class="button button-secondary" type="button">Generate key</button><button id="downloadKey" class="button button-muted" type="button" disabled>Save key file</button></div>
+        <p class="field-note">Keep the key in an approved private location. Do not email it, commit it to GitHub, or include it with reporting exports. Losing the key changes pseudonyms in later snapshots.</p>
+      </article>
+    </section>
+
+    <section class="action-bar">
+      <div><strong>Ready to sanitise?</strong><span>Nothing runs until you select the source files, confirm mappings and press the button.</span></div>
+      <button id="sanitiseButton" class="button button-primary" type="button" disabled>Sanitise locally →</button>
+    </section>
+
+    <section id="resultsSection" class="results-section" hidden>
+      <div class="results-heading"><div><div class="eyebrow">SANITISED RESULT</div><h2>Reporting snapshot</h2><p id="resultScope">Aggregate reporting only · no ticket references or raw colleague names</p></div><span class="result-status">LOCAL PREVIEW</span></div>
+      <div id="qualityWarnings" class="quality-warnings" hidden></div>
+      <div id="kpiResults" class="result-kpis"></div>
+      <div class="result-grid">
+        <section class="result-panel"><h3>Inbox summary</h3><div id="inboxResults"></div></section>
+        <section class="result-panel"><h3>Brand mix</h3><div id="brandResults"></div></section>
+        <section class="result-panel"><h3>Daily ticket records</h3><div id="dailyResults"></div><p class="table-note">Only dates parsed as date-only UTC values or timezone-explicit timestamps are included.</p></section>
+        <section class="result-panel"><h3>Initial allocation by agent</h3><div id="agentResults"></div><p class="table-note">Shares use first assignments only. Handovers, reassignments and recoveries do not increase allocation share.</p></section>
+        <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
+      </div>
+      <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
+      <div class="download-bar">
+        <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories and keyed agent references are included.</span></div>
+        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
+      </div>
+      <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>
+    </section>
+
+    <section class="guardrails">
+      <h2>Reporting guardrails</h2>
+      <div class="guardrail-grid">
+        <div><strong>First assignment ≠ every touch</strong><p>Allocation share counts one initial assignment per unique ticket. Handover, reassignment and recovery activity stays separate.</p></div>
+        <div><strong>Current workload is a snapshot</strong><p>Open work is derived from the ticket-state export and is not historical allocation volume.</p></div>
+        <div><strong>No invented timing metrics</strong><p>Response time, active handling time and resolution duration are not calculated from incomplete or ambiguous timestamps.</p></div>
+        <div><strong>Uncertain data stays uncertain</strong><p>Unknown inboxes, duplicate ticket rows, ambiguous initial assignments and unmapped states are counted as quality issues, not silently guessed.</p></div>
+      </div>
+    </section>
+    <footer class="studio-footer">VWG DISPATCH INTELLIGENCE · OFFLINE REPORTING STUDIO · NO LIVE MAILBOX CONNECTION</footer>
+  </main>
+</body>
+</html>
