@@ -591,7 +591,7 @@ function validateAndSanitiseSnapshot(raw){
 function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
-async function loadLocalSnapshot(file){
+async async function loadLocalSnapshot(file){
   if(!file)return;
   if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
   const parsed=JSON.parse(await file.text());
@@ -603,14 +603,15 @@ async function loadLocalSnapshot(file){
   periodSelect.disabled=true;
   periodSelect.title="This is a point-in-time snapshot. Period trends require timestamped source history.";
   document.getElementById("datasetBadge").innerHTML="<span></span> LOCAL SNAPSHOT";
+  document.getElementById("footerNote").textContent="Sanitised aggregate snapshot · Browser memory only · Refresh clears the import";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
   state.selectedAgent=null;
+  state.memberSearch="";
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
   showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
-}
-function clearLocalSnapshot(){
+}function clearLocalSnapshot(){
   state.importedSnapshot=null;
   state.period="month";
   const periodSelect=document.getElementById("periodSelect");
@@ -618,24 +619,15 @@ function clearLocalSnapshot(){
   periodSelect.disabled=false;
   periodSelect.title="";
   document.getElementById("datasetBadge").innerHTML="<span></span> DEMO DATA";
+  document.getElementById("footerNote").textContent="Prototype preview · No Outlook or Excel connection · All figures synthetic";
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
   document.getElementById("snapshotFileInput").value="";
   state.selectedAgent=null;
+  state.memberSearch="";
   render();
   showToast("Returned to the synthetic demo dataset.");
-}
-const pageContent = document.getElementById("pageContent");
-const toast = document.getElementById("toast");
-const modalRoot = document.getElementById("modalRoot");
-const VIEW_TITLES = {
-  overview:"Overview",live:"Live operations",tickets:"Ticket analytics",brands:"Brand insights",
-  workflow:"Workflow analytics",folders:"Folder share",team:"Team performance",my:"My performance",
-  roster:"Roster & coverage",rules:"Dispatch configuration",reliability:"Reliability centre",
-  audit:"Audit history",reports:"Reports & exports",admin:"Administration"
-};
-
-function fmt(value){return Math.round(value).toLocaleString("en-GB");}
+}function fmt(value){return Math.round(value).toLocaleString("en-GB");}
 function scaled(value){return Math.max(0,Math.round(value*(state.importedSnapshot?1:PERIODS[state.period].factor)));}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
@@ -2208,9 +2200,8 @@ function csvDownload(filename,rows){
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
   const url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-  showToast("Sample CSV exported. It contains demonstration data only.");
-}
-function exportLiveQueue(){
+  showToast(state.importedSnapshot?"Sanitised snapshot CSV exported locally.":"Sample CSV exported. It contains demonstration data only.");
+}function exportLiveQueue(){
   const rows=liveFilteredTickets();
   csvDownload("dispatcher-live-operations-sample-queue.csv",[
     ["Reference","Subject","Brand","Inbox","Owner","Age","Status","SLA"],
@@ -2225,34 +2216,40 @@ function exportTickets(){
   ]);
 }
 function exportBrands(){
-  csvDownload("dispatcher-sample-brand-mix.csv",[["Brand","Tickets"],...brandRows().map(b=>[b.name,scaled(b.value)])]);
-}
-function exportFolders(){
+  csvDownload(state.importedSnapshot?"dispatcher-local-snapshot-brand-mix.csv":"dispatcher-sample-brand-mix.csv",[["Brand","Ticket records"],...brandRows().map(brand=>[brand.name,brand.value])]);
+}function exportFolders(){
   const rows=allocationMatrix(),folders=scopeFolders();
-  csvDownload("dispatcher-sample-folder-share.csv",[["Member",...folders.flatMap(f=>[f.name+" assigned",f.name+" share"]), "Total"],...rows.map(r=>[r.name,...folders.flatMap(f=>{const fi=FOLDERS.findIndex(x=>x.id===f.id);const total=rows.reduce((s,x)=>s+x.cells[fi],0);return [r.cells[fi],(r.cells[fi]/Math.max(1,total)*100).toFixed(1)+"%"]; }),r.total])]);
-}
-function exportTeam(){
+  csvDownload(state.importedSnapshot?"dispatcher-local-snapshot-folder-share.csv":"dispatcher-sample-folder-share.csv",[
+    ["Member reference",...folders.flatMap(folder=>[folder.name+" first assigned",folder.name+" allocation share"]), "Total first assigned"],
+    ...rows.map(row=>[row.name,...folders.flatMap(folder=>{
+      const index=FOLDERS.findIndex(item=>item.id===folder.id);
+      const total=rows.reduce((sum,item)=>sum+(item.cells[index]||0),0);
+      return [row.cells[index]||0,((row.cells[index]||0)/Math.max(1,total)*100).toFixed(1)+"%"];
+    }),row.cells.reduce((sum,value)=>sum+value,0)])
+  ]);
+}function exportTeam(){
   const profiles=teamProfileRows().filter(agent=>activeSearch(agent.name));
   const folders=scopeFolders();
+  const imported=Boolean(state.importedSnapshot),assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
+  const events=workflowSummaryRows();
   const rows=[
-    ["TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
+    [imported?"TEAM PERFORMANCE — SANITISED SNAPSHOT":"TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
     ["Reporting period",PERIODS[state.period].label],
     ["Inbox",scopeName()],
-    ["All records are synthetic; event counts are team-level aggregates and are not attributed to members."],
+    [imported?"Agent references are pseudonymised; shift and rota details are not included.":"All records are synthetic; event counts are team-level aggregates and are not attributed to members."],
     [],
-    ["Member","Shift group (illustrative)",...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current open-work snapshot"],
+    ["Member reference",...(imported?["Shift data"]:["Shift group (illustrative)"]),...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current open-work snapshot"],
     ...profiles.map(agent=>[
-      agent.name,agent.shift,...folders.map(folder=>agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]),
-      agent.firstAssigned,agent.open
+      agent.name,imported?"Not supplied":agent.shift,...folders.map(folder=>agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]),
+      assignmentsAvailable?agent.firstAssigned:"Not supplied",agent.open
     ]),
     [],
     ["TEAM-LEVEL WORKFLOW EVENTS — NOT MEMBER-ATTRIBUTED OR TIME-SCOPED"],
-    ["Event type","Events recorded","Unique tickets affected","Sample rate"],
-    ...WORKFLOW_EVENT_SUMMARY.map(event=>[event.label,event.events,event.uniqueTickets,event.rate])
+    ["Event type","Events recorded","Unique tickets affected","Rate / interpretation"],
+    ...events.map(event=>[event.label,event.events,event.uniqueTickets,imported?"Not available":event.rate])
   ];
-  csvDownload("dispatcher-sample-team-performance.csv",rows);
-}
-function exportConfiguration(){
+  csvDownload(imported?"dispatcher-local-snapshot-team-performance.csv":"dispatcher-sample-team-performance.csv",rows);
+}function exportConfiguration(){
   const rows=[
     ["DISPATCH CONFIGURATION 2.0 — DESIGN PROPOSAL ONLY"],
     ["Status","Not configured. No rules are active and no settings are persisted."],
@@ -2326,10 +2323,19 @@ function exportAdminSecurityBlueprint(){
   csvDownload("dispatcher-proposed-admin-security-blueprint.csv",rows);
 }
 function exportSummary(){
-  const t=totals();
-  csvDownload("dispatcher-sample-management-summary.csv",[["Metric","Value"],["Period",PERIODS[state.period].label],["Inbox",scopeName()],["Received",t.received],["Initially assigned",t.assigned],["Resolved",t.resolved],["Outstanding",t.open],["Unassigned",t.unassigned]]);
-}
-function openTicket(ref){
+  const t=totals(),imported=Boolean(state.importedSnapshot),assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
+  csvDownload(imported?"dispatcher-local-snapshot-management-summary.csv":"dispatcher-sample-management-summary.csv",[
+    ["Metric","Value"],
+    ["Period",PERIODS[state.period].label],
+    ["Inbox",scopeName()],
+    [imported?"Ticket records":"Received",t.received],
+    ["Initially assigned",assignmentsAvailable?t.assigned:"Not supplied"],
+    ["Resolved / closed",t.resolved],
+    ["Outstanding",t.open],
+    ["Currently unassigned",t.unassigned],
+    ["Source mode",imported?"Sanitised aggregate · local browser memory":"Synthetic demonstration"]
+  ]);
+}function openTicket(ref){
   const ticket=TICKETS.find(t=>t.ref===ref);if(!ticket)return;
   const sla=liveSla(ticket);
   const timeline=[
