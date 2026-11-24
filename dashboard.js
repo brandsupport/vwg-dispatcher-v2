@@ -819,19 +819,19 @@ function overviewRiskSummary(tickets){
 }
 function overviewInboxSnapshot(inboxes){
   if(!inboxes.length)return '<div class="empty-state">No inboxes match the selected scope.</div>';
+  const imported=Boolean(state.importedSnapshot);
   return '<div class="overview-inbox-grid">'+inboxes.map(folder=>{
     const allocationRate=folder.received?folder.assigned/folder.received*100:0;
     const outstandingRate=folder.received?folder.open/folder.received*100:0;
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
       '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>RECEIVED</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+fmt(folder.assigned)+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
-      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of received volume"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
-      '<div class="overview-inbox-foot"><span>'+allocationRate.toFixed(1)+'% initially allocated</span><span>'+outstandingRate.toFixed(1)+'% open / received</span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
+      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
+      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
     '</article>';
   }).join("")+'</div>';
-}
-function overviewRiskPanel(summary,tickets){
+}function overviewRiskPanel(summary,tickets){
   const rows=(summary.attention.length?summary.attention: tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status)).sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a))).slice(0,4);
   const ticketRows=rows.length?'<div class="overview-risk-list">'+rows.map(ticket=>{
     const sla=liveSla(ticket);
@@ -874,24 +874,23 @@ function overviewAllocationSummary(rows){
   const folders=scopeFolders();
   const totalsByFolder=folders.map(folder=>{
     const fi=FOLDERS.findIndex(item=>item.id===folder.id);
-    return {name:folder.name,count:rows.reduce((sum,row)=>sum+row.cells[fi],0)};
+    return {name:folder.name,count:rows.reduce((sum,row)=>sum+(row.cells[fi]||0),0)};
   });
   const total=totalsByFolder.reduce((sum,item)=>sum+item.count,0);
-  const values=rows.map(row=>folders.reduce((sum,folder)=>sum+row.cells[FOLDERS.findIndex(item=>item.id===folder.id)],0)).filter(Number.isFinite);
-  const low=values.length?Math.min(...values):0;
-  const high=values.length?Math.max(...values):0;
+  const values=rows.map(row=>folders.reduce((sum,folder)=>sum+(row.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0)).filter(Number.isFinite);
+  const low=values.length?Math.min(...values):0,high=values.length?Math.max(...values):0;
+  const missing=state.importedSnapshot&&!importedSourceAvailable("Assignment history");
   return '<div class="overview-allocation-summary">'+
-    '<div><strong>'+fmt(total)+'</strong><span>Initial allocations in sample matrix</span></div>'+
-    '<div><strong>'+fmt(low)+'–'+fmt(high)+'</strong><span>Member allocation range</span></div>'+
+    '<div><strong>'+fmt(total)+'</strong><span>Initial allocations '+(state.importedSnapshot?"in imported snapshot":"in sample matrix")+'</span></div>'+
+    '<div><strong>'+(missing?"Not supplied":fmt(low)+'–'+fmt(high))+'</strong><span>Member allocation range</span></div>'+
     '<div><strong>'+folders.length+'</strong><span>Inboxes in selected scope</span></div>'+
   '</div>'+
   '<div class="overview-allocation-bars">'+totalsByFolder.map(item=>{
     const share=total?item.count/total*100:0;
     return '<div><span>'+esc(item.name)+'</span><b>'+fmt(item.count)+'</b><i><em style="width:'+share.toFixed(1)+'%"></em></i></div>';
   }).join("")+'</div>'+
-  '<p class="overview-panel-foot">Initial allocation is separate from handovers, reassignments and recoveries. Sample matrix only; no conclusion about fairness is possible without verified hours, eligibility and workload complexity.</p>';
-}
-function overviewIntegrationPanel(){
+  '<p class="overview-panel-foot">'+(missing?"Assignment history was not supplied. No first-assignment distribution is inferred from current owners.":"Initial allocation is separate from handovers, reassignments and recoveries. Allocation volume is descriptive, not a performance ranking or proof of fairness.")+'</p>';
+}function overviewIntegrationPanel(){
   return '<div class="overview-integration-list">'+
     healthRow("Outlook shared mailboxes","Not connected","warning","No mailbox messages are being read")+
     healthRow("Excel dispatch tracker","Not connected","warning","No assignment records are being read or written")+
@@ -901,46 +900,62 @@ function overviewIntegrationPanel(){
   '</div>';
 }
 function renderOverview(){
-  const t=totals();
-  const brands=brandRows();
-  const rows=allocationMatrix();
+  const imported=Boolean(state.importedSnapshot);
+  const t=totals(),brands=brandRows(),rows=allocationMatrix();
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
+  const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
+  const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
+  const resolutionRate=t.received?t.resolved/t.received*100:null;
   const trend=overviewTrendData(t.received,t.resolved);
-  const allocationRate=t.received?t.assigned/t.received*100:0;
-  const resolutionRate=t.received?t.resolved/t.received*100:0;
+  const trendPanel=imported
+    ? panel("Received-date coverage","Actual UTC received dates present in the imported ticket snapshot. Resolved-date history is not included.",overviewSnapshotTrendTable(),'<span class="subtle-tag">SOURCE DATES ONLY</span>')
+    : panel("Ticket flow pattern","12 illustrative intervals · distributed from the selected totals",'<div class="dual-bars">'+chartPair(trend.received,trend.resolved,trend.labels)+'</div><div class="overview-chart-note">The intervals are a generated distribution of the sample totals, not timestamped daily source records.</div>',horizontalLegend([{label:"Received",color:"#ff174f"},{label:"Resolved",color:"#ff85aa"}]));
+  const banner=imported
+    ? '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Generated '+esc(new Date(state.importedSnapshot.generated_at_utc).toLocaleString("en-GB"))+'</span><span>In memory only · refresh clears import</span></div>'
+    : '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Portfolio reporting view</span><span>All figures are synthetic and illustrative</span></div>';
+  const allocationValue=assignmentsAvailable?fmt(t.assigned):"Not supplied";
+  const allocationRateValue=allocationRate===null?"Not available":allocationRate.toFixed(1)+"%";
+  const resolutionRateValue=resolutionRate===null?"—":resolutionRate.toFixed(1)+"%";
   pageContent.innerHTML=
-    heading("MANAGEMENT PERFORMANCE","Performance overview","A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
-    '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Portfolio reporting view</span><span>All figures are synthetic and illustrative</span></div>'+
+    heading("MANAGEMENT PERFORMANCE",imported?"Imported snapshot overview":"Performance overview",imported?"Explore aggregate ticket, inbox, brand and first-allocation data from the sanitised local snapshot. Individual tickets and source rows are not included.":"A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual sample work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
+    banner+
     kpiGrid([
-      kpi("Tickets received",fmt(t.received),"Distinct tickets in selected reporting scope","▤"),
-      kpi("Initially assigned",fmt(t.assigned),"Distinct tickets with a first allocation","↗"),
-      kpi("Tickets resolved",fmt(t.resolved),"Recorded completed tickets in sample totals","✓"),
-      kpi("Outstanding workload",fmt(t.open),"Illustrative open snapshot for selected scope","◷",null,"warning")
+      kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
+      kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
+      kpi(imported?"Resolved / closed":"Tickets resolved",fmt(t.resolved),imported?"Current resolved state in the snapshot":"Recorded completed tickets in sample totals","✓"),
+      kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
-      '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRate.toFixed(1)+'%</strong><small>First-assigned ÷ received</small></div>'+
-      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRate.toFixed(1)+'%</strong><small>Resolved ÷ received · not a cohort closure rate</small></div>'+
-      '<div class="overview-metric-tile"><span>NOT INITIALLY ALLOCATED</span><strong>'+fmt(t.unassigned)+'</strong><small>Received less first-assigned total</small></div>'+
+      '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRateValue+'</strong><small>'+(imported?"Resolved ÷ snapshot records; not a cohort closure rate":"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
-      panel("Ticket flow pattern","12 illustrative intervals · distributed from the selected totals",'<div class="dual-bars">'+chartPair(trend.received,trend.resolved,trend.labels)+'</div><div class="overview-chart-note">The intervals are a generated distribution of the sample totals, not timestamped daily source records.</div>',horizontalLegend([{label:"Received",color:"#ff174f"},{label:"Resolved",color:"#ff85aa"}]))+
+      trendPanel+
       panel("Initial allocation distribution","First assignment only · handovers and recoveries remain separate",overviewAllocationSummary(rows),'<button class="panel-action" data-go="folders">Open folder share matrix ↗</button>')+
     '</div>'+
-    '<div class="section-heading overview-section-heading"><div><h2>Inbox performance</h2><p>Compare received, first-assigned, resolved and outstanding sample totals across the selected inbox scope.</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
+    '<div class="section-heading overview-section-heading"><div><h2>Inbox performance</h2><p>'+(imported?"Current ticket records, first assignments, resolved and outstanding counts from the imported snapshot.":"Compare received, first-assigned, resolved and outstanding sample totals across the selected inbox scope.")+'</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
     overviewInboxSnapshot(inboxes)+
     '<div class="grid-two overview-secondary-grid">'+
-      panel("Brand demand","Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
+      panel("Brand demand",imported?"Approved brand classification across all inboxes; the snapshot does not include a brand-by-inbox cross-tab.":"Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
       panel("How to read this overview","Aggregate management measures — not a ticket workbench",'<div class="overview-guide-list">'+
-        '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner.</span></div>'+
-        '<div><strong>Resolution ratio</strong><span>Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.</span></div>'+
-        '<div><strong>Outstanding workload</strong><span>A current-state sample snapshot, separate from historical allocation volume.</span></div>'+
+        '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner. '+(imported&&!assignmentsAvailable?"No assignment-history file was included, so this measure is unavailable.":"")+'</span></div>'+
+        '<div><strong>Resolution ratio</strong><span>'+(imported?"Resolved records ÷ current snapshot records. This is not a received-ticket cohort closure rate.":"Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.")+'</span></div>'+
+        '<div><strong>Outstanding workload</strong><span>'+(imported?"The current open-state snapshot, separate from historical allocation volume.":"A current-state sample snapshot, separate from historical allocation volume.")+'</span></div>'+
       '</div>','<span class="subtle-tag">MEASURE GUIDE</span>')+
     '</div>'+
-    '<div class="overview-next-step"><div><span>NEED TO INSPECT OR WORK A TICKET?</span><strong>Live Operations is the ticket-level workspace for queue search, status filters and exception review.</strong></div><button type="button" class="btn btn-primary" data-go="live">Open Live Operations ↗</button></div>'+
-    '<div class="overview-final-note"><strong>Management interpretation:</strong> all figures are synthetic portfolio aggregates. Reopened tickets, active handling time, approved SLA performance and production health require validated event data before they can be reported.</div>';
+    '<div class="overview-next-step"><div><span>NEED TO INSPECT OR WORK A TICKET?</span><strong>Live Operations remains a separate sample workbench. The sanitised aggregate snapshot intentionally contains no ticket references, subjects or individual source rows.</strong></div><button type="button" class="btn btn-primary" data-go="live">Open Live Operations ↗</button></div>'+
+    '<div class="overview-final-note"><strong>Data boundary:</strong> '+(imported?"This view uses only the imported sanitised aggregate snapshot. It is held in memory in this tab and is not uploaded or persisted. Date trends require valid timestamps; resolution timing, SLA performance and production health are not inferred.":"All figures are synthetic portfolio aggregates. Reopened tickets, active handling time, approved SLA performance and production health require validated event data before they can be reported.")+'</div>';
 }
-function healthRow(label,value,type,note){
+function overviewSnapshotTrendTable(){
+  if(!state.importedSnapshot)return "";
+  const rows=state.importedSnapshot.tickets.daily_volume
+    .filter(row=>state.folder==="all"||row.inbox_code===state.folder)
+    .slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30)
+    .map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.ticket_records)+'</td></tr>');
+  return rows.length?dataTable(["Received date · UTC","Inbox","Ticket records"],rows):'<div class="empty-state">No valid timezone-explicit received dates were supplied. No date trend is inferred.</div>';
+}function healthRow(label,value,type,note){
   return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
 }
 function liveBaseTickets(){
@@ -1295,50 +1310,58 @@ function metricPanel(title,value,copy,note){
   return '<article class="metric-panel"><span>'+title+'</span><strong>'+value+'</strong><p>'+copy+'</p><small>'+note+'</small></article>';
 }
 function renderBrands(){
-  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),known=total-rows.find(b=>b.id==="other").value;
-  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload","See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+  const rows=brandRows(),total=rows.reduce((a,b)=>a+b.value,0),other=rows.find(b=>b.id==="other")?.value||0,known=total-other;
+  const imported=Boolean(state.importedSnapshot);
+  pageContent.innerHTML=heading("BRAND INTELLIGENCE","Know the brands behind the workload",imported?"Explore validated brand categories from the sanitised snapshot. Brand-by-inbox detail is not present in this export.":"See how many tickets relate to each VW Group brand and compare brand demand across inboxes.",'<button class="btn btn-secondary" data-action="export-brands">↓ Export brand mix</button>')+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Brand totals · all inboxes</span><span>No brand-by-inbox split supplied</span></div>':'')+
     kpiGrid([
-      kpi("Total tickets",fmt(total),"Distinct received tickets","▤"),
+      kpi(imported?"Ticket records":"Total tickets",fmt(total),imported?"Current-state snapshot records":"Distinct received tickets","▤"),
       kpi("Identified brand",fmt(known),total?(known/total*100).toFixed(1)+"% classified":"—","◈"),
       kpi("Audi tickets",fmt(rows.find(b=>b.id==="audi").value),"Share "+(total?rows.find(b=>b.id==="audi").value/total*100:0).toFixed(1)+"%","A"),
       kpi("Škoda tickets",fmt(rows.find(b=>b.id==="skoda").value),"Share "+(total?rows.find(b=>b.id==="skoda").value/total*100:0).toFixed(1)+"%","Š")
     ])+
     '<div class="grid-two">'+
       panel("Brand distribution","Share of unique tickets in the current scope",brandBarList(rows),'<span class="subtle-tag">7 CATEGORIES</span>')+
-      panel("Brand mix by inbox","The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">SAMPLE COMPARISON</span>')+
+      panel("Brand mix by inbox",imported?"Not supplied by the aggregate snapshot. Clear the global inbox filter to review overall brand totals.":"The selected folder filter applies to all views",brandFolderTable(),'<span class="subtle-tag">'+(imported?"NOT IN SOURCE":"SAMPLE COMPARISON")+'</span>')+
     '</div>'+
     panel("Brand register","Classification coverage and handling rules",dataTable(["Brand","Tickets","Share","Classification","Treatment"],rows.map(b=>{
       const share=total?b.value/total*100:0;
       return '<tr><td><span class="brand-register-name"><i style="background:'+b.color+'"></i>'+b.name+'</span></td><td class="total-cell">'+fmt(b.value)+'</td><td>'+share.toFixed(1)+'%</td><td>'+statusPill(b.id==="other"?"Review required":"Identified")+'</td><td>'+(b.id==="other"?"Retain until confirmed":"Explicit / validated mapping")+'</td></tr>';
     })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
-    '<div class="prototype-warning"><strong>Classification safeguard.</strong> In the live system, brand identity must come from an explicit field or validated reference mapping. Ambiguous records stay in Other / unclassified rather than being guessed from a subject line.</div>';
-}
-function brandFolderTable(){
+    '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
+}function brandFolderTable(){
+  if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
   const rows=FOLDERS.filter(f=>state.folder==="all"||f.id===state.folder);
   return dataTable(["Inbox","VW","Audi","Škoda","Other"],rows.map(f=>{
     const total=scaled(f.received),mix=BRAND_MIX[f.id],v=distribute(total,mix);
     return '<tr><td>'+f.name+'</td><td>'+fmt(v[0])+'</td><td>'+fmt(v[1])+'</td><td>'+fmt(v[2])+'</td><td>'+fmt(v[6])+'</td></tr>';
   }));
-}
-function renderWorkflow(){
-  const manual=workflowEvent("manual");
-  const handover=workflowEvent("handover");
-  const recovery=workflowEvent("recovery");
-  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves","Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
+}function renderWorkflow(){
+  const imported=Boolean(state.importedSnapshot);
+  const manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
+  const sourceAvailable=!imported||importedSourceAvailable("Workflow history");
+  const summaries=workflowSummaryRows();
+  const actualRows=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
+    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+  ):null;
+  const allocationMethodPanel=imported
+    ? panel("Allocation method split","The snapshot distinguishes first allocations from workflow events but does not identify automatic versus manual allocation method.",'<div class="empty-state">Not available in this source export. No allocation method split is inferred.</div>','<span class="subtle-tag">NOT IN SOURCE</span>')
+    : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Event counts and distinct tickets affected remain separate.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
     kpiGrid([
-      kpi("Automatic allocation","1,064","89.5% of assigned tickets","↗"),
-      kpi("Manual assignment events",fmt(manual.events),fmt(manual.uniqueTickets)+" unique tickets affected","✎"),
-      kpi("Handover events",fmt(handover.events),fmt(handover.uniqueTickets)+" unique tickets affected","⇄"),
-      kpi("Recovery events",fmt(recovery.events),fmt(recovery.uniqueTickets)+" unique tickets affected","↺")
+      kpi("Automatic allocation",imported?"Not available":"1,064",imported?"The source does not classify automatic versus manual first assignments":"89.5% of assigned tickets","↗"),
+      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",sourceAvailable?fmt(manual.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","✎"),
+      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",sourceAvailable?fmt(handover.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","⇄"),
+      kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",sourceAvailable?fmt(recovery.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","↺")
     ])+
     '<div class="grid-two">'+
-      panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>')+
-      panel("Workflow events","Recorded event volume in the sample",barRows(WORKFLOW_EVENT_SUMMARY.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
+      allocationMethodPanel+
+      panel("Workflow events",imported?"Event types mapped from the supplied workflow history, scoped to the selected inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No mapped workflow events in this inbox scope.":"No workflow-history file was supplied.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
     '</div>'+
-    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],WORKFLOW_EVENT_SUMMARY.map(event=>'<tr><td>'+event.label+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+fmt(event.events)+'</td><td>'+event.rate+' of assigned / handled tickets</td></tr>')))+
-    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket measure and three times in the event count. Events can affect the same ticket more than once; never add event counts to distinct ticket totals.</div>';
-}
-function donutChart(items){
+    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+fmt(event.events)+'</td><td>'+(imported?"Not available — denominator and method not supplied":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket measure and three times in the event count. Event types may overlap; never add event counts to distinct ticket totals or initial allocations.</div>';
+}function donutChart(items){
   let offset=0;
   const circles=items.map(item=>{
     const length=item.value*2.45;
