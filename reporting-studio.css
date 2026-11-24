@@ -398,3 +398,106 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,su
   .workspace-nav-button,.button { transition:none; }
   .button-primary:hover:not(:disabled) { transform:none; }
 }
+
+
+/* ---------- Balanced Studio type scale and overflow-safe content ---------- */
+body { font-size:15.8px !important; line-height:1.55; }
+.studio-topbar .brand-lockup strong { font-size:13.8px !important; letter-spacing:.04em; }
+.studio-topbar .brand-lockup small { font-size:11.5px !important; letter-spacing:.12em; }
+.studio-topbar .back-link { font-size:13px !important; }
+.studio-shell { width:min(1240px,calc(100% - 48px)); padding:36px 0 32px; min-width:0; }
+.intro { padding:27px 30px 25px; }
+.intro .eyebrow { font-size:11.8px !important; }
+.intro h1 { font-size:clamp(32px,3.8vw,44px) !important; line-height:1.12; overflow-wrap:anywhere; }
+.intro>p { font-size:15.8px !important; line-height:1.62; overflow-wrap:anywhere; }
+.privacy-banner strong { font-size:14px !important; }
+.privacy-banner span { font-size:13.2px !important; line-height:1.55; overflow-wrap:anywhere; }
+.workflow-grid { gap:15px; min-width:0; }
+.workflow-grid>*,.step-card,.mapping-panels,.mapping-group,.result-grid,.result-panel { min-width:0; max-width:100%; }
+.step-card { padding:19px; }
+.step-heading,.step-heading>div { min-width:0; }
+.step-heading h2 { font-size:16px !important; line-height:1.32; }
+.step-heading p { font-size:13.2px !important; }
+.step-number { font-size:12px !important; }
+.file-picker label,.key-card>label { font-size:13.5px !important; }
+.file-picker label em { font-size:11.5px !important; }
+.file-picker input[type=file],.file-picker input::file-selector-button { font-size:12.5px !important; }
+.file-picker small,.field-note { font-size:12.5px !important; line-height:1.55; overflow-wrap:anywhere; }
+.mapping-group h3 { font-size:12.8px !important; }
+.mapping-field { grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); min-width:0; }
+.mapping-field label { font-size:12.8px !important; overflow-wrap:anywhere; }
+.mapping-field select,.key-entry input { font-size:13px !important; min-width:0; }
+.empty-mapping { font-size:12.8px !important; overflow-wrap:anywhere; }
+.key-entry { min-width:0; }
+.key-entry input { width:100%; }
+.button { font-size:13px !important; min-height:38px; }
+.action-bar { min-width:0; flex-wrap:wrap; padding:13px 16px; }
+.action-bar>div { min-width:0; flex:1 1 280px; }
+.action-bar strong { font-size:14px !important; }
+.action-bar span { font-size:12.8px !important; line-height:1.55; overflow-wrap:anywhere; }
+.results-heading { min-width:0; flex-wrap:wrap; }
+.results-heading>div { min-width:0; }
+.results-heading h2 { font-size:22px !important; }
+.results-heading p { font-size:12.8px !important; overflow-wrap:anywhere; }
+.result-status { font-size:11.8px !important; }
+.result-kpi span { font-size:12.2px !important; overflow-wrap:anywhere; }
+.result-kpi strong { font-size:22px !important; }
+.result-panel h3 { font-size:14px !important; }
+.result-panel { overflow-x:auto; }
+.result-panel table { min-width:460px; font-size:12.5px !important; }
+.result-panel th { font-size:11px !important; }
+.result-panel td,.result-panel th { padding:8px 7px; }
+.table-note,.quality-warnings,.schema-details { font-size:12.4px !important; line-height:1.55; overflow-wrap:anywhere; }
+.schema-details pre { font-size:11.8px !important; max-width:100%; }
+.download-bar { min-width:0; flex-wrap:wrap; }
+.download-bar>div:first-child { min-width:0; flex:1 1 260px; }
+.download-bar strong { font-size:13px !important; }
+.download-bar span { font-size:12.5px !important; overflow-wrap:anywhere; }
+.guardrails h2 { font-size:16px !important; }
+.guardrail-grid strong { font-size:12.8px !important; }
+.guardrail-grid p { font-size:12.3px !important; line-height:1.55; overflow-wrap:anywhere; }
+@media(max-width:900px) {
+  .studio-shell { width:calc(100% - 36px); }
+  .workflow-grid { grid-template-columns:1fr; }
+  .step-card:first-child { grid-row:auto; }
+  .step-card { padding:18px; }
+}
+@media(max-width:600px) {
+  .studio-topbar { min-height:64px; gap:9px; }
+  .studio-topbar .brand-lockup strong { font-size:12.2px !important; }
+  .studio-topbar .brand-lockup small { font-size:11px !important; }
+  .studio-topbar .back-link { font-size:11.8px !important; }
+  .studio-shell { width:calc(100% - 24px); padding-top:22px; }
+  .intro { padding:22px 18px 20px; }
+  .intro h1 { font-size:30px !important; }
+  .intro>p { font-size:14.8px !important; }
+  .privacy-banner span { font-size:12.8px !important; }
+  .mapping-field { grid-template-columns:1fr; gap:5px; }
+  .action-bar,.results-heading,.download-bar { align-items:stretch; flex-direction:column; }
+  .action-bar .button,.download-actions .button { width:100%; }
+  .result-grid { grid-template-columns:1fr; }
+  .result-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .guardrail-grid { grid-template-columns:1fr; }
+}
+/* ---------- Matching knowledge-workspace signature footer ---------- */
+.studio-footer {
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+  gap:10px 22px; margin-top:32px; padding:18px 2px 7px;
+  border-top:1px solid rgba(255,82,129,.20); color:#9b7889;
+  text-align:left; font-size:11.5px !important; letter-spacing:.04em;
+}
+.studio-footer-main { display:flex; align-items:center; flex-wrap:wrap; gap:7px 14px; min-width:0; }
+.studio-footer-brand { color:#f3dce5; font-size:11.5px; font-weight:800; letter-spacing:.12em; }
+.studio-footer-note { color:#9b7889; font-size:11px; letter-spacing:.09em; }
+.studio-footer-credit { margin:0; color:#c7a4b2; font-size:12.5px !important; letter-spacing:.015em; }
+.studio-footer-author {
+  color:#ff5c91; font-weight:900;
+  background:linear-gradient(100deg,#ff174f 0%,#ff8eae 52%,#c2a0ff 100%);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  text-shadow:0 0 18px rgba(255,92,145,.16);
+}
+@media(max-width:700px) {
+  .studio-footer { justify-content:center; text-align:center; }
+  .studio-footer-main { justify-content:center; }
+  .studio-footer-credit { width:100%; }
+}
