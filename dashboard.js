@@ -919,6 +919,12 @@ function totals(){
   const unassigned=state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned);
   return {received,assigned,resolved,open,unassigned};
 }
+function hasResolutionTracking(){
+  return !state.importedSnapshot||state.importedSnapshot.tickets.resolution_tracking==="source_status_present";
+}
+function currentOwnerRecordCount(folder){
+  return Math.max(0,folder.received-(folder.unassigned||0));
+}
 function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
 function heading(eyebrow,title,copy,actions){
   return '<div class="page-heading"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1><p class="heading-copy">'+copy+'</p></div><div class="heading-actions">'+(actions||'')+'<span class="period-pill">'+PERIODS[state.period].label+'</span></div></div>';
@@ -1038,16 +1044,19 @@ function overviewRiskSummary(tickets){
 }
 function overviewInboxSnapshot(inboxes){
   if(!inboxes.length)return '<div class="empty-state">No inboxes match the selected scope.</div>';
-  const imported=Boolean(state.importedSnapshot);
+  const imported=Boolean(state.importedSnapshot),resolutionTracked=hasResolutionTracking();
   return '<div class="overview-inbox-grid">'+inboxes.map(folder=>{
     const allocationRate=folder.received?folder.assigned/folder.received*100:0;
-    const outstandingRate=folder.received?folder.open/folder.received*100:0;
+    const ownerRecords=currentOwnerRecordCount(folder);
+    const workloadValue=resolutionTracked?folder.open:ownerRecords;
+    const workloadRate=folder.received?workloadValue/folder.received*100:0;
+    const workloadLabel=resolutionTracked?"outstanding":"with current owner";
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
-      '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(imported&&state.importedSnapshot.tickets.resolution_tracking!=="source_status_present"?"Not tracked":fmt(folder.resolved))+'</b></span></div>'+
-      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
-      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
+      '<div class="overview-inbox-open"><strong>'+fmt(workloadValue)+'</strong><span>'+workloadLabel+'</span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(resolutionTracked?fmt(folder.resolved):"Not tracked")+'</b></span></div>'+
+      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' '+workloadLabel+' as a share of ticket records"><span style="width:'+Math.min(100,workloadRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
+      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+workloadRate.toFixed(1)+'% '+(resolutionTracked?"open":"have an owner")+'</span></div>'+
     '</article>';
   }).join("")+'</div>';
 }
@@ -1151,9 +1160,11 @@ function renderOverview(){
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
-  const resolutionRate=!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"
+  const resolutionRate=!imported||hasResolutionTracking()
     ?(t.received?t.resolved/t.received*100:null):null;
   const resolutionAverage=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes:null;
+  const workloadTracked=hasResolutionTracking();
+  const currentOwnerRecords=Math.max(0,t.received-t.unassigned);
   const resolutionTimedCount=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.timed_tickets||0:0;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
@@ -1173,12 +1184,12 @@ function renderOverview(){
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
       kpi(imported?"Resolved / closed":"Tickets resolved",resolutionRate===null?"Not tracked":fmt(t.resolved),imported?(resolutionRate===null?"The dispatcher does not yet record resolved / closed events":"Explicit resolved states in the snapshot"):"Recorded completed tickets in sample totals","✓"),
-      kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
+      kpi(imported&&!workloadTracked?"Records with current owner":"Outstanding workload",workloadTracked?fmt(t.open):fmt(currentOwnerRecords),imported?(workloadTracked?"Open records at snapshot time":"Current owner records only; resolution state is not tracked"):"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
       '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
-      '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>'+(imported?"WITHOUT CURRENT OWNER":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?(workloadTracked?"Open records with no current owner":"Records without a current owner; not a resolution measure"):"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
