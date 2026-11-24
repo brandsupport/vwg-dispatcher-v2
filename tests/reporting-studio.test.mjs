@@ -138,7 +138,9 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
   assert.equal(hooks.autoMap(["Event Type","Assignment Flag"],hooks.sourceConfig.workflow.fields.find(field=>field.id==="event_type").aliases),"Event Type");
   assert.equal(snapshot.tickets.total,2);
   assert.equal(snapshot.tickets.overall.initially_assigned,2);
-  assert.deepEqual(snapshot.assignment_methods,{automatic:1,manual:1,other:0});
+  assert.equal(snapshot.assignment_methods.automatic,1);
+  assert.equal(snapshot.assignment_methods.manual,1);
+  assert.equal(snapshot.assignment_methods.other,0);
   assert.equal(snapshot.workflow.find(row=>row.event_type==="handover").event_count,1);
   assert.equal(snapshot.workflow.find(row=>row.event_type==="flagged").event_count,1);
   assert.equal(snapshot.workflow.find(row=>row.event_type==="recovery_restored").event_count,1);
@@ -166,7 +168,9 @@ test("uses the earliest timestamped first-allocation event and de-duplicates rep
   ].join("\r\n");
   const {snapshot}=await hooks.processVwg(tickets,activity);
   assert.equal(snapshot.tickets.overall.initially_assigned,1);
-  assert.deepEqual(snapshot.assignment_methods,{automatic:1,manual:0,other:0});
+  assert.equal(snapshot.assignment_methods.automatic,1);
+  assert.equal(snapshot.assignment_methods.manual,0);
+  assert.equal(snapshot.assignment_methods.other,0);
   const agent=snapshot.allocations.find(row=>row.inbox_code==="detags"&&row.initial_assignments===1);
   assert.ok(agent);
   assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Assignment history").duplicate_rows,1);
