@@ -489,6 +489,8 @@ async function sanitise(){
       for(const row of files.assignments.records){
         const ref=selectedValue(row,"assignments","ticket_ref");const agent=selectedValue(row,"assignments","agent");const kind=selectedValue(row,"assignments","kind");
         const status=selectedValue(row,"assignments","status");
+        const allocatedRaw=selectedValue(row,"assignments","occurred_at");
+        const allocatedAt=allocatedRaw?parseSourceInstant(allocatedRaw,"Africa/Cairo"):null;
         const inboxRaw=selectedValue(row,"assignments","inbox");const inbox=inboxRaw?normaliseInbox(inboxRaw):"";
         if(!ref||!agent||isUnassigned(agent)||!kind){q.rows_skipped++;continue;}
         const ticketKey=norm(ref);const ticket=ticketMap.get(ticketKey);
@@ -496,6 +498,9 @@ async function sanitise(){
         if(inboxRaw&&!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         if(inbox&&inbox!==ticket.inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         if(!isInitialKind(kind)){q.rows_accepted++;continue;}
+        // The dispatcher also sets Assignment Flag=TRUE for existing/manual category registrations.
+        // Its authoritative automatic-first-allocation discriminator is Allocated At (Egypt).
+        if(!allocatedAt){q.rows_skipped++;if(allocatedRaw)q.ambiguous_time++;continue;}
         if(!isSuccessfulInitialStatus(status)){q.rows_skipped++;continue;}
         const resolvedInbox=inbox||ticket.inbox;
         if(!resolvedInbox){q.rows_skipped++;q.unknown_inbox++;continue;}
