@@ -1826,7 +1826,7 @@ function agentPerformanceReviewPanel(profiles){
     '</tr>';
   });
   return panel("Agent performance review","First assignments, current open work and event involvement. When the tracker provides an explicit resolver and timestamps, resolved counts and average elapsed solve time appear here. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual","Open workload","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
-    '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague's original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
+    '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague&#39;s original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
 }
 function teamEvidencePanel(){
   const items=[
