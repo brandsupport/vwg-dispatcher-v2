@@ -313,7 +313,7 @@ function initialAssignmentMethod(value){
 function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
-    received:["received","ticket received","created","queued"],
+    received:["received","ticket received","created","queued","backlog discovered"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
@@ -321,10 +321,10 @@ function normaliseWorkflowEvent(value){
     flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending","existing assignment needs review","new mail needs review","backlog needs review","ambiguous assignment","ambiguous categories review"],
     recovery_requested:["recovery requested","recovery request","recovery review opened"],
     recovery_held:["recovery held","held for recovery","recovery hold","recovery blocked","recovery requires review"],
-    recovery_restored:["recovery restored","restored","assignment restored","category restored","restoration marker removed","recovery state reconciled","assignment state reconciled"],
+    recovery_restored:["recovery restored","restored","recovered","assignment restored","category restored","restoration marker removed","recovery state reconciled","assignment state reconciled"],
     resolved:["resolved","closed","completed"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment pending verification","queued item not found","queued item not mail","pending item not found","pending change cancelled","multiple categories pending","multiple categories review","error"]
+    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment pending verification","auto assignment log failed","assigned baseline scan failed","queued item not found","queued item not mail","pending item not found","pending change cancelled","multiple categories pending","multiple categories review","queue save failed","queue blocked time zone","new mail processing failed","item handler failed","maintenance failed","manual scan failed","start failed","time zone conversion failed","error"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
