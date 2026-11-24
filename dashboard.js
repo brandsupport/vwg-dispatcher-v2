@@ -48,14 +48,32 @@ const WORKFLOW_EVENT_SUMMARY = [
   { id:"recovery", label:"Recovery", events:27, uniqueTickets:25, rate:"2.2%", color:"#76e7ce" },
   { id:"reassignment", label:"Reassignment", events:42, uniqueTickets:34, rate:"3.0%", color:"#f1846f" }
 ];
+function workflowSummaryRows(){
+  if(!state.importedSnapshot)return WORKFLOW_EVENT_SUMMARY;
+  const definitions=[
+    {id:"handover",label:"Handover",codes:["handover"],color:"#ff5c91"},
+    {id:"flag",label:"Flagged",codes:["flagged"],color:"#ffbd68"},
+    {id:"manual",label:"Manual assignment",codes:["manual_assignment"],color:"#c2a0ff"},
+    {id:"recovery",label:"Recovery",codes:["recovery_requested","recovery_held","recovery_restored"],color:"#76e7ce"},
+    {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"}
+  ];
+  return definitions.map(definition=>{
+    const matches=state.importedSnapshot.workflow.filter(row=>
+      definition.codes.includes(row.event_type)&&(state.folder==="all"||row.inbox_code===state.folder)
+    );
+    return {...definition,events:matches.reduce((sum,row)=>sum+row.event_count,0),
+      uniqueTickets:matches.reduce((sum,row)=>sum+row.distinct_tickets,0),rate:"Not available"};
+  });
+}
 function workflowEvent(id){
-  return WORKFLOW_EVENT_SUMMARY.find(event=>event.id===id)||{events:0,uniqueTickets:0};
+  return workflowSummaryRows().find(event=>event.id===id)||{events:0,uniqueTickets:0};
 }
 const PERIODS = {
   today:{label:"Today",factor:.055,days:1},
   week:{label:"Last 7 days",factor:.235,days:7},
   month:{label:"Last 30 days",factor:1,days:30},
-  quarter:{label:"Last 90 days",factor:2.72,days:90}
+  quarter:{label:"Last 90 days",factor:2.72,days:90},
+  snapshot:{label:"Snapshot",factor:1,days:null}
 };
 const TICKETS = [
   {ref:"DSP-10482",brand:"Audi",folder:"Detags",member:"Agent 02",subject:"Vehicle de-tag request — retail handover",age:"18m",status:"Assigned",received:"09:42",last:"Initial allocation"},
@@ -433,6 +451,7 @@ const ADMIN_INTEGRATIONS = [
 
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
+  importedSnapshot:null,
   selectedAgent:null, paused:false, pausedFolders:{}, modal:null,
   liveStatus:"all", liveOwner:"all", liveBrand:"all", liveSort:"oldest", liveSearch:"",
   ticketStatus:"all", ticketBrand:"all", ticketOwner:"all", ticketSort:"oldest", ticketSearch:"",
@@ -442,6 +461,170 @@ const state = {
   auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020",
   adminRole:"operations_manager", adminRequestSearch:"", adminRequestStatus:"all", selectedAdminRequest:"ACCESS-SAMPLE-004"
 };
+function validateAndSanitiseSnapshot(raw){
+  const fail=message=>{throw new Error(message);};
+  const isObject=value=>Boolean(value)&&typeof value==="object"&&!Array.isArray(value);
+  const count=(value,label)=>{
+    if(typeof value!=="number"||!Number.isSafeInteger(value)||value<0)fail("Invalid "+label+".");
+    return value;
+  };
+  const pct=(value,label)=>{
+    if(typeof value!=="number"||!Number.isFinite(value)||value<0||value>100)fail("Invalid "+label+".");
+    return value;
+  };
+  const inboxCodes=["agency","detags","transfers","unadopts"];
+  const brandCodes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
+  const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception"];
+  if(!isObject(raw)||raw.schema_version!=="dispatcher-reporting-snapshot-1"||raw.source_mode!=="offline_sanitised_aggregate"){
+    fail("This is not a supported sanitised Dispatcher reporting snapshot.");
+  }
+  if(typeof raw.generated_at_utc!=="string"||!raw.generated_at_utc.endsWith("Z")||!Number.isFinite(Date.parse(raw.generated_at_utc))){
+    fail("The snapshot generation timestamp is missing or invalid.");
+  }
+  if(!isObject(raw.tickets)||!isObject(raw.tickets.overall)||!Array.isArray(raw.tickets.by_inbox)||!Array.isArray(raw.tickets.by_brand)||!Array.isArray(raw.tickets.daily_volume)){
+    fail("The snapshot is missing its required ticket summary sections.");
+  }
+  const byInbox=raw.tickets.by_inbox.map(row=>{
+    if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("The snapshot contains an unsupported inbox code.");
+    return {
+      inbox_code:row.inbox_code,
+      ticket_records:count(row.ticket_records,"ticket record count"),
+      initially_assigned:count(row.initially_assigned,"first-assignment count"),
+      resolved:count(row.resolved,"resolved count"),
+      outstanding:count(row.outstanding,"outstanding count"),
+      unassigned:count(row.unassigned,"unassigned count")
+    };
+  });
+  if(byInbox.length!==4||new Set(byInbox.map(row=>row.inbox_code)).size!==4)fail("The snapshot must contain exactly one summary for each of the four inboxes.");
+  byInbox.sort((a,b)=>inboxCodes.indexOf(a.inbox_code)-inboxCodes.indexOf(b.inbox_code));
+  const overall=raw.tickets.overall;
+  const cleanOverall={
+    ticket_records:count(overall.ticket_records,"overall ticket count"),
+    initially_assigned:count(overall.initially_assigned,"overall first-assignment count"),
+    resolved:count(overall.resolved,"overall resolved count"),
+    outstanding:count(overall.outstanding,"overall outstanding count"),
+    unassigned:count(overall.unassigned,"overall unassigned count")
+  };
+  const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
+  for(const key of Object.keys(cleanOverall)){
+    if(sum(byInbox,key)!==cleanOverall[key])fail("Inbox totals do not reconcile with the overall "+key+" value.");
+  }
+  const total=count(raw.tickets.total,"snapshot ticket total");
+  if(total!==cleanOverall.ticket_records)fail("The snapshot ticket total does not reconcile.");
+  const byBrand=raw.tickets.by_brand.map(row=>{
+    if(!isObject(row)||!brandCodes.includes(row.brand_code))fail("The snapshot contains an unsupported brand code.");
+    return {brand_code:row.brand_code,count:count(row.count,"brand count")};
+  });
+  if(new Set(byBrand.map(row=>row.brand_code)).size!==byBrand.length||sum(byBrand,"count")!==total)fail("Brand totals are duplicated or do not reconcile with the ticket total.");
+  const dailyVolume=raw.tickets.daily_volume.map(row=>{
+    if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||typeof row.date_utc!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(row.date_utc)||!Number.isFinite(Date.parse(row.date_utc+"T00:00:00Z"))){
+      fail("The snapshot contains an invalid daily-volume row.");
+    }
+    return {date_utc:row.date_utc,inbox_code:row.inbox_code,ticket_records:count(row.ticket_records,"daily ticket count")};
+  });
+  if(!isObject(raw.reporting_period)&&raw.reporting_period!==null)fail("The reporting-period metadata is invalid.");
+  let reportingPeriod=null;
+  if(raw.reporting_period){
+    const first=raw.reporting_period.first_received_date_utc,last=raw.reporting_period.last_received_date_utc;
+    if(typeof first!=="string"||typeof last!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(first)||!/^\d{4}-\d{2}-\d{2}$/.test(last)||first>last)fail("The reporting-period dates are invalid.");
+    reportingPeriod={first_received_date_utc:first,last_received_date_utc:last};
+  }
+  if(!Array.isArray(raw.allocations)||!Array.isArray(raw.workflow)||!isObject(raw.data_quality)||!Array.isArray(raw.data_quality.sources)){
+    fail("The snapshot is missing allocation, workflow or data-quality sections.");
+  }
+  const allocations=raw.allocations.map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||""))||!inboxCodes.includes(row.inbox_code))fail("An allocation row contains an invalid pseudonymous agent or inbox reference.");
+    return {
+      agent_ref:row.agent_ref,inbox_code:row.inbox_code,
+      initial_assignments:count(row.initial_assignments,"agent initial-assignment count"),
+      allocation_share_pct:pct(row.allocation_share_pct,"allocation share"),
+      current_open_workload:count(row.current_open_workload,"agent open-workload count")
+    };
+  });
+  const allocationKeys=new Set();
+  for(const row of allocations){
+    const key=row.agent_ref+"|"+row.inbox_code;
+    if(allocationKeys.has(key))fail("Duplicate agent and inbox allocation rows were found.");
+    allocationKeys.add(key);
+  }
+  for(const inbox of byInbox){
+    const rows=allocations.filter(row=>row.inbox_code===inbox.inbox_code);
+    if(sum(rows,"initial_assignments")!==inbox.initially_assigned)fail("Agent allocation totals do not reconcile for "+inbox.inbox_code+".");
+    if(sum(rows,"current_open_workload")>inbox.outstanding)fail("Agent open-workload totals exceed outstanding work for "+inbox.inbox_code+".");
+    for(const row of rows){
+      const expected=inbox.initially_assigned?row.initial_assignments/inbox.initially_assigned*100:0;
+      if(Math.abs(row.allocation_share_pct-expected)>0.05)fail("An agent allocation share does not reconcile for "+inbox.inbox_code+".");
+    }
+  }
+  const workflow=raw.workflow.map(row=>{
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code))fail("The workflow contains an unsupported event or inbox code.");
+    const eventCount=count(row.event_count,"workflow event count");
+    const distinctTickets=count(row.distinct_tickets,"workflow distinct-ticket count");
+    if(distinctTickets>eventCount)fail("Workflow distinct-ticket counts cannot exceed event counts.");
+    return {event_type:row.event_type,inbox_code:row.inbox_code,event_count:eventCount,distinct_tickets:distinctTickets};
+  });
+  const sourceNames=["Ticket snapshot","Assignment history","Workflow history"];
+  const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
+  const sources=raw.data_quality.sources.map(row=>{
+    if(!isObject(row)||!sourceNames.includes(row.source))fail("The data-quality section contains an unsupported source label.");
+    const clean={source:row.source};
+    for(const key of qualityCounters)clean[key]=count(row[key],key+" quality counter");
+    if(clean.rows_accepted+clean.rows_skipped>clean.rows_read)fail("Data-quality row counts do not reconcile.");
+    return clean;
+  });
+  if(!sources.some(row=>row.source==="Ticket snapshot"))fail("The data-quality section does not identify the ticket snapshot source.");
+  const sourceSet=new Set(sources.map(row=>row.source));
+  if(sourceSet.size!==sources.length)fail("Duplicate data-quality source rows were found.");
+  return {
+    schema_version:"dispatcher-reporting-snapshot-1",
+    generated_at_utc:raw.generated_at_utc,
+    source_mode:"offline_sanitised_aggregate",
+    reporting_period:reportingPeriod,
+    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
+    allocations,workflow,
+    data_quality:{
+      sources,
+      ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
+    }
+  };
+}
+function importedSourceAvailable(source){
+  return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
+}
+async function loadLocalSnapshot(file){
+  if(!file)return;
+  if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
+  const parsed=JSON.parse(await file.text());
+  const clean=validateAndSanitiseSnapshot(parsed);
+  state.importedSnapshot=clean;
+  state.period="snapshot";
+  const periodSelect=document.getElementById("periodSelect");
+  periodSelect.value="snapshot";
+  periodSelect.disabled=true;
+  periodSelect.title="This is a point-in-time snapshot. Period trends require timestamped source history.";
+  document.getElementById("datasetBadge").innerHTML="<span></span> LOCAL SNAPSHOT";
+  document.getElementById("resetSnapshotButton").hidden=false;
+  document.getElementById("importSnapshotButton").textContent="Replace snapshot";
+  state.selectedAgent=null;
+  render();
+  const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
+  showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
+}
+function clearLocalSnapshot(){
+  state.importedSnapshot=null;
+  state.period="month";
+  const periodSelect=document.getElementById("periodSelect");
+  periodSelect.value="month";
+  periodSelect.disabled=false;
+  periodSelect.title="";
+  document.getElementById("datasetBadge").innerHTML="<span></span> DEMO DATA";
+  document.getElementById("resetSnapshotButton").hidden=true;
+  document.getElementById("importSnapshotButton").textContent="Import snapshot";
+  document.getElementById("snapshotFileInput").value="";
+  state.selectedAgent=null;
+  render();
+  showToast("Returned to the synthetic demo dataset.");
+}
 const pageContent = document.getElementById("pageContent");
 const toast = document.getElementById("toast");
 const modalRoot = document.getElementById("modalRoot");
@@ -453,7 +636,7 @@ const VIEW_TITLES = {
 };
 
 function fmt(value){return Math.round(value).toLocaleString("en-GB");}
-function scaled(value){return Math.max(0,Math.round(value*PERIODS[state.period].factor));}
+function scaled(value){return Math.max(0,Math.round(value*(state.importedSnapshot?1:PERIODS[state.period].factor)));}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
 function scopeName(){const folder=FOLDERS.find(f=>f.id===state.folder);return folder?folder.name:"All inboxes";}
@@ -466,15 +649,41 @@ function distribute(total,weights){
   return values;
 }
 function folderAssignedRows(){
-  return FOLDERS.map((folder,fi)=>({...folder,assigned:scaled(folder.assigned),received:scaled(folder.received),resolved:scaled(folder.resolved),open:scaled(folder.open)}));
+  if(state.importedSnapshot){
+    return FOLDERS.map(folder=>{
+      const row=state.importedSnapshot.tickets.by_inbox.find(item=>item.inbox_code===folder.id)||{};
+      return {...folder,received:row.ticket_records||0,assigned:row.initially_assigned||0,resolved:row.resolved||0,open:row.outstanding||0,unassigned:row.unassigned||0};
+    });
+  }
+  return FOLDERS.map(folder=>({...folder,assigned:scaled(folder.assigned),received:scaled(folder.received),resolved:scaled(folder.resolved),open:scaled(folder.open)}));
 }
 function allocationMatrix(){
+  if(state.importedSnapshot){
+    const agents=new Map();
+    state.importedSnapshot.allocations.forEach(item=>{
+      if(!agents.has(item.agent_ref)){
+        agents.set(item.agent_ref,{id:"snapshot-"+item.agent_ref,name:item.agent_ref,shift:"Shift data not included",availability:"Not supplied",start:"—",end:"—",eligibleFolders:[],assigned:0,open:0,cells:FOLDERS.map(()=>0),openByFolder:FOLDERS.map(()=>0),total:0});
+      }
+      const agent=agents.get(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
+      if(index>=0){agent.cells[index]=item.initial_assignments;agent.openByFolder[index]=item.current_open_workload;}
+      agent.assigned+=item.initial_assignments;agent.open+=item.current_open_workload;agent.total+=item.initial_assignments;
+    });
+    return [...agents.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  }
   return AGENTS.map((agent,ai)=>{
     const cells=FOLDERS.map((folder,fi)=>distribute(scaled(folder.assigned),MATRIX_WEIGHTS.map(row=>row[fi]))[ai]);
     return {...agent,cells,total:cells.reduce((a,b)=>a+b,0)};
   });
 }
 function brandRows(){
+  if(state.importedSnapshot){
+    const counts=Object.fromEntries(state.importedSnapshot.tickets.by_brand.map(row=>[row.brand_code,row.count]));
+    return BRANDS.map(brand=>{
+      const code=brand.id==="vw"?"volkswagen":brand.id;
+      const value=brand.id==="other"?(counts.other||0)+(counts.unclassified||0):(counts[code]||0);
+      return {...brand,value};
+    });
+  }
   const folders=scopeFolders();
   const total=folders.reduce((sum,f)=>sum+scaled(f.received),0);
   const weights=BRANDS.map((brand,bi)=>{
@@ -490,7 +699,8 @@ function totals(){
   const assigned=folders.reduce((a,f)=>a+f.assigned,0);
   const resolved=folders.reduce((a,f)=>a+f.resolved,0);
   const open=folders.reduce((a,f)=>a+f.open,0);
-  return {received,assigned,resolved,open,unassigned:Math.max(0,received-assigned)};
+  const unassigned=state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned);
+  return {received,assigned,resolved,open,unassigned};
 }
 function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
 function heading(eyebrow,title,copy,actions){
