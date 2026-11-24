@@ -1455,8 +1455,9 @@ function ticketTelemetryCard(title,reason){
 function renderTickets(){
   if(state.importedSnapshot){
     const t=totals(),assignmentAvailable=importedSourceAvailable("Assignment history");
+    const resolutionAvailable=state.importedSnapshot.tickets.resolution_data_available!==false;
     const inboxRows=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder).map(folder=>
-      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+fmt(folder.resolved)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
+      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+(resolutionAvailable?fmt(folder.resolved):"Not recorded")+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
     );
     const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30).map(row=>
       '<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.ticket_records)+'</td></tr>'
@@ -1466,14 +1467,14 @@ function renderTickets(){
       kpiGrid([
         kpi("Ticket records",fmt(t.received),"Unique current-state records","▤"),
         kpi("Initially assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Validated first-assignment events":"Assignment history was not supplied","↗"),
-        kpi("Resolved / closed",fmt(t.resolved),"Current state at snapshot time","✓"),
+        kpi("Resolved / closed",resolutionAvailable?fmt(t.resolved):"Not recorded",resolutionAvailable?"Current state at snapshot time":"No resolved state or event exists in the source","✓"),
         kpi("Outstanding",fmt(t.open),"Current open-state records","◷")
       ])+
       '<div class="grid-two ticket-analytics-primary">'+
         panel("Ticket state by inbox","Current-state records from the imported aggregate",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned"],inboxRows),'<span class="subtle-tag">SNAPSHOT</span>')+
         panel("Current ticket state","Portfolio totals · current snapshot",dataTable(["Measure","Records"],[
           '<tr><td>Ticket records</td><td class="total-cell">'+fmt(t.received)+'</td></tr>',
-          '<tr><td>Resolved / closed</td><td>'+fmt(t.resolved)+'</td></tr>',
+          '<tr><td>Resolved / closed</td><td>'+(resolutionAvailable?fmt(t.resolved):"Not recorded")+'</td></tr>',
           '<tr><td>Outstanding</td><td>'+fmt(t.open)+'</td></tr>',
           '<tr><td>Currently unassigned</td><td>'+fmt(t.unassigned)+'</td></tr>'
         ]))+
@@ -1639,16 +1640,16 @@ function renderFolders(){
   const folderCount=scope.length,assignmentsAvailable=!state.importedSnapshot||importedSourceAvailable("Assignment history");
   const assigned=scope.reduce((sum,folder)=>sum+folder.assigned,0);
   const open=scope.reduce((sum,folder)=>sum+folder.open,0);
-  pageContent.innerHTML=heading("WORKLOAD DISTRIBUTION","Every member. Every folder.",state.importedSnapshot?"Review first allocations and current open workload from pseudonymised snapshot references. Imported shift details appear where a matching Team & Shifts roster was supplied.":"See each member’s share of initial ticket allocations in each inbox. Current open workload is measured separately.",'<button class="btn btn-secondary" data-action="export-folders">↓ Export matrix</button>')+
+  pageContent.innerHTML=heading("WORKLOAD DISTRIBUTION","Every member. Every folder.",state.importedSnapshot?"Review colleague first-allocation shares and current open workload. Agent references remain pseudonymised, while approved names and shift details come from Team & Shifts.":"See each member’s share of initial ticket allocations in each inbox. Current open workload is measured separately.",'<button class="btn btn-secondary" data-action="export-folders">↓ Export matrix</button>')+
     (state.importedSnapshot?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Agent IDs are pseudonymised</span><span>'+(state.importedSnapshot.team_roster?.length?"Rota / shift data included":"Rota / shift data not included")+'</span></div>':'')+
     kpiGrid([
-      kpi(state.importedSnapshot?"Pseudonymised agents":"Team members",String(rows.length),state.importedSnapshot?"References present in allocation or workload data":"Illustrative team roster","♧"),
+      kpi(state.importedSnapshot?"Colleague profiles":"Team members",String(rows.length),state.importedSnapshot?"Names from roster; agent references remain pseudonymised":"Illustrative team roster","♧"),
       kpi("Initial allocations",assignmentsAvailable?fmt(assigned):"Not supplied","Distinct tickets first assigned","↗"),
       kpi("Folders in scope",String(folderCount),"Four monitored workstreams","▤"),
       kpi("Open workload",fmt(open),state.importedSnapshot?"Current-state snapshot · selected inboxes":"Current-state sample snapshot","◷")
     ])+
     '<div class="prototype-warning"><strong>Share definition.</strong> Each percentage is the member’s distinct tickets first assigned in that folder divided by all first-assigned tickets in that folder. Handovers, recoveries and reassignments do not inflate original allocation share. '+(state.importedSnapshot&&!assignmentsAvailable?"Assignment history was not supplied; the matrix does not infer first allocation from current ownership.":"")+'</div>'+
-    panel("Member allocation matrix","Counts and percentage share are shown for every visible folder",'<div class="table-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search pseudonymous agents…" value="'+esc(state.memberSearch)+'"></div>'+shareMatrix(rows,true),'<span class="subtle-tag">'+(state.importedSnapshot?rows.length+" COLLEAGUE PROFILES":"14 SAMPLE MEMBERS")+'</span>')+
+    panel("Member allocation matrix","Counts and percentage share are shown for every visible folder",'<div class="table-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search colleagues or agent references…" value="'+esc(state.memberSearch)+'"></div>'+shareMatrix(rows,true),'<span class="subtle-tag">'+(state.importedSnapshot?rows.length+" COLLEAGUE PROFILES":"14 SAMPLE MEMBERS")+'</span>')+
     '<div class="grid-two">'+
       panel("Folder allocation share","How the selected team shares initial allocations",assignmentsAvailable?barRows(scope.map(folder=>({label:folder.name,value:folder.assigned,color:folder.color}))):'<div class="empty-state">Initial-assignment history was not supplied.</div>',"")+
       panel("Current open workload","Snapshot of open tickets by folder",barRows(scope.map(folder=>({label:folder.name,value:folder.open,color:folder.color}))),"")+
@@ -1724,7 +1725,7 @@ function renderTeam(){
       ? '<div class="team-demo-strip local-snapshot-strip"><span><i></i> SANITISED SNAPSHOT · READ ONLY</span><span>'+allProfiles.length+' colleague profiles · refs pseudonymised</span><span>Shift / rota data <b>'+(state.importedSnapshot.team_roster?.length?"Included":"Not supplied")+'</b></span></div>'
       : '<div class="team-demo-strip"><span><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All 14 profiles are anonymised sample records</span><span>Outlook / Excel <b>Not connected</b></span></div>')+
     kpiGrid([
-      kpi(state.importedSnapshot?"Agent references in view":"Agent profiles in view",String(profiles.length),state.importedSnapshot?"Pseudonymised snapshot references · global search applies":"Anonymised sample profiles · global search applies","♧"),
+      kpi(state.importedSnapshot?"Colleague profiles in view":"Agent profiles in view",String(profiles.length),state.importedSnapshot?"Approved roster names · global search applies":"Anonymised sample profiles · global search applies","♧"),
       kpi("First assignments",assignmentsAvailable?fmt(firstAssigned):"Not supplied",state.importedSnapshot?"Current snapshot totals · not period-filtered":"Distinct tickets first assigned · selected period and inbox","↗"),
       kpi("Current open workload",fmt(openWorkload),state.importedSnapshot?"Owner snapshot · independent of inbox filter":"All-profile sample snapshot · not period or inbox scoped","◷"),
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
