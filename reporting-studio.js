@@ -26,31 +26,31 @@ const SOURCE_CONFIG={
   tickets:{
     title:"Ticket / current-state export",
     fields:[
-      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["ticket id","ticket reference","ticket ref","case id","item id","reference","ticketid"]},
-      {id:"inbox",label:"Inbox / folder",required:true,aliases:["inbox","folder","mailbox folder","queue","folder name"]},
+      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","item id","reference","ticketid"]},
+      {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","inbox","folder","mailbox folder","queue","folder name"]},
       {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
       {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
-      {id:"received_at",label:"Received timestamp",aliases:["received at","received date","received","date received","created at","created date","received timestamp"]},
+      {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
       {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]}
     ]
   },
   assignments:{
     title:"Assignment history export",
     fields:[
-      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"agent",label:"New owner / assigned agent",required:true,aliases:["new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
-      {id:"kind",label:"Assignment type",required:true,aliases:["assignment kind","assignment type","event type","type","action","allocation type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Assignment timestamp",aliases:["occurred at","assigned at","timestamp","event time","created at","date"]}
+      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
+      {id:"agent",label:"New owner / assigned agent",required:true,aliases:["original assignee","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
+      {id:"kind",label:"Assignment type",required:true,aliases:["assignment flag","assignment kind","assignment type","event type","type","action","allocation type"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
+      {id:"occurred_at",label:"Assignment timestamp",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
   },
   workflow:{
     title:"Workflow / activity export",
     fields:[
-      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"event_type",label:"Workflow event type",required:true,aliases:["event type","workflow event","event","activity","action","type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["inbox","folder","queue","folder name"]},
-      {id:"occurred_at",label:"Event timestamp",aliases:["occurred at","timestamp","event time","created at","date"]}
+      {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
+      {id:"event_type",label:"Workflow event type",required:true,aliases:["assignment flag","workflow event","event type","event","activity","action","type"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
+      {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
   }
 };
@@ -174,7 +174,7 @@ function isResolved(value){
 }
 function isInitialKind(value){
   const key=norm(value);
-  return key==="initial"||key==="first"||key==="first assignment"||key==="initial assignment"||key==="initial allocation"||key==="first allocation";
+  return key==="initial"||key==="first"||key==="first assignment"||key==="initial assignment"||key==="initial allocation"||key==="first allocation"||key==="auto assigned";
 }
 function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
@@ -182,15 +182,16 @@ function normaliseWorkflowEvent(value){
     received:["received","ticket received","created"],
     flagged:["flagged","flag","flag raised","flagged for review"],
     handover:["handover","handed over","handed off","shift handover"],
-    assigned:["assigned","initial assignment","initial allocation","first assignment","first allocation"],
-    manual_assignment:["manual assignment","manually assigned","manual allocation"],
+    assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
+    manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
+    flagged:["flagged","flag","flag raised","flagged for review","category removal detected"],
     recovery_requested:["recovery requested","recovery request","recovery review opened"],
     recovery_held:["recovery held","held for recovery","recovery hold"],
-    recovery_restored:["recovery restored","restored","assignment restored"],
+    recovery_restored:["recovery restored","restored","assignment restored","category restored"],
     resolved:["resolved","closed","completed"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","error"]
+    exception:["exception","write failed","assignment failed","error","pending item not found","multiple categories pending"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
