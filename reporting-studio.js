@@ -455,7 +455,7 @@ async function sanitise(){
     if(files.roster){
       for(const row of files.roster.records){
         const identity=selectedValue(row,"roster","identity");
-        const displayName=selectedValue(row,"roster","display_name")||identity;
+        const displayName=selectedValue(row,"roster","display_name");
         const shiftGroup=normaliseShiftGroup(selectedValue(row,"roster","shift_group"));
         const shiftStart=selectedValue(row,"roster","shift_start");
         const shiftEnd=selectedValue(row,"roster","shift_end");
@@ -491,7 +491,7 @@ async function sanitise(){
     };
 
     const ticketMap=new Map(),dateSet=new Set(),ticketRows=[];
-    let anyBrandValue=false,anyLifecycleValue=false;
+    let anyBrandValue=false,brandValuesComplete=true,anyLifecycleValue=false,lifecycleValuesComplete=true;
     const lifecycleMapped=Boolean(mappings.tickets.lifecycle_status||mappings.tickets.resolved_at);
     for(const row of files.tickets.records){
       const ref=selectedValue(row,"tickets","ticket_ref");
@@ -507,7 +507,8 @@ async function sanitise(){
 
       const brandRaw=selectedValue(row,"tickets","brand");
       const brand=normaliseBrand(brandRaw);
-      if(brand!=="unclassified")anyBrandValue=true;
+      if(norm(brandRaw))anyBrandValue=true;
+      else brandValuesComplete=false;
       if(brand==="unclassified"&&mappings.tickets.brand)quality.tickets.unknown_brand++;
 
       const receivedRaw=selectedValue(row,"tickets","received_at");
@@ -521,6 +522,7 @@ async function sanitise(){
       const resolvedDate=resolvedAtRaw?parseSourceCalendarDate(resolvedAtRaw,"Europe/London"):null;
       const lifecycleValue=norm(lifecycleRaw);
       if(lifecycleRaw||resolvedAtRaw)anyLifecycleValue=true;
+      else lifecycleValuesComplete=false;
       const resolved=lifecycleMapped&&(isResolved(lifecycleRaw)||Boolean(resolvedAtRaw));
       const owner=selectedValue(row,"tickets","current_owner");
       const ownerInfo=await agentInfo(owner);
@@ -546,8 +548,8 @@ async function sanitise(){
       });
       quality.tickets.rows_accepted++;
     }
-    const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue;
-    const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue;
+    const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue&&lifecycleValuesComplete;
+    const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue&&brandValuesComplete;
     if(!brandAvailable&&mappings.tickets.brand)quality.tickets.unknown_brand+=ticketRows.length;
 
     // Event Type is the actual event name in the tracker. Assignment Flag is a
@@ -757,7 +759,7 @@ async function sanitise(){
         ticket_rows:ticketRowsWithInitial
       },
       allocations,assignment_methods:methods,
-      team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_name.localeCompare(b.agent_name)),
+      team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||String(a.agent_name||"").localeCompare(String(b.agent_name||""))),
       workflow,activity_summary:activitySummary,activity_rows:activityRows,
       data_quality:{
         sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),
