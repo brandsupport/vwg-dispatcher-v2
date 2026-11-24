@@ -695,14 +695,12 @@ function renderOverview(){
   const brands=brandRows();
   const rows=allocationMatrix();
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
-  const tickets=liveBaseTickets();
-  const risk=overviewRiskSummary(tickets);
   const trend=overviewTrendData(t.received,t.resolved);
   const allocationRate=t.received?t.assigned/t.received*100:0;
   const resolutionRate=t.received?t.resolved/t.received*100:0;
-    pageContent.innerHTML=
-    heading("MANAGEMENT COMMAND CENTRE","One operation. Four inboxes. Full visibility.","A decision-focused view of ticket flow, inbox pressure, team workload and platform readiness.",'<button class="btn btn-secondary" data-go="live">Open live operations ↗</button>')+
-    '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All figures are synthetic and illustrative</span><span>Outlook <b>Not connected</b></span><span>Excel <b>Not connected</b></span></div>'+
+  pageContent.innerHTML=
+    heading("MANAGEMENT PERFORMANCE","Performance overview","A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
+    '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Portfolio reporting view</span><span>All figures are synthetic and illustrative</span></div>'+
     kpiGrid([
       kpi("Tickets received",fmt(t.received),"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",fmt(t.assigned),"Distinct tickets with a first allocation","↗"),
@@ -717,21 +715,21 @@ function renderOverview(){
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
       panel("Ticket flow pattern","12 illustrative intervals · distributed from the selected totals",'<div class="dual-bars">'+chartPair(trend.received,trend.resolved,trend.labels)+'</div><div class="overview-chart-note">The intervals are a generated distribution of the sample totals, not timestamped daily source records.</div>',horizontalLegend([{label:"Received",color:"#ff174f"},{label:"Resolved",color:"#ff85aa"}]))+
-      panel("Risk radar","A quick view of unresolved sample records",overviewRiskPanel(risk,tickets),'<button class="panel-action" data-go="live">Inspect working queue ↗</button>')+
+      panel("Initial allocation distribution","First assignment only · handovers and recoveries remain separate",overviewAllocationSummary(rows),'<button class="panel-action" data-go="folders">Open folder share matrix ↗</button>')+
     '</div>'+
-    '<div class="section-heading overview-section-heading"><div><h2>Inbox pressure</h2><p>Received, first-assigned, resolved and outstanding sample totals. Select an inbox using the global filter above.</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
+    '<div class="section-heading overview-section-heading"><div><h2>Inbox performance</h2><p>Compare received, first-assigned, resolved and outstanding sample totals across the selected inbox scope.</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
     overviewInboxSnapshot(inboxes)+
     '<div class="grid-two overview-secondary-grid">'+
-      panel("Team coverage & workload","Anonymised roster snapshot · illustrative availability",overviewTeamPanel(),'<button class="panel-action" data-go="team">Team performance ↗</button>')+
       panel("Brand demand","Unique ticket mix by identified brand, including unclassified",brandBarList(brands),'<button class="panel-action" data-go="brands">Explore brand insights ↗</button>')+
+      panel("How to read this overview","Aggregate management measures — not a ticket workbench",'<div class="overview-guide-list">'+
+        '<div><strong>Initial allocation</strong><span>Counts the first allocation for each ticket, not every subsequent owner.</span></div>'+
+        '<div><strong>Resolution ratio</strong><span>Resolved ÷ received in the selected totals; it is not a same-cohort closure rate.</span></div>'+
+        '<div><strong>Outstanding workload</strong><span>A current-state sample snapshot, separate from historical allocation volume.</span></div>'+
+      '</div>','<span class="subtle-tag">MEASURE GUIDE</span>')+
     '</div>'+
-    '<div class="grid-two overview-secondary-grid">'+
-      panel("Initial allocation distribution","First assignment only · separate from handovers and recoveries",overviewAllocationSummary(rows),'<button class="panel-action" data-go="folders">Open folder share matrix ↗</button>')+
-      panel("Source & platform readiness","What this preview is — and is not — connected to",overviewIntegrationPanel(),'<button class="panel-action" data-go="reliability">Reliability centre ↗</button>')+
-    '</div>'+
-    '<div class="overview-final-note"><strong>Management interpretation:</strong> volume and allocation ratios are synthetic sample aggregates. Reopened tickets, active handling time, approved SLA performance, live coverage and production system health require validated event data before they can be reported.</div>';
+    '<div class="overview-next-step"><div><span>NEED TO INSPECT OR WORK A TICKET?</span><strong>Live Operations is the ticket-level workspace for queue search, status filters and exception review.</strong></div><button type="button" class="btn btn-primary" data-go="live">Open Live Operations ↗</button></div>'+
+    '<div class="overview-final-note"><strong>Management interpretation:</strong> all figures are synthetic portfolio aggregates. Reopened tickets, active handling time, approved SLA performance and production health require validated event data before they can be reported.</div>';
 }
-
 function healthRow(label,value,type,note){
   return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
 }
@@ -863,7 +861,7 @@ function renderLive(){
   const available=AGENTS.filter(a=>a.availability==="Available").length;
   const owners=[...new Set(TICKETS.map(t=>t.member).filter(name=>name!=="Unassigned"))].sort();
   const brands=[...new Set(TICKETS.map(t=>t.brand))].sort();
-  pageContent.innerHTML=heading("LIVE OPERATIONS","Operations control room","A focused view of inbox demand, the working queue, SLA exposure and current team coverage.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
+  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is the working view — not the portfolio performance summary.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
     '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> DEMONSTRATION DATA</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Preview only</span><span><b>Last sample refresh</b> Static dataset</span></div>'+
     kpiGrid([
       kpi("Open tickets",fmt(open.length),"In the current inbox scope","◷"),
