@@ -112,6 +112,18 @@ jobs:
               throw new Error(name + ' is missing the cloned Knowledge Base mark or warm Dispatcher accent treatment.');
             }
           }
+          if (!html.includes('class="sidebar-studio-link"') || !html.includes('href="./reporting-studio.html"')) {
+            throw new Error('The dashboard must provide a persistent link to the Reporting Studio.');
+          }
+          if (!studioHtml.includes('class="workspace-nav-button"') || !studioHtml.includes('href="./"')) {
+            throw new Error('The Reporting Studio must provide a clear return link to the dashboard.');
+          }
+          for (const token of ['--studio-accent:#ff174f','--studio-accent-soft:#ff5c91','--studio-plum:#c2a0ff','CHERRY GLASS — Reporting Studio']) {
+            if (!studioCss.includes(token)) throw new Error('Reporting Studio Cherry Glass design token missing: ' + token);
+          }
+          for (const selector of ['.intro {','.step-card {','.button-primary {','.results-section {','.guardrails {','.workspace-nav-button']) {
+            if (!studioCss.includes(selector)) throw new Error('Reporting Studio Cherry Glass styling missing: ' + selector);
+          }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
             if (!sheet.includes('font-size: 17px !important')) throw new Error(name + ' is missing the larger base typography override.');
           }
@@ -157,11 +169,20 @@ jobs:
           const overviewStart = js.indexOf('function renderOverview(){');
           const overviewEnd = js.indexOf('\nfunction healthRow(', overviewStart);
           const overview = overviewStart >= 0 && overviewEnd > overviewStart ? js.slice(overviewStart, overviewEnd) : '';
-          for (const helper of ['overviewTrendData','overviewRiskSummary','overviewInboxSnapshot','overviewTeamPanel','overviewAllocationSummary','overviewIntegrationPanel']) {
+          for (const helper of ['overviewTrendData','overviewInboxSnapshot','overviewAllocationSummary']) {
             if (!js.includes('function ' + helper + '(')) throw new Error('Missing management overview component: ' + helper);
           }
-          for (const text of ['MANAGEMENT COMMAND CENTRE','DEMONSTRATION DATA · READ ONLY','REOPENED TICKETS','Not connected','Initial allocation distribution','Source & platform readiness']) {
+          for (const text of ['MANAGEMENT PERFORMANCE','Performance overview','DEMONSTRATION DATA · READ ONLY','REOPENED TICKETS','Initial allocation distribution','Inbox performance','Brand demand','How to read this overview','NEED TO INSPECT OR WORK A TICKET?']) {
             if (!overview.includes(text)) throw new Error('Management overview disclosure or section missing: ' + text);
+          }
+          if (overview.includes('overviewRiskPanel(') || overview.includes('overviewTeamPanel()') || overview.includes('overviewIntegrationPanel()') || overview.includes('liveQueueRows()')) {
+            throw new Error('Overview must stay at portfolio level and must not duplicate the ticket queue or live status panels.');
+          }
+          const liveStart = js.indexOf('function renderLive(){');
+          const liveEnd = js.indexOf('\\nfunction ticketQueueBase(', liveStart);
+          const liveView = liveStart >= 0 && liveEnd > liveStart ? js.slice(liveStart, liveEnd) : '';
+          for (const text of ['Queue-first control room','Working queue','Needs attention','Team coverage','Recent operational events']) {
+            if (!liveView.includes(text)) throw new Error('Live Operations is missing its ticket-workbench distinction: ' + text);
           }
           const readinessStart = js.indexOf('function overviewIntegrationPanel(');
           const readinessEnd = js.indexOf('\nfunction renderOverview(', readinessStart);
@@ -170,7 +191,7 @@ jobs:
           for (const stale of ['+8.4%','+5.2%','+11.6%','42 aged over 24h','Last heartbeat 10:42:18','Dispatcher engine","Running']) {
             if (overview.includes(stale)) throw new Error('Stale or unsupported Overview claim remains: ' + stale);
           }
-          for (const text of ['.overview-demo-strip','.overview-metric-strip','.overview-inbox-grid','.overview-risk-list','.overview-team-list','.overview-final-note']) {
+          for (const text of ['.overview-demo-strip','.overview-metric-strip','.overview-inbox-grid','.overview-guide-list','.overview-next-step','.overview-final-note','.sidebar-studio-link']) {
             if (!css.includes(text)) throw new Error('Management overview styling missing: ' + text);
           }
           const trendStart = js.indexOf('function overviewTrendData(');
