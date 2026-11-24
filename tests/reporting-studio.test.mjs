@@ -37,7 +37,7 @@ function loadStudio(){
         files.tickets={...ticketData,rowCount:ticketData.records.length};
         files.assignments={...assignmentData,rowCount:assignmentData.records.length};
         files.workflow={...workflowData,rowCount:workflowData.records.length};
-        mappings.tickets={ticket_ref:"ticket_ref",inbox:"inbox",status:"status",brand:"brand",received_at:"received_at",current_owner:"current_owner"};
+        mappings.tickets={ticket_ref:"ticket_ref",inbox:"inbox",status:"status",brand:"brand",received_at:"received_at",current_owner:"current_owner",resolution_status:"resolution_status",resolved_at:"resolved_at",resolved_by:"resolved_by"};
         mappings.assignments={ticket_ref:"ticket_ref",agent:"agent",kind:"assignment_kind",inbox:"inbox",occurred_at:"occurred_at"};
         mappings.workflow={ticket_ref:"ticket_ref",event_type:"event_type",inbox:"inbox",occurred_at:"occurred_at"};
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
