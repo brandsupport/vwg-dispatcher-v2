@@ -103,7 +103,8 @@
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
       <div class="download-bar">
         <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
-        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
+        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button><button id="downloadPrivateLookup" class="button button-muted" type="button">Download private agent-name lookup</button></div>
+        <p class="table-note private-lookup-note"><strong>Keep this private file separate.</strong> It contains colleague display names and pseudonymous IDs. Do not upload it to GitHub, share it with the JSON snapshot, or send it outside approved recipients. Import it separately into the dashboard on your approved device to show colleague names locally.</p>
       </div>
       <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>
     </section>
