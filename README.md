@@ -52,7 +52,7 @@ These are deliberately different workspaces:
 - **Overview** is the management/performance view. It summarises selected-period ticket demand, first allocations, completions, inbox pressure, brand mix and allocation distribution. It avoids the individual ticket queue.
 - **Live Operations** is the ticket workbench. It is where an operator searches and filters individual sample tickets, checks unassigned or at-risk work, reviews the attention list, and inspects illustrative coverage and recent sample events.
 
-The public dashboard is still a synthetic-data prototype. The Live Operations page is not connected to Outlook or Excel and cannot assign, move, recover or update real tickets. The overview ratios and intervals are generated from sample totals and must not be interpreted as validated live performance.
+Without an imported snapshot, the public dashboard uses synthetic sample data. When a sanitised snapshot is explicitly imported, the aggregate analytics views use only the imported counts and pseudonymised agent references for the current tab session. This does not create a live feed or validate source quality beyond the checks displayed. The Live Operations page remains synthetic, is not connected to Outlook or Excel, and cannot assign, move, recover or update real tickets. SLA, response, resolution-time, roster and audit measures are not supplied by the aggregate import.
 
 ## Offline Reporting Studio
 
