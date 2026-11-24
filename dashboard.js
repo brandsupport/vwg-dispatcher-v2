@@ -1604,13 +1604,13 @@ function renderWorkflow(){
   const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
   const methodTotal=automatic.events+manual.events;
   const allocationMethodPanel=imported
-    ? panel("Allocation method split","Derived from actual Activity Log event names: AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED.",methodTotal
-      ?dataTable(["Method","Events","Share of recorded assignment events"],[
-        '<tr><td>Automatic assignment</td><td class="total-cell">'+fmt(automatic.events)+'</td><td>'+(methodTotal?((automatic.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>',
-        '<tr><td>Manual assignment captured</td><td class="total-cell">'+fmt(manual.events)+'</td><td>'+(methodTotal?((manual.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>'
-      ])
+    ? panel("Automatic vs manual event counts","Counts Activity Log AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED rows. This is an event-type comparison, not a complete split of every first allocation.",methodTotal
+      ?dataTable(["Recorded event type","Events","Share of these two event types"],[
+        '<tr><td>Automatic assignment event</td><td class="total-cell">'+fmt(automatic.events)+'</td><td>'+(methodTotal?((automatic.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>',
+        '<tr><td>Manual assignment captured event</td><td class="total-cell">'+fmt(manual.events)+'</td><td>'+(methodTotal?((manual.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>'
+      ])+'<p class="team-panel-note">Manual captures can represent existing category registrations and may not have an Allocated At (Egypt) timestamp. They are not included in the automatic first-allocation total.</p>'
       :'<div class="empty-state">No recognised automatic or manual assignment event was found in Activity Log.</div>','<span class="subtle-tag">SOURCE EVENT TYPES</span>')
-    : panel("Assignment method mix","Method split is illustrative in demo mode only",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">DEMO ESTIMATE</span>');
+    : panel("Assignment event types","Illustrative comparison in demo mode only",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">DEMO ESTIMATE</span>');
   pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
     (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event timestamps retained in the safe Activity Log view</span></div>':'')+
     kpiGrid([
@@ -1987,7 +1987,7 @@ function renderRoster(){
     heading("ROSTER & COVERAGE INTELLIGENCE","Know who is planned — and where shifts overlap.",imported?"Review the imported fortnightly roster, colleague display names, active Early/Late coverage and Egypt-local shift windows. Exact Outlook category keys remain private.":"Explore anonymised shift groups, inbox eligibility and derived sample coverage without presenting placeholder hours as an approved rota.",'<button class="btn btn-secondary" data-action="export-roster">↓ Export roster & coverage</button>')+
     '<div class="roster-demo-strip '+(imported?"local-snapshot-strip":"")+'"><span><i></i> '+(imported?"SANITISED SNAPSHOT · READ ONLY":"DEMONSTRATION DATA · READ ONLY")+'</span><span>'+(imported?"Roster supplied for this fortnight":"Shift windows are illustrative")+'</span><span>Approved rota source <b>'+(imported?"Imported snapshot":"Not connected")+'</b></span><span>Live availability <b>Not connected</b></span></div>'+
     kpiGrid([
-      kpi("Roster profiles",String(profiles.length),imported?"Anonymised roster references · filters apply":"Anonymised sample profiles · filters apply","♧"),
+      kpi("Colleague profiles",String(profiles.length),imported?"Approved display names · filters apply":"Anonymised sample profiles · filters apply","♧"),
       kpi("Active Early",String(early.count),imported?"10:00–19:00 Egypt":"Indicative window "+(early.start===null?"—":rosterClockLabel(early.start)+"–"+rosterClockLabel(early.end)),"☼"),
       kpi("Active Late",String(late.count),imported?"11:00–20:00 Egypt":"Indicative window "+(late.start===null?"—":rosterClockLabel(late.start)+"–"+rosterClockLabel(late.end)),"☾"),
       kpi(imported?"Inactive this fortnight":"Cross-shift overlap",imported?String(inactiveCount):overlapLabel,imported?"Retained in the roster but excluded from coverage": "Derived from all sample shift windows · not live coverage","⇄")
