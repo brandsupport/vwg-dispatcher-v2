@@ -71,7 +71,7 @@ jobs:
           for (const file of ['examples/synthetic-ticket-snapshot.csv', 'examples/synthetic-assignment-history.csv', 'examples/synthetic-workflow-history.csv']) {
             if (!fs.existsSync(file)) throw new Error('Missing synthetic example: ' + file);
           }
-          const outbound = /\\b(fetch|XMLHttpRequest|WebSocket|EventSource)\\b|sendBeacon|localStorage|sessionStorage|indexedDB|serviceWorker/i;
+          const outbound = /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\b|sendBeacon|localStorage|sessionStorage|indexedDB|serviceWorker/i;
           if (outbound.test(js)) throw new Error('Reporting Studio must not make network calls or persist source data in browser storage.');
           for (const text of ['HMAC', 'SHA-256', 'normaliseWorkflowEvent', 'initial_assignments', 'current_open_workload']) {
             if (!js.includes(text)) throw new Error('Reporting Studio capability or safety guard missing: ' + text);
