@@ -1615,31 +1615,43 @@ function ticketTelemetryCard(title,reason){
 function renderTickets(){
   if(state.importedSnapshot){
     const t=totals(),assignmentAvailable=importedSourceAvailable("Assignment history");
+    const lifecycle=state.importedSnapshot.tickets.lifecycle_available===true;
+    const brandAvailable=state.importedSnapshot.tickets.brand_available===true;
     const inboxRows=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder).map(folder=>
-      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+fmt(folder.resolved)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
+      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td>'+
+      '<td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td>'+
+      '<td>'+(lifecycle?fmt(folder.resolved):"Not recorded")+'</td>'+
+      '<td>'+(lifecycle?fmt(folder.open):"Not recorded")+'</td>'+
+      '<td>'+(lifecycle?fmt(folder.unassigned):"Not recorded")+'</td>'+
+      '<td>'+fmt(folder.owner_records)+'</td></tr>'
     );
-    const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30).map(row=>
-      '<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.ticket_records)+'</td></tr>'
-    );
-    pageContent.innerHTML=heading("TICKET FLOW INTELLIGENCE","Ticket snapshot analysis","This sanitised export contains aggregate ticket state and approved categories only. It intentionally excludes ticket references, subjects, message content and individual source rows.")+
-      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(state.importedSnapshot.tickets.total)+' ticket records</span><span>Ticket-level explorer not included</span></div>'+
+    const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder)
+      .slice().sort((a,b)=>(b.date_local||b.date_utc).localeCompare(a.date_local||a.date_utc)).slice(0,30).map(row=>
+        '<tr><td>'+esc(row.date_local||row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.ticket_records)+'</td></tr>'
+      );
+    const brandPanel=brandAvailable
+      ?panel("Brand totals","Explicitly recorded brand values only",brandBarList(brandRows()),'<span class="subtle-tag">SOURCE FIELD</span>')
+      :panel("Brand totals","Not present in the current tracker export",'<div class="empty-state">The Assignments worksheet has no Brand field. The dashboard will not infer brand from email subjects, ticket keys or inbox names. Add an explicit controlled Brand field to the dispatcher source before reporting this metric.</div>','<span class="subtle-tag">NOT IN SOURCE</span>');
+    pageContent.innerHTML=heading("TICKET FLOW INTELLIGENCE","Understand ticket volume and source coverage","This page reports what the imported workbook can support. It deliberately separates tracker assignment states from ticket lifecycle outcomes.",'<button class="btn btn-primary" type="button" data-go="live">Open ticket queue ↗</button>')+
+      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(state.importedSnapshot.tickets.total)+' unique ticket records</span><span>Ticket queue is available in Live Operations</span></div>'+
       kpiGrid([
-        kpi("Ticket records",fmt(t.received),"Unique current-state records","▤"),
-        kpi("Initially assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Validated first-assignment events":"Assignment history was not supplied","↗"),
-        kpi("Resolved / closed",fmt(t.resolved),"Current state at snapshot time","✓"),
-        kpi("Outstanding",fmt(t.open),"Current open-state records","◷")
+        kpi("Ticket records",fmt(t.received),"Unique current-state rows","▤"),
+        kpi("First assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Distinct tickets with one successful first allocation":"Activity Log history was not included","↗"),
+        kpi("Resolved / closed",lifecycle?fmt(t.resolved):"Not recorded",lifecycle?"Explicit lifecycle status / resolved date":"No resolution lifecycle field in the workbook","✓"),
+        kpi(lifecycle?"Outstanding":"Current owner records",lifecycle?fmt(t.open):fmt(allocationMatrix().reduce((sum,row)=>sum+row.ownerRecords,0)),lifecycle?"Explicit open-state records":"Current Owner rows; not an open/closed measure","◷")
       ])+
       '<div class="grid-two ticket-analytics-primary">'+
-        panel("Ticket state by inbox","Current-state records from the imported aggregate",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned"],inboxRows),'<span class="subtle-tag">SNAPSHOT</span>')+
-        panel("Current ticket state","Portfolio totals · current snapshot",dataTable(["Measure","Records"],[
-          '<tr><td>Ticket records</td><td class="total-cell">'+fmt(t.received)+'</td></tr>',
-          '<tr><td>Resolved / closed</td><td>'+fmt(t.resolved)+'</td></tr>',
-          '<tr><td>Outstanding</td><td>'+fmt(t.open)+'</td></tr>',
-          '<tr><td>Currently unassigned</td><td>'+fmt(t.unassigned)+'</td></tr>'
-        ]))+
-      '</div>'+
-      panel("Received-date coverage","Records with valid UTC received dates only. Records without a trustworthy timestamp are excluded from this date list.",dates.length?dataTable(["Received date · UTC","Inbox","Ticket records"],dates):'<div class="empty-state">No valid received dates were supplied in this snapshot.</div>')+
-      '<div class="prototype-warning"><strong>Why there is no ticket explorer:</strong> the Studio removes ticket references and source rows before export. To inspect individual tickets, use the approved source system; this public dashboard does not receive or store raw ticket-level data.</div>';
+        panel("Ticket state by inbox","Snapshot counts with missing lifecycle states kept explicit",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned","Current owner records"],inboxRows),'<span class="subtle-tag">SOURCE COUNTS</span>')+
+        panel("Metric availability","Do not turn missing fields into zero performance",'<div class="team-evidence-list">'+
+          '<div><span>First allocation</span><strong>'+(assignmentAvailable?"Available":"Not supplied")+'</strong><small>Uses Event Type with Assignment Flag = TRUE.</small></div>'+
+          '<div><span>Brand mix</span><strong>'+(brandAvailable?"Available":"Not recorded")+'</strong><small>'+(brandAvailable?"Explicit Brand source field is mapped.":"Brand is not a column in Assignments.")+'</small></div>'+
+          '<div><span>Resolution rate</span><strong>'+(lifecycle?"Available":"Not recorded")+'</strong><small>Requires explicit lifecycle state or resolved timestamp.</small></div>'+
+          '<div><span>Solve time</span><strong>'+(lifecycle?"Requires valid receipt and resolved timestamps":"Not recorded")+'</strong><small>Elapsed time is never estimated from tracker assignment status.</small></div>'+
+        '</div>')
+      +'</div>'+
+      panel("Received-date coverage","Calendar dates parsed from Received At (UK), shown in Europe/London local dates",dates.length?dataTable(["Received date · UK local","Inbox","Ticket records"],dates):'<div class="empty-state">No usable Received At (UK) dates were present. No date trend is inferred.</div>','<span class="subtle-tag">SOURCE DATES</span>')+
+      brandPanel+
+      '<div class="prototype-warning"><strong>Important distinction.</strong> Status in the current Assignments sheet is a dispatcher state (for example Queued, Assigned, Recovered or Needs Review). It does not mean a ticket was resolved or remains open. Resolution rate, resolve time and individual resolver performance require lifecycle capture in the dispatcher and tracker.</div>';
     return;
   }
   const t=totals();
@@ -1699,6 +1711,7 @@ function renderTickets(){
       '<div id="ticketExplorerRows">'+dataTable(["Reference / subject","Brand","Inbox","Owner","Age","Priority","Status","SLA preview","Last sample event"],rows)+'</div>'+
     '</section>';
 }
+
 function chartPair(a,b,labels){
   const max=Math.max(...a,...b),h=115;
   return '<div class="paired-chart">'+a.map((v,i)=>'<div class="paired-col"><div class="paired-bars"><span class="paired-bar received" style="height:'+v/max*100+'%"></span><span class="paired-bar resolved" style="height:'+b[i]/max*100+'%"></span></div><small>'+labels[i]+'</small></div>').join("")+'</div>';
@@ -2774,6 +2787,17 @@ function csvDownload(filename,rows){
 }
 function exportLiveQueue(){
   const rows=liveFilteredTickets();
+  if(state.importedSnapshot){
+    csvDownload("dispatcher-local-sanitised-ticket-queue.csv",[
+      ["Ticket reference (HMAC pseudonym)","Brand","Inbox","Current owner","Received date · UK","Tracker status","Lifecycle status","Resolved date · UK","Resolved by"],
+      ...rows.map(ticket=>{
+        const source=state.importedSnapshot.tickets.ticket_rows.find(row=>row.ticket_ref===ticket.ref)||{};
+        return [ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.received,ticket.status,
+          source.lifecycle_status||"Not recorded",source.resolved_date_uk||"Not recorded",source.resolved_by_name||"Not recorded"];
+      })
+    ]);
+    return;
+  }
   csvDownload("dispatcher-live-operations-sample-queue.csv",[
     ["Reference","Subject","Brand","Inbox","Owner","Age","Status","SLA"],
     ...rows.map(t=>[t.ref,t.subject,t.brand,t.folder,t.member,t.age,t.status,liveSla(t).label])
@@ -2951,6 +2975,27 @@ function exportSummary(){
   ]);
 }
 function openTicket(ref){
+  if(state.importedSnapshot&&Array.isArray(state.importedSnapshot.tickets.ticket_rows)){
+    const row=state.importedSnapshot.tickets.ticket_rows.find(ticket=>ticket.ticket_ref===ref);
+    if(!row)return;
+    const owner=row.owner_name||row.owner_ref||"Unassigned";
+    const brandNames={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other / unclassified",unclassified:"Not recorded"};
+    const brand=state.importedSnapshot.tickets.brand_available?brandNames[row.brand_code]||"Other / unclassified":"Not recorded";
+    const events=(state.importedSnapshot.activity_summary||[]).filter(event=>
+      (state.folder==="all"||event.inbox_code===state.folder)&&
+      // No raw email key or message content is retained; the grouped event panel
+      // is intentionally not joined to an individual ticket in this schema.
+      false
+    );
+    modalRoot.innerHTML='<div class="modal-backdrop" data-modal-close><section class="modal-card live-ticket-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">'+
+      '<div class="modal-head"><div><span class="eyebrow">IMPORTED TICKET RECORD · READ ONLY</span><h2 id="modalTitle">'+esc(row.ticket_ref)+'</h2></div><button class="icon-button" data-modal-close aria-label="Close">×</button></div>'+
+      '<p class="modal-copy">Message subject, body, customer details and raw Outlook key are not included in this sanitised view.</p>'+
+      '<div class="live-detail-status">'+statusPill(row.tracker_status)+'<span class="sla-pill neutral">SLA · Not supplied</span></div>'+
+      '<div class="ticket-detail-grid"><div><span>Brand</span><strong>'+esc(brand)+'</strong></div><div><span>Inbox</span><strong>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</strong></div><div><span>Current owner</span><strong>'+esc(owner)+'</strong></div><div><span>Received date · UK</span><strong>'+esc(row.received_date_uk||"Not supplied")+'</strong></div><div><span>Lifecycle status</span><strong>'+esc(row.lifecycle_status||"Not recorded")+'</strong></div><div><span>Resolved date</span><strong>'+esc(row.resolved_date_uk||"Not recorded")+'</strong></div></div>'+
+      '<div class="prototype-warning"><strong>Source boundary.</strong> This is a point-in-time workbook row, not a live Outlook message. The Activity Log is summarised separately; ticket-level event correlation is not exposed because raw ticket IDs are removed before export.</div>'+
+      '</section></div>';
+    return;
+  }
   const ticket=TICKETS.find(t=>t.ref===ref);if(!ticket)return;
   const sla=liveSla(ticket);
   const timeline=[
@@ -2967,6 +3012,7 @@ function openTicket(ref){
     '<div class="prototype-warning"><strong>Read-only sample.</strong> This ticket is synthetic. Outlook, Excel and dispatch actions are not connected, so no assignment or status changes can be made.</div>'+
     '</section></div>';
 }
+
 function closeModal(){modalRoot.innerHTML="";}
 function handleAction(action){
   if(action==="refresh"){showToast("Preview refreshed. Sample data remains unchanged.");return;}
@@ -3052,6 +3098,7 @@ document.addEventListener("input",event=>{
   const auditSearch=event.target.closest("[data-audit-search]");
   if(auditSearch){
     state.auditSearch=auditSearch.value;
+    if(state.importedSnapshot){renderAudit();return;}
     refreshAuditPanels();
     return;
   }
