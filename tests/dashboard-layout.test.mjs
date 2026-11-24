@@ -38,3 +38,20 @@ test("unsupported brand and resolution metrics are labelled as not captured",()=
   assert.match(dashboard,/AVERAGE ELAPSED RESOLUTION/);
   assert.match(dashboard,/Resolution rate/);
 });
+
+
+test("imported owner counts are not labelled as open workload without resolution tracking",()=>{
+  assert.match(dashboard,/function hasResolutionTracking\(\)/);
+  assert.match(dashboard,/Records with current owner/);
+  assert.match(dashboard,/Current owner records/);
+  const start=dashboard.indexOf("function renderImportedLiveOperations(){");
+  const end=dashboard.indexOf("\nfunction renderLive()",start);
+  const live=dashboard.slice(start,end);
+  assert.match(live,/const workloadLabel=resolutionTracked\?"Open workload":"Records with current owner"/);
+  assert.match(live,/resolutionTracked\?folder\.open:currentOwnerRecordCount\(folder\)/);
+  const foldersStart=dashboard.indexOf("function renderFolders(){");
+  const foldersEnd=dashboard.indexOf("\nfunction teamProfileRows()",foldersStart);
+  const folderView=dashboard.slice(foldersStart,foldersEnd);
+  assert.match(folderView,/const workloadLabel=resolutionTracked\?"Open workload":"Current owner records"/);
+  assert.match(folderView,/resolutionTracked\?folder\.open:currentOwnerRecordCount\(folder\)/);
+});
