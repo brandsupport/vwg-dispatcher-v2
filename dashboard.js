@@ -492,7 +492,7 @@ function validateAndSanitiseSnapshot(raw){
   };
   const inboxCodes=["agency","detags","transfers","unadopts"];
   const brandCodes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
-  const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception"];
+  const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception","assignment_pending","baseline_registered"];
   const validDate=value=>{
     if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
     const parsed=new Date(value+"T00:00:00Z");
@@ -507,6 +507,14 @@ function validateAndSanitiseSnapshot(raw){
   if(!isObject(raw.tickets)||!isObject(raw.tickets.overall)||!Array.isArray(raw.tickets.by_inbox)||!Array.isArray(raw.tickets.by_brand)||!Array.isArray(raw.tickets.daily_volume)){
     fail("The snapshot is missing its required ticket summary sections.");
   }
+  const lifecycleAvailable=raw.tickets.lifecycle_available===true;
+  const brandAvailable=raw.tickets.brand_available===true;
+  const cleanName=value=>{
+    if(value===null||value===undefined||String(value).trim()==="")return null;
+    const name=String(value).trim();
+    if(name.length>80)fail("A colleague display name exceeds 80 characters.");
+    return name;
+  };
   const byInbox=raw.tickets.by_inbox.map(row=>{
     if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("The snapshot contains an unsupported inbox code.");
     return {
@@ -520,8 +528,11 @@ function validateAndSanitiseSnapshot(raw){
   });
   if(byInbox.length!==4||new Set(byInbox.map(row=>row.inbox_code)).size!==4)fail("The snapshot must contain exactly one summary for each of the four inboxes.");
   for(const row of byInbox){
-    if(row.resolved+row.outstanding!==row.ticket_records||row.unassigned>row.outstanding||row.initially_assigned>row.ticket_records){
-      fail("Inbox state counts do not reconcile for "+row.inbox_code+".");
+    if(row.initially_assigned>row.ticket_records)fail("First-assignment count exceeds ticket records for "+row.inbox_code+".");
+    if(lifecycleAvailable){
+      if(row.resolved+row.outstanding!==row.ticket_records||row.unassigned>row.outstanding)fail("Inbox lifecycle counts do not reconcile for "+row.inbox_code+".");
+    }else if(row.resolved!==0||row.outstanding!==0||row.unassigned!==0){
+      fail("Lifecycle counts must be zero when lifecycle data is not supplied.");
     }
   }
   byInbox.sort((a,b)=>inboxCodes.indexOf(a.inbox_code)-inboxCodes.indexOf(b.inbox_code));
@@ -545,14 +556,17 @@ function validateAndSanitiseSnapshot(raw){
   });
   if(new Set(byBrand.map(row=>row.brand_code)).size!==byBrand.length||sum(byBrand,"count")!==total)fail("Brand totals are duplicated or do not reconcile with the ticket total.");
   const dailyVolume=raw.tickets.daily_volume.map(row=>{
-    if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||!validDate(row.date_utc)){
-      fail("The snapshot contains an invalid daily-volume row.");
+    if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("The snapshot contains an invalid daily-volume row.");
+    if(validDate(row.date_local)){
+      if(row.time_zone!=="Europe/London")fail("Local received dates must identify the Europe/London timezone.");
+      return {date_local:row.date_local,time_zone:"Europe/London",inbox_code:row.inbox_code,ticket_records:count(row.ticket_records,"daily ticket count")};
     }
-    return {date_utc:row.date_utc,inbox_code:row.inbox_code,ticket_records:count(row.ticket_records,"daily ticket count")};
+    if(validDate(row.date_utc))return {date_utc:row.date_utc,inbox_code:row.inbox_code,ticket_records:count(row.ticket_records,"daily ticket count")};
+    fail("The snapshot contains an invalid daily-volume date.");
   });
   const dailyKeys=new Set();
   for(const row of dailyVolume){
-    const key=row.date_utc+"|"+row.inbox_code;
+    const key=(row.date_local||row.date_utc)+"|"+row.inbox_code;
     if(dailyKeys.has(key))fail("Duplicate daily-volume rows were found.");
     dailyKeys.add(key);
   }
@@ -560,11 +574,19 @@ function validateAndSanitiseSnapshot(raw){
   if(!isObject(raw.reporting_period)&&raw.reporting_period!==null)fail("The reporting-period metadata is invalid.");
   let reportingPeriod=null;
   if(raw.reporting_period){
-    const first=raw.reporting_period.first_received_date_utc,last=raw.reporting_period.last_received_date_utc;
-    if(!validDate(first)||!validDate(last)||first>last)fail("The reporting-period dates are invalid.");
-    reportingPeriod={first_received_date_utc:first,last_received_date_utc:last};
-    const dates=dailyVolume.map(row=>row.date_utc).sort();
-    if(dates.length&&(dates[0]!==first||dates[dates.length-1]!==last))fail("Reporting-period dates do not match the dated ticket rows.");
+    const firstLocal=raw.reporting_period.first_received_date_local;
+    const lastLocal=raw.reporting_period.last_received_date_local;
+    const firstUtc=raw.reporting_period.first_received_date_utc;
+    const lastUtc=raw.reporting_period.last_received_date_utc;
+    if(validDate(firstLocal)&&validDate(lastLocal)&&firstLocal<=lastLocal&&raw.reporting_period.time_zone==="Europe/London"){
+      reportingPeriod={first_received_date_local:firstLocal,last_received_date_local:lastLocal,time_zone:"Europe/London"};
+      const dates=dailyVolume.map(row=>row.date_local).filter(Boolean).sort();
+      if(dates.length&&(dates[0]!==firstLocal||dates[dates.length-1]!==lastLocal))fail("Local reporting-period dates do not match the dated ticket rows.");
+    }else if(validDate(firstUtc)&&validDate(lastUtc)&&firstUtc<=lastUtc){
+      reportingPeriod={first_received_date_utc:firstUtc,last_received_date_utc:lastUtc};
+      const dates=dailyVolume.map(row=>row.date_utc).filter(Boolean).sort();
+      if(dates.length&&(dates[0]!==firstUtc||dates[dates.length-1]!==lastUtc))fail("Reporting-period dates do not match the dated ticket rows.");
+    }else fail("The reporting-period dates are invalid.");
   }else if(dailyVolume.length)fail("Dated ticket rows require reporting-period metadata.");
   if(!Array.isArray(raw.allocations)||!Array.isArray(raw.workflow)||!isObject(raw.data_quality)||!Array.isArray(raw.data_quality.sources)){
     fail("The snapshot is missing allocation, workflow or data-quality sections.");
@@ -572,10 +594,11 @@ function validateAndSanitiseSnapshot(raw){
   const allocations=raw.allocations.map(row=>{
     if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||""))||!inboxCodes.includes(row.inbox_code))fail("An allocation row contains an invalid pseudonymous agent or inbox reference.");
     return {
-      agent_ref:row.agent_ref,inbox_code:row.inbox_code,
+      agent_ref:row.agent_ref,agent_name:cleanName(row.agent_name),inbox_code:row.inbox_code,
       initial_assignments:count(row.initial_assignments,"agent initial-assignment count"),
       allocation_share_pct:pct(row.allocation_share_pct,"allocation share"),
-      current_open_workload:count(row.current_open_workload,"agent open-workload count")
+      current_open_workload:count(row.current_open_workload,"agent open-workload count"),
+      current_owner_records:count(row.current_owner_records??row.current_open_workload,"agent current-owner record count")
     };
   });
   if(raw.team_roster!==undefined&&!Array.isArray(raw.team_roster))fail("The Team & Shifts roster section is invalid.");
@@ -588,7 +611,7 @@ function validateAndSanitiseSnapshot(raw){
     if(toMinutes(row.shift_end_egypt)<=toMinutes(row.shift_start_egypt))fail("A roster shift end must be later than its start.");
     if(typeof row.active_this_fortnight!=="boolean")fail("The roster contains an invalid active-fortnight flag.");
     return {
-      agent_ref:row.agent_ref,shift_group:row.shift_group,
+      agent_ref:row.agent_ref,agent_name:cleanName(row.agent_name),shift_group:row.shift_group,
       shift_start_egypt:row.shift_start_egypt,shift_end_egypt:row.shift_end_egypt,
       active_this_fortnight:row.active_this_fortnight
     };
@@ -603,7 +626,8 @@ function validateAndSanitiseSnapshot(raw){
   for(const inbox of byInbox){
     const rows=allocations.filter(row=>row.inbox_code===inbox.inbox_code);
     if(sum(rows,"initial_assignments")!==inbox.initially_assigned)fail("Agent allocation totals do not reconcile for "+inbox.inbox_code+".");
-    if(sum(rows,"current_open_workload")>inbox.outstanding)fail("Agent open-workload totals exceed outstanding work for "+inbox.inbox_code+".");
+    if(lifecycleAvailable&&sum(rows,"current_open_workload")>inbox.outstanding)fail("Agent open-workload totals exceed outstanding work for "+inbox.inbox_code+".");
+    if(sum(rows,"current_owner_records")>inbox.ticket_records)fail("Agent current-owner records exceed ticket records for "+inbox.inbox_code+".");
     for(const row of rows){
       const expected=inbox.initially_assigned?row.initial_assignments/inbox.initially_assigned*100:0;
       if(Math.abs(row.allocation_share_pct-expected)>0.05)fail("An agent allocation share does not reconcile for "+inbox.inbox_code+".");
@@ -622,6 +646,69 @@ function validateAndSanitiseSnapshot(raw){
     if(workflowKeys.has(key))fail("Duplicate workflow event and inbox rows were found.");
     workflowKeys.add(key);
   }
+  const assignmentMethods=(raw.assignment_methods||[]).map(row=>{
+    if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("An assignment-method row contains an unsupported inbox.");
+    const automatic=count(row.automatic,"automatic assignment count");
+    const manual=count(row.manual,"manual assignment count");
+    const methodTotal=count(row.total,"assignment method total");
+    const inbox=byInbox.find(item=>item.inbox_code===row.inbox_code);
+    if(automatic+manual!==methodTotal||methodTotal!==(inbox?.initially_assigned??-1))fail("Automatic/manual first-assignment counts do not reconcile for "+row.inbox_code+".");
+    return {inbox_code:row.inbox_code,automatic,manual,total:methodTotal};
+  });
+  if(assignmentMethods.length&&new Set(assignmentMethods.map(row=>row.inbox_code)).size!==assignmentMethods.length)fail("Duplicate assignment-method inbox rows were found.");
+
+  const activitySummary=(raw.activity_summary||[]).map(row=>{
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code))fail("An Activity Log summary row contains an unsupported event or inbox.");
+    const agentRef=row.agent_ref===null||row.agent_ref===undefined?null:String(row.agent_ref);
+    if(agentRef&&!/^Agent-[A-F0-9]{10}$/.test(agentRef))fail("An Activity Log summary row contains an invalid agent reference.");
+    const eventDate=row.event_date_egypt===null||row.event_date_egypt===undefined?null:String(row.event_date_egypt);
+    if(eventDate&&!validDate(eventDate))fail("An Activity Log summary row contains an invalid Egypt-local date.");
+    if(row.time_zone!=="Africa/Cairo")fail("Activity Log dates must identify the Africa/Cairo timezone.");
+    const eventCount=count(row.event_count,"Activity Log event count");
+    const distinctTickets=count(row.distinct_tickets,"Activity Log distinct-ticket count");
+    if(distinctTickets>eventCount||distinctTickets>total)fail("Activity Log distinct-ticket counts do not reconcile.");
+    return {
+      event_type:row.event_type,inbox_code:row.inbox_code,agent_ref:agentRef,
+      agent_name:cleanName(row.agent_name),event_date_egypt:eventDate,
+      time_zone:"Africa/Cairo",event_count:eventCount,distinct_tickets:distinctTickets
+    };
+  });
+
+  const ticketRows=(raw.tickets.ticket_rows||[]).map(row=>{
+    if(!isObject(row)||!/^Ref-[A-F0-9]{10}$/.test(String(row.ticket_ref||""))||!inboxCodes.includes(row.inbox_code))fail("A ticket queue row contains an invalid pseudonymous ticket or inbox reference.");
+    const allowedStatuses=["Unassigned","Queued","Assigning","Assigned","Recovered","Needs Review","Handover Pending","Handed Over","Recovery Failed","Dry Run - Recovery Pending","Recovery Pending","Other / review","Resolved"];
+    if(!allowedStatuses.includes(row.tracker_status))fail("A ticket queue row contains an unsupported tracker status.");
+    if(!brandCodes.includes(row.brand_code))fail("A ticket queue row contains an unsupported brand code.");
+    const ownerRef=row.owner_ref===null||row.owner_ref===undefined?null:String(row.owner_ref);
+    const resolvedByRef=row.resolved_by_ref===null||row.resolved_by_ref===undefined?null:String(row.resolved_by_ref);
+    if(ownerRef&&!/^Agent-[A-F0-9]{10}$/.test(ownerRef))fail("A ticket queue row contains an invalid owner reference.");
+    if(resolvedByRef&&!/^Agent-[A-F0-9]{10}$/.test(resolvedByRef))fail("A ticket queue row contains an invalid resolver reference.");
+    const receivedDate=row.received_date_uk===null||row.received_date_uk===undefined?null:String(row.received_date_uk);
+    const resolvedDate=row.resolved_date_uk===null||row.resolved_date_uk===undefined?null:String(row.resolved_date_uk);
+    if(receivedDate&&!validDate(receivedDate))fail("A ticket queue row contains an invalid UK-local received date.");
+    if(resolvedDate&&!validDate(resolvedDate))fail("A ticket queue row contains an invalid UK-local resolved date.");
+    if(row.lifecycle_status!==null&&row.lifecycle_status!==undefined&&String(row.lifecycle_status).length>60)fail("A ticket lifecycle label is too long.");
+    return {
+      ticket_ref:row.ticket_ref,inbox_code:row.inbox_code,tracker_status:row.tracker_status,
+      brand_code:row.brand_code,owner_ref:ownerRef,owner_name:cleanName(row.owner_name),
+      received_date_uk:receivedDate,resolved_date_uk:resolvedDate,
+      resolved_by_ref:resolvedByRef,resolved_by_name:cleanName(row.resolved_by_name),
+      lifecycle_status:row.lifecycle_status?String(row.lifecycle_status):null
+    };
+  });
+  if(ticketRows.length&&ticketRows.length!==total)fail("Pseudonymised ticket queue rows do not match the ticket total.");
+  if(new Set(ticketRows.map(row=>row.ticket_ref)).size!==ticketRows.length)fail("The pseudonymised ticket queue contains duplicate references.");
+  if(ticketRows.length){
+    for(const inbox of byInbox){
+      if(ticketRows.filter(row=>row.inbox_code===inbox.inbox_code).length!==inbox.ticket_records)fail("Ticket queue counts do not match the inbox total for "+inbox.inbox_code+".");
+    }
+    if(brandAvailable){
+      for(const brand of byBrand){
+        if(ticketRows.filter(row=>row.brand_code===brand.brand_code).length!==brand.count)fail("Ticket queue brand counts do not match the brand total for "+brand.brand_code+".");
+      }
+    }
+  }
+
   const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
@@ -639,8 +726,8 @@ function validateAndSanitiseSnapshot(raw){
     generated_at_utc:raw.generated_at_utc,
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
-    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-    allocations,team_roster:teamRoster,workflow,
+    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,brand_available:brandAvailable,lifecycle_available:lifecycleAvailable,ticket_rows:ticketRows},
+    allocations,team_roster:teamRoster,workflow,assignment_methods:assignmentMethods,activity_summary:activitySummary,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
