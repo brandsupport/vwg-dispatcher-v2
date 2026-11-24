@@ -247,7 +247,7 @@ function renderWorkbookSelectors(){
   renderMappings();
 }
 async function readWorkbook(file){
-  if(!/\\.(?:xlsx|xls)$/i.test(file.name||""))throw new Error("Select the original Excel workbook (.xlsx or .xls).");
+  if(!/\.(?:xlsx|xls)$/i.test(file.name||""))throw new Error("Select the original Excel workbook (.xlsx or .xls).");
   if(typeof XLSX==="undefined"||typeof XLSX.read!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
   const workbook=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:false});
   if(!Array.isArray(workbook.SheetNames)||!workbook.SheetNames.length)throw new Error("No worksheets were found in the selected workbook.");
