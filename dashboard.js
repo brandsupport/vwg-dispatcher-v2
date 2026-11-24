@@ -62,7 +62,7 @@ function workflowSummaryRows(){
       definition.codes.includes(row.event_type)&&(state.folder==="all"||row.inbox_code===state.folder)
     );
     return {...definition,events:matches.reduce((sum,row)=>sum+row.event_count,0),
-      uniqueTickets:matches.reduce((sum,row)=>sum+row.distinct_tickets,0),rate:"Not available"};
+      uniqueTickets:null,rate:"Not available"};
   });
 }
 function workflowEvent(id){
@@ -611,7 +611,8 @@ async async function loadLocalSnapshot(file){
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
   showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
-}function clearLocalSnapshot(){
+}
+function clearLocalSnapshot(){
   state.importedSnapshot=null;
   state.period="month";
   const periodSelect=document.getElementById("periodSelect");
@@ -627,7 +628,8 @@ async async function loadLocalSnapshot(file){
   state.memberSearch="";
   render();
   showToast("Returned to the synthetic demo dataset.");
-}function fmt(value){return Math.round(value).toLocaleString("en-GB");}
+}
+function fmt(value){return Math.round(value).toLocaleString("en-GB");}
 function scaled(value){return Math.max(0,Math.round(value*(state.importedSnapshot?1:PERIODS[state.period].factor)));}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
@@ -824,7 +826,8 @@ function overviewInboxSnapshot(inboxes){
       '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
     '</article>';
   }).join("")+'</div>';
-}function overviewRiskPanel(summary,tickets){
+}
+function overviewRiskPanel(summary,tickets){
   const rows=(summary.attention.length?summary.attention: tickets.filter(ticket=>!["Resolved","Closed"].includes(ticket.status)).sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a))).slice(0,4);
   const ticketRows=rows.length?'<div class="overview-risk-list">'+rows.map(ticket=>{
     const sla=liveSla(ticket);
@@ -1118,7 +1121,8 @@ function renderLive(){
         healthRow("Event history","Sample records","neutral","Synthetic timeline for interface testing")+
       '</div>','<button class="panel-action" data-go="reliability">Open reliability centre ↗</button>')
     '</div>';
-}function ticketQueueBase(){
+}
+function ticketQueueBase(){
   const folderName=FOLDERS.find(folder=>folder.id===state.folder)?.name;
   return TICKETS.filter(ticket=>
     (!folderName||ticket.folder===folderName) &&
@@ -1318,7 +1322,8 @@ function renderTickets(){
       '<div class="live-queue-meta"><span id="ticketQueueCount">Showing '+rows.length+' of '+base.length+' sample records</span><button type="button" class="text-action" data-action="reset-ticket-filters">Reset explorer filters</button></div>'+
       '<div id="ticketExplorerRows">'+dataTable(["Reference / subject","Brand","Inbox","Owner","Age","Priority","Status","SLA preview","Last sample event"],rows)+'</div>'+
     '</section>';
-}function chartPair(a,b,labels){
+}
+function chartPair(a,b,labels){
   const max=Math.max(...a,...b),h=115;
   return '<div class="paired-chart">'+a.map((v,i)=>'<div class="paired-col"><div class="paired-bars"><span class="paired-bar received" style="height:'+v/max*100+'%"></span><span class="paired-bar resolved" style="height:'+b[i]/max*100+'%"></span></div><small>'+labels[i]+'</small></div>').join("")+'</div>';
 }
@@ -1345,14 +1350,16 @@ function renderBrands(){
       return '<tr><td><span class="brand-register-name"><i style="background:'+b.color+'"></i>'+b.name+'</span></td><td class="total-cell">'+fmt(b.value)+'</td><td>'+share.toFixed(1)+'%</td><td>'+statusPill(b.id==="other"?"Review required":"Identified")+'</td><td>'+(b.id==="other"?"Retain until confirmed":"Explicit / validated mapping")+'</td></tr>';
     })),'<span class="subtle-tag">DISTINCT TICKETS</span>')+
     '<div class="prototype-warning"><strong>Classification safeguard.</strong> Brand identity comes from the explicit mapped field. Unrecognised values remain Other / unclassified; this dashboard does not infer brand from subject text.</div>';
-}function brandFolderTable(){
+}
+function brandFolderTable(){
   if(state.importedSnapshot)return '<div class="empty-state">Brand counts are available for the overall snapshot only. The export does not include brand-by-inbox rows, so no folder split is estimated.</div>';
   const rows=FOLDERS.filter(f=>state.folder==="all"||f.id===state.folder);
   return dataTable(["Inbox","VW","Audi","Škoda","Other"],rows.map(f=>{
     const total=scaled(f.received),mix=BRAND_MIX[f.id],v=distribute(total,mix);
     return '<tr><td>'+f.name+'</td><td>'+fmt(v[0])+'</td><td>'+fmt(v[1])+'</td><td>'+fmt(v[2])+'</td><td>'+fmt(v[6])+'</td></tr>';
   }));
-}function renderWorkflow(){
+}
+function renderWorkflow(){
   const imported=Boolean(state.importedSnapshot);
   const manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
   const sourceAvailable=!imported||importedSourceAvailable("Workflow history");
@@ -1360,24 +1367,27 @@ function renderBrands(){
   const actualRows=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
     '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
   ):null;
+  const importedNote=sourceAvailable?"Event totals are aggregated; distinct-ticket counts remain visible by inbox below.":"No workflow-history file supplied";
+  const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
   const allocationMethodPanel=imported
     ? panel("Allocation method split","The snapshot distinguishes first allocations from workflow events but does not identify automatic versus manual allocation method.",'<div class="empty-state">Not available in this source export. No allocation method split is inferred.</div>','<span class="subtle-tag">NOT IN SOURCE</span>')
     : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
-  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Event counts and distinct tickets affected remain separate.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
     (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
     kpiGrid([
       kpi("Automatic allocation",imported?"Not available":"1,064",imported?"The source does not classify automatic versus manual first assignments":"89.5% of assigned tickets","↗"),
-      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",sourceAvailable?fmt(manual.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","✎"),
-      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",sourceAvailable?fmt(handover.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","⇄"),
-      kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",sourceAvailable?fmt(recovery.uniqueTickets)+" unique tickets affected":"No workflow-history file supplied","↺")
+      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",eventDescription(manual),"✎"),
+      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",eventDescription(handover),"⇄"),
+      kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",eventDescription(recovery),"↺")
     ])+
     '<div class="grid-two">'+
       allocationMethodPanel+
-      panel("Workflow events",imported?"Event types mapped from the supplied workflow history, scoped to the selected inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No mapped workflow events in this inbox scope.":"No workflow-history file was supplied.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
+      panel("Workflow events",imported?"Event counts and distinct tickets affected by event type and inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No mapped workflow events in this inbox scope.":"No workflow-history file was supplied.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
     '</div>'+
-    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+fmt(event.events)+'</td><td>'+(imported?"Not available — denominator and method not supplied":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
-    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in the unique-ticket measure and three times in the event count. Event types may overlap; never add event counts to distinct ticket totals or initial allocations.</div>';
-}function donutChart(items){
+    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+(imported?"Not aggregated across inboxes":fmt(event.uniqueTickets))+'</td><td>'+fmt(event.events)+'</td><td>'+(imported?"Not available — distinct-ticket deduplication and denominators are not supplied":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in an inbox-level distinct-ticket measure and three times in the event count. The aggregate export does not include ticket IDs to deduplicate across inboxes, so cross-inbox unique-ticket totals are not calculated.</div>';
+}
+function donutChart(items){
   let offset=0;
   const circles=items.map(item=>{
     const length=item.value*2.45;
@@ -1407,7 +1417,8 @@ function renderFolders(){
     '</div>';
   const search=document.getElementById("memberSearch");
   if(search)search.addEventListener("input",e=>{state.memberSearch=e.target.value;const pos=e.target.selectionStart;renderFolders();const el=document.getElementById("memberSearch");el.focus();el.setSelectionRange(pos,pos);});
-}function teamProfileRows(){
+}
+function teamProfileRows(){
   const matrix=allocationMatrix(),folders=scopeFolders();
   if(state.importedSnapshot){
     return matrix.map(agent=>{
@@ -1422,7 +1433,8 @@ function renderFolders(){
     const firstAssigned=folders.reduce((sum,folder)=>sum+firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)],0);
     return {...agent,firstAssignedByFolder,firstAssigned};
   });
-}function teamWorkloadPanel(rows){
+}
+function teamWorkloadPanel(rows){
   if(!rows.length)return '<div class="empty-state">No anonymised profiles match the current search.</div>';
   const ordered=rows.slice().sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
   const maximum=Math.max(1,...ordered.map(agent=>agent.open));
@@ -1430,17 +1442,26 @@ function renderFolders(){
     '<div class="team-workload-row"><div class="team-workload-person">'+memberCell(agent.name,agent.shift||"Pseudonymised reference")+'</div><div class="team-workload-track"><span style="width:'+(agent.open/maximum*100).toFixed(1)+'%"></span></div><strong>'+fmt(agent.open)+'</strong></div>'
   ).join("")+'</div>'+
   '<p class="team-panel-note">'+(state.importedSnapshot?"Open counts are taken from the current-state ticket snapshot and grouped by pseudonymised owner and inbox. They are not time-scoped or adjusted for scheduled hours, eligibility or ticket complexity.":"Open counts are a static current-workload sample. They are not period-scaled, inbox-scoped or adjusted for scheduled hours, eligibility or ticket complexity.")+'</p>';
-}function teamEventLedger(){
+}
+function teamEventLedger(){
   const imported=Boolean(state.importedSnapshot),sourceAvailable=!imported||importedSourceAvailable("Workflow history");
   if(imported&&!sourceAvailable)return '<div class="empty-state">Workflow history was not supplied with this snapshot. No event counts are inferred.</div>';
+  if(imported){
+    const rows=state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
+      '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+    );
+    return '<div class="team-event-ledger">'+dataTable(["Event type","Inbox","Events recorded","Tickets affected"],rows)+
+      '<p class="team-panel-note">Distinct-ticket counts are shown at event-type and inbox level, exactly as supplied. The export removes ticket IDs, so records cannot be deduplicated across inboxes. Events are not member-attributed or time-scoped.</p></div>';
+  }
   const summaries=workflowSummaryRows();
   return '<div class="team-event-ledger">'+
     dataTable(["Event type","Events recorded","Unique tickets affected","Interpretation"],summaries.map(event=>
-      '<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+(imported?"Aggregate snapshot · not time-scoped":event.rate+' · sample ratio only')+'</td></tr>'
+      '<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td>'+event.rate+' · sample ratio only</td></tr>'
     ))+
-    '<p class="team-panel-note">'+(imported?"These are team-level event aggregates from the local snapshot. The source has no event timestamps or member-attributed event detail.":"These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped.")+' One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
+    '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
   '</div>';
-}function teamEvidencePanel(){
+}
+function teamEvidencePanel(){
   const items=[
     ["First response","Not available","Requires a validated first-response timestamp."],
     ["Elapsed resolution","Not available","Requires received and resolved timestamps."],
@@ -1489,7 +1510,8 @@ function renderTeam(){
       panel("Team-level workflow event ledger","Events and unique tickets affected · separate from initial allocation",teamEventLedger(),'<span class="subtle-tag">NOT MEMBER-ATTRIBUTED</span>')+
       panel("Performance measures awaiting evidence","Timing, quality and capacity measures are deliberately withheld until validated sources exist",teamEvidencePanel(),'<span class="subtle-tag">NOT AVAILABLE</span>')+
     '</div>';
-}function agentDetail(id){
+}
+function agentDetail(id){
   const agent=AGENTS.find(item=>item.id===id)||teamProfileRows().find(item=>item.id===id);
   if(!agent)return "";
   const allocation=allocationMatrix().find(row=>row.id===id);
@@ -1500,7 +1522,8 @@ function renderTeam(){
     '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+(state.importedSnapshot&&!importedSourceAvailable("Assignment history")?"Not supplied":fmt(firstAssigned))+'</strong></div><div><span>Current open workload</span><strong>'+fmt(agent.open)+'</strong></div><div><span>'+(state.importedSnapshot?"Roster information":"Shift group")+'</span><strong>'+(state.importedSnapshot?"Not supplied":esc(agent.shift))+'</strong><small>'+(state.importedSnapshot?"Shift times and eligibility are not part of this aggregate export.":"Indicative roster label; scheduled hours are not verified.")+'</small></div></div>'+
     '<div class="grid-two"><div><h3 class="mini-heading">First assignments by inbox</h3>'+barRows(folders.map(folder=>({label:folder.name,value:allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],color:folder.color})))+'</div><div class="team-private-state"><strong>Individual workflow events · Not available</strong><p>Handover, reassignment, recovery and flag events are not attributed to individual profiles in the snapshot. The aggregate event ledger is shown separately and must not be distributed across members.</p></div></div>'+
     '</section>';
-}function duration(minutes){return Math.floor(minutes/60)+"h "+String(minutes%60).padStart(2,"0")+"m";}
+}
+function duration(minutes){return Math.floor(minutes/60)+"h "+String(minutes%60).padStart(2,"0")+"m";}
 function renderMy(){
   pageContent.innerHTML=heading("PRIVATE PERFORMANCE","Your personal view is not enabled yet","Individual reporting will appear only after secure sign-in and server-enforced access permissions are in place.")+
     '<div class="team-private-state my-private-state"><span class="eyebrow">ACCESS NOT CONFIGURED</span><h2>Personal records are protected by design.</h2><p>This public demonstration does not identify the signed-in agent, expose a sample colleague profile or infer whose tickets belong to you.</p><strong>Authentication and individual permissions · Not configured</strong></div>'+
@@ -2042,7 +2065,8 @@ function renderReports(){
       '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Map tracker CSV columns, remove direct identifiers, create stable pseudonymous agent references and export aggregate reporting files.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
     '</div>'+
     panel("Current report scope","The selected inbox filter applies to this snapshot; period selection is unavailable for point-in-time aggregates",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>'+(imported?"Sanitised local snapshot":"Demonstration only")+'</strong></div></div>',"");
-}function reportCard(title,copy,tag,foot){
+}
+function reportCard(title,copy,tag,foot){
   return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="export-summary">Export ↗</button></div></article>';
 }
 function adminRoleById(id){
@@ -2203,7 +2227,8 @@ function csvDownload(filename,rows){
   const url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
   showToast(state.importedSnapshot?"Sanitised snapshot CSV exported locally.":"Sample CSV exported. It contains demonstration data only.");
-}function exportLiveQueue(){
+}
+function exportLiveQueue(){
   const rows=liveFilteredTickets();
   csvDownload("dispatcher-live-operations-sample-queue.csv",[
     ["Reference","Subject","Brand","Inbox","Owner","Age","Status","SLA"],
@@ -2219,20 +2244,24 @@ function exportTickets(){
 }
 function exportBrands(){
   csvDownload(state.importedSnapshot?"dispatcher-local-snapshot-brand-mix.csv":"dispatcher-sample-brand-mix.csv",[["Brand","Ticket records"],...brandRows().map(brand=>[brand.name,brand.value])]);
-}function exportFolders(){
+}
+function exportFolders(){
   const rows=allocationMatrix(),folders=scopeFolders();
-  csvDownload(state.importedSnapshot?"dispatcher-local-snapshot-folder-share.csv":"dispatcher-sample-folder-share.csv",[
+  const imported=Boolean(state.importedSnapshot),available=!imported||importedSourceAvailable("Assignment history");
+  csvDownload(imported?"dispatcher-local-snapshot-folder-share.csv":"dispatcher-sample-folder-share.csv",[
     ["Member reference",...folders.flatMap(folder=>[folder.name+" first assigned",folder.name+" allocation share"]), "Total first assigned"],
     ...rows.map(row=>[row.name,...folders.flatMap(folder=>{
       const index=FOLDERS.findIndex(item=>item.id===folder.id);
       const total=rows.reduce((sum,item)=>sum+(item.cells[index]||0),0);
-      return [row.cells[index]||0,((row.cells[index]||0)/Math.max(1,total)*100).toFixed(1)+"%"];
-    }),row.cells.reduce((sum,value)=>sum+value,0)])
+      return available?[row.cells[index]||0,((row.cells[index]||0)/Math.max(1,total)*100).toFixed(1)+"%"]:["Not supplied","Not supplied"];
+    }),available?row.cells.reduce((sum,value)=>sum+value,0):"Not supplied"])
   ]);
-}function exportTeam(){
+}
+function exportTeam(){
   const profiles=teamProfileRows().filter(agent=>activeSearch(agent.name));
   const folders=scopeFolders();
   const imported=Boolean(state.importedSnapshot),assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
+  const workflowAvailable=!imported||importedSourceAvailable("Workflow history");
   const events=workflowSummaryRows();
   const rows=[
     [imported?"TEAM PERFORMANCE — SANITISED SNAPSHOT":"TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
@@ -2242,16 +2271,17 @@ function exportBrands(){
     [],
     ["Member reference",...(imported?["Shift data"]:["Shift group (illustrative)"]),...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current open-work snapshot"],
     ...profiles.map(agent=>[
-      agent.name,imported?"Not supplied":agent.shift,...folders.map(folder=>agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]),
+      agent.name,imported?"Not supplied":agent.shift,...folders.map(folder=>assignmentsAvailable?agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]:"Not supplied"),
       assignmentsAvailable?agent.firstAssigned:"Not supplied",agent.open
     ]),
     [],
     ["TEAM-LEVEL WORKFLOW EVENTS — NOT MEMBER-ATTRIBUTED OR TIME-SCOPED"],
-    ["Event type","Events recorded","Unique tickets affected","Rate / interpretation"],
-    ...events.map(event=>[event.label,event.events,event.uniqueTickets,imported?"Not available":event.rate])
+    ["Event type","Events recorded","Distinct tickets affected","Rate / interpretation"],
+    ...events.map(event=>[event.label,workflowAvailable?event.events:"Not supplied",imported?"Not aggregated across inboxes":event.uniqueTickets,imported?"Not available":event.rate])
   ];
   csvDownload(imported?"dispatcher-local-snapshot-team-performance.csv":"dispatcher-sample-team-performance.csv",rows);
-}function exportConfiguration(){
+}
+function exportConfiguration(){
   const rows=[
     ["DISPATCH CONFIGURATION 2.0 — DESIGN PROPOSAL ONLY"],
     ["Status","Not configured. No rules are active and no settings are persisted."],
@@ -2337,7 +2367,8 @@ function exportSummary(){
     ["Currently unassigned",t.unassigned],
     ["Source mode",imported?"Sanitised aggregate · local browser memory":"Synthetic demonstration"]
   ]);
-}function openTicket(ref){
+}
+function openTicket(ref){
   const ticket=TICKETS.find(t=>t.ref===ref);if(!ticket)return;
   const sla=liveSla(ticket);
   const timeline=[
