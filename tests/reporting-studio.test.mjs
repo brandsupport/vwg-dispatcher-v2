@@ -150,6 +150,27 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
   assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
 });
 
+test("uses the earliest timestamped first-allocation event and de-duplicates repeats",async()=>{
+  const hooks=loadStudio();
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner",
+    "KEY-EARLIEST,Detags,Assigned,Audi,2026-11-24 08:00:00,Belal"
+  ].join("\r\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    "2026-11-24 10:30:00,AUTO_ASSIGNMENT,KEY-EARLIEST,Detags,Belal,Belal,TRUE,0,",
+    "2026-11-24 10:31:00,AUTO_ASSIGNMENT,KEY-EARLIEST,Detags,Belal,Belal,TRUE,0,",
+    "2026-11-24 11:30:00,MANUAL_ASSIGNMENT_CAPTURED,KEY-EARLIEST,Detags,Mariam,Mariam,TRUE,0,"
+  ].join("\r\n");
+  const {snapshot}=await hooks.processVwg(tickets,activity);
+  assert.equal(snapshot.tickets.overall.initially_assigned,1);
+  assert.deepEqual(snapshot.assignment_methods,{automatic:1,manual:0,other:0});
+  const agent=snapshot.allocations.find(row=>row.inbox_code==="detags"&&row.initial_assignments===1);
+  assert.ok(agent);
+  assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Assignment history").duplicate_rows,1);
+  assert.equal(snapshot.data_quality.ambiguous_initial_assignment_tickets,0);
+});
+
 test("uses explicit resolution status, resolver and timestamps for solve-time metrics",async()=>{
   const hooks=loadStudio();
   const tickets=[
