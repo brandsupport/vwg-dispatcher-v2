@@ -616,7 +616,7 @@ function validateAndSanitiseSnapshot(raw){
 function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
-async function loadLocalSnapshot(file){
+async async function loadLocalSnapshot(file){
   if(!file)return;
   if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
   const parsed=JSON.parse(await file.text());
@@ -627,12 +627,16 @@ async function loadLocalSnapshot(file){
   periodSelect.value="snapshot";
   periodSelect.disabled=true;
   periodSelect.title="This is a point-in-time snapshot. Period trends require timestamped source history.";
-  document.getElementById("datasetBadge").innerHTML="<span></span> LOCAL SNAPSHOT";
-  document.getElementById("footerNote").textContent="Sanitised aggregate snapshot · Browser memory only · Refresh clears the import";
+  const datasetBadge=document.getElementById("datasetBadge");
+  datasetBadge.innerHTML="<span></span> LOCAL SNAPSHOT";
+  datasetBadge.title="Public, unauthenticated preview. Only company-approved sanitised aggregate snapshots should be imported.";
+  document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Browser memory only · Refresh clears the import";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
   state.selectedAgent=null;
   state.memberSearch="";
+  state.search="";
+  document.getElementById("globalSearch").value="";
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
   showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
@@ -644,7 +648,9 @@ function clearLocalSnapshot(){
   periodSelect.value="month";
   periodSelect.disabled=false;
   periodSelect.title="";
-  document.getElementById("datasetBadge").innerHTML="<span></span> DEMO DATA";
+  const datasetBadge=document.getElementById("datasetBadge");
+  datasetBadge.innerHTML="<span></span> DEMO DATA";
+  datasetBadge.title="Synthetic demonstration data only.";
   document.getElementById("footerNote").textContent="Prototype preview · No Outlook or Excel connection · All figures synthetic";
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
@@ -943,6 +949,7 @@ function renderOverview(){
   pageContent.innerHTML=
     heading("MANAGEMENT PERFORMANCE",imported?"Imported snapshot overview":"Performance overview",imported?"Explore aggregate ticket, inbox, brand and first-allocation data from the sanitised local snapshot. Individual tickets and source rows are not included.":"A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual sample work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
     banner+
+    (imported?'<div class="prototype-warning"><strong>Public, unauthenticated preview.</strong> Only import company-approved sanitised aggregate snapshots on an approved device. This browser-memory workflow is not an access-control boundary.</div>':"")+
     kpiGrid([
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
