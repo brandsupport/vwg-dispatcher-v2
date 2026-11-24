@@ -546,7 +546,6 @@ async function sanitise(){
     }
     const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue;
     const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue;
-    const lifecycleAvailable=Boolean(lifecycleMapped);
     if(!brandAvailable&&mappings.tickets.brand)quality.tickets.unknown_brand+=ticketRows.length;
 
     // Event Type is the actual event name in the tracker. Assignment Flag is a
