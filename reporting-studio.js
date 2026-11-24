@@ -31,7 +31,10 @@ const SOURCE_CONFIG={
       {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
       {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
       {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
-      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]}
+      {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]},
+      {id:"resolution_status",label:"Resolution status (future tracker field)",aliases:["resolution status","resolution state","closure status"]},
+      {id:"resolved_at",label:"Resolved timestamp (future tracker field)",aliases:["resolved at uk","resolved at","closed at uk","closed at","resolution timestamp"]},
+      {id:"resolved_by",label:"Resolved by (future tracker field; exact Outlook category)",aliases:["resolved by exact","resolved by","resolver","closed by"]}
     ]
   },
   assignments:{
@@ -469,13 +472,23 @@ async function sanitise(){
       if(ticketMap.has(id)){quality.tickets.rows_skipped++;quality.tickets.duplicate_rows++;continue;}
       const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;const brandRaw=selectedValue(row,"tickets","brand");const brand=normaliseBrand(brandRaw);
       if(brand==="unclassified"&&norm(brandRaw)&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
-      const receivedRaw=selectedValue(row,"tickets","received_at");const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
+      const receivedRaw=selectedValue(row,"tickets","received_at");
+      const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
+      const receivedAtUtc=parseExplicitTimestamp(receivedRaw,"Europe/London");
       if(receivedRaw&&!receivedDate)quality.tickets.ambiguous_time++;
       if(receivedDate)dateSet.add(receivedDate);
       const owner=selectedValue(row,"tickets","current_owner");
       const ownerRef=isUnassigned(owner)?null:await rememberAgent(owner);
+      const resolutionStatusRaw=selectedValue(row,"tickets","resolution_status");
+      const resolutionStatus=norm(resolutionStatusRaw);
+      const resolvedRaw=selectedValue(row,"tickets","resolved_at");
+      const resolvedAtUtc=parseExplicitTimestamp(resolvedRaw,"Europe/London");
+      if(resolvedRaw&&!resolvedAtUtc)quality.tickets.ambiguous_time++;
+      const resolvedByRaw=selectedValue(row,"tickets","resolved_by");
+      const resolvedByRef=resolvedByRaw&&!isUnassigned(resolvedByRaw)?await rememberAgent(resolvedByRaw):null;
+      const resolved=resolutionStatusRaw?isResolved(resolutionStatus):Boolean(resolvedAtUtc);
       const ticketRef=await pseudonym(key,"ticket",ref);
-      ticketMap.set(id,{ticketRef,inbox,brand,status,resolved:isResolved(status),ownerRef,unassigned:isUnassigned(owner),receivedDate});
+      ticketMap.set(id,{ticketRef,inbox,brand,status,resolved,ownerRef,unassigned:isUnassigned(owner),receivedDate,receivedAtUtc,resolutionStatus:resolutionStatusRaw||"",resolvedAtUtc,resolvedByRef});
       quality.tickets.rows_accepted++;
     }
     const initialRows=new Map();
@@ -572,6 +585,43 @@ async function sanitise(){
     const byInbox=Object.keys(INBOXES).map(inbox_code=>({inbox_code,...inboxStats[inbox_code]}));
     const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code));
     const overall={ticket_records:ticketMap.size,initially_assigned:validInitial.size,resolved:byInbox.reduce((sum,row)=>sum+row.resolved,0),outstanding:byInbox.reduce((sum,row)=>sum+row.outstanding,0),unassigned:byInbox.reduce((sum,row)=>sum+row.unassigned,0)};
+    const resolutionRows=[];
+    const resolutionAgentMap=new Map();
+    for(const ticket of ticketMap.values()){
+      if(!ticket.resolved)continue;
+      let durationMinutes=null;
+      if(ticket.receivedAtUtc&&ticket.resolvedAtUtc){
+        const elapsed=(Date.parse(ticket.resolvedAtUtc)-Date.parse(ticket.receivedAtUtc))/60000;
+        if(Number.isFinite(elapsed)&&elapsed>=0)durationMinutes=elapsed;
+      }
+      if(durationMinutes!==null)resolutionRows.push({inbox_code:ticket.inbox,minutes:durationMinutes});
+      if(ticket.resolvedByRef){
+        const entry=resolutionAgentMap.get(ticket.resolvedByRef)||{agent_ref:ticket.resolvedByRef,resolved_tickets:0,timed_tickets:0,total_resolution_minutes:0};
+        entry.resolved_tickets++;
+        if(durationMinutes!==null){entry.timed_tickets++;entry.total_resolution_minutes+=durationMinutes;}
+        resolutionAgentMap.set(ticket.resolvedByRef,entry);
+      }
+    }
+    const summariseDurations=values=>{
+      const sorted=values.slice().sort((a,b)=>a-b);
+      const percentile=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.ceil(p*sorted.length)-1)]:null;
+      return {
+        timed_tickets:sorted.length,
+        average_minutes:sorted.length?Math.round(sorted.reduce((sum,value)=>sum+value,0)/sorted.length):null,
+        median_minutes:sorted.length?Math.round((sorted[Math.floor((sorted.length-1)/2)]+sorted[Math.ceil((sorted.length-1)/2)])/2):null,
+        p90_minutes:percentile(.9)===null?null:Math.round(percentile(.9))
+      };
+    };
+    const resolutionMetrics={
+      status_field_mapped:Boolean(mappings.tickets.resolution_status),
+      resolved_at_field_mapped:Boolean(mappings.tickets.resolved_at),
+      resolved_by_field_mapped:Boolean(mappings.tickets.resolved_by),
+      overall:summariseDurations(resolutionRows.map(row=>row.minutes)),
+      by_inbox:INBOXES&&Object.keys(INBOXES).map(inbox_code=>({
+        inbox_code,...summariseDurations(resolutionRows.filter(row=>row.inbox_code===inbox_code).map(row=>row.minutes))
+      }))
+    };
+    const resolutionByAgent=[...resolutionAgentMap.values()].sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
     const warnings=[];
     if(quality.tickets.duplicate_rows)warnings.push(quality.tickets.duplicate_rows+" duplicate ticket row(s) were skipped; only the first occurrence per ticket reference was retained.");
@@ -604,7 +654,9 @@ async function sanitise(){
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
       tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
-        resolution_tracking:ticketMap.size&&[...ticketMap.values()].some(ticket=>ticket.resolved)?"source_status_present":"not_captured",
+        resolution_tracking:mappings.tickets.resolution_status?"source_status_present":"not_captured",
+        resolution_metrics:resolutionMetrics,
+        resolution_by_agent:resolutionByAgent,
         brand_field_mapped:Boolean(mappings.tickets.brand)},
       allocations,assignment_methods:assignmentMethods,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
