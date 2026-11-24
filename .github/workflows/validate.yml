@@ -97,14 +97,20 @@ jobs:
           const studioHtml = fs.readFileSync('reporting-studio.html', 'utf8');
           const studioCss = fs.readFileSync('reporting-studio.css', 'utf8');
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
-            if (!page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) throw new Error(name + ' is missing the original glowing VW logo artwork.');
-            if (page.includes('class="vw-roundel"') || page.includes('class="brand-mark"')) throw new Error(name + ' is still using the replacement roundel or placeholder.');
+            if (!page.includes('class="brand-mark"') || !page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) {
+              throw new Error(name + ' is missing the Knowledge Base-style VW mark structure.');
+            }
+            if (page.includes('class="vw-roundel"') || page.includes('brand-symbol')) {
+              throw new Error(name + ' is still using the previous logo treatment.');
+            }
           }
-          if (!css.includes('--vw-logo: url("data:image/png;base64,') ||
-              !studioCss.includes('--vw-logo: url("data:image/png;base64,') ||
-              !css.includes('@keyframes dispatch-mark-spin') ||
-              !studioCss.includes('@keyframes dispatch-mark-spin')) {
-            throw new Error('Both standalone pages must embed and animate the same original Volkswagen logo asset.');
+          for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
+            if (!sheet.includes('--vw-logo: url("data:image/png;base64,') ||
+                !sheet.includes('.brand-mark::after') ||
+                !sheet.includes('@keyframes kb-brandmark-spin') ||
+                !sheet.includes('var(--coral)') || !sheet.includes('var(--copper)')) {
+              throw new Error(name + ' is missing the cloned Knowledge Base mark or warm Dispatcher accent treatment.');
+            }
           }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
             if (!sheet.includes('font-size: 17px !important')) throw new Error(name + ' is missing the larger base typography override.');
