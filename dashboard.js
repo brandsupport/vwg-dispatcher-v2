@@ -914,6 +914,15 @@ function overviewAllocationSummary(rows){
   }).join("")+'</div>'+
   '<p class="overview-panel-foot">Initial allocation is separate from handovers, reassignments and recoveries. Allocation volume is descriptive, not a performance ranking or proof of fairness.</p>';
 }
+function overviewIntegrationPanel(){
+  return '<div class="overview-integration-list">'+
+    healthRow("Outlook shared mailboxes","Not connected","warning","No mailbox messages are being read")+
+    healthRow("Excel dispatch tracker","Not connected","warning","No assignment records are being read or written")+
+    healthRow("Production data service","Not configured","warning","No live ticket database is connected")+
+    healthRow("Authentication and roles","Not configured","warning","This public preview is not a protected production application")+
+    healthRow("Demonstration dataset","Loaded","neutral","Synthetic records only · no operational side effects")+
+  '</div>';
+}
 function renderOverview(){
   const imported=Boolean(state.importedSnapshot);
   const t=totals(),brands=brandRows(),rows=allocationMatrix();
