@@ -2267,3 +2267,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .page-content[data-view="admin"] .admin-role-card small{font-size:10px}
   .page-content[data-view="audit"] .audit-timeline-event{min-height:52px}
 }
+
+
+/* Offline reporting studio entry point */
+.reporting-privacy-banner{display:flex;align-items:center;gap:11px;margin:-8px 0 16px;padding:12px 14px;border:1px solid rgba(91,196,171,.28);border-radius:11px;background:linear-gradient(100deg,rgba(14,55,47,.82),rgba(15,28,39,.9));color:#b9d8d1}
+.reporting-privacy-icon{display:grid;place-items:center;flex:0 0 24px;height:24px;border-radius:50%;background:#194c41;color:#9af0d8;font-weight:900}
+.reporting-privacy-banner strong,.reporting-privacy-banner span{display:block}
+.reporting-privacy-banner strong{color:#c8f7e8;font-size:10px}
+.reporting-privacy-banner span{margin-top:4px;color:#9ebbb4;font-size:9px;line-height:1.5}
+.report-studio-card{border-color:#c6e8df;background:linear-gradient(145deg,#f1fbf8,#fff)}
+.report-studio-card .report-card-icon{background:#dff5ed;color:#21856c}
+.report-studio-card h3{color:#24584c}
+.report-studio-card p{color:#6a887f}
+.report-studio-card .report-card-foot{color:#63877d}
+.report-studio-card .panel-action{display:inline-flex;align-items:center;text-decoration:none}
+@media(max-width:700px){.reporting-privacy-banner{align-items:flex-start}.report-studio-card .report-card-foot{align-items:flex-start;flex-direction:column}}
