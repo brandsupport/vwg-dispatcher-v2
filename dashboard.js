@@ -768,7 +768,7 @@ function allocationMatrix(){
       if(!agents.has(agentRef)){
         const roster=rosterByRef.get(agentRef);
         agents.set(agentRef,{
-          id:"snapshot-"+agentRef,name:agentRef,
+          id:"snapshot-"+agentRef,name:roster?(roster.agent_name||agentRef):agentRef,
           shift:roster?roster.shift_group:"Shift data not included",
           availability:roster?(roster.active_this_fortnight?"Active this fortnight":"Inactive this fortnight"):"Not supplied",
           activeThisFortnight:roster?roster.active_this_fortnight:null,
@@ -875,7 +875,9 @@ function shareMatrix(rows,full,denominatorRows){
   return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>'+(missing?'<p class="team-panel-note">Assignment history was not included in this import. First-assignment counts and shares are unavailable; current ownership is not used as a substitute.</p>':'');
 }
 function memberCell(name,shift){
-  return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
+  const clean=String(name||"Team member").trim();
+  const initials=clean.split(/\s+/).slice(0,2).map(part=>part.charAt(0)).join("").toUpperCase()||"•";
+  return '<div class="member-cell"><span class="member-avatar">'+esc(initials)+'</span><span class="member-cell-copy"><span class="member-name">'+esc(clean)+'</span><span class="member-role">'+esc(shift||"Team member")+'</span></span></div>';
 }
 function dataTable(headers,rows,empty){
   if(!rows.length)return '<div class="empty-state">'+(empty||"No records match the current filters.")+'</div>';
@@ -1744,7 +1746,7 @@ function rosterProfiles(){
     return {
       ...base,
       id:"snapshot-"+meta.agent_ref,
-      name:meta.agent_ref,
+      name:meta.agent_name||meta.agent_ref,
       shift:meta.shift_group,
       start:meta.shift_start_egypt,
       end:meta.shift_end_egypt,
@@ -1776,18 +1778,35 @@ function rosterEligibilityCells(agent){
 }
 function rosterDirectoryRows(agents){
   const imported=Boolean(state.importedSnapshot);
-  const headers=imported
-    ?["Agent reference","Shift group","Scheduled window · Egypt local","Fortnight status","Agency eligibility","Detags eligibility","Transfers eligibility","Unadopts eligibility"]
-    :["Member","Shift group","Indicative shift window · Egypt local","Availability sample","Agency","Detags","Transfers","Unadopts"];
-  return dataTable(headers,agents.map(agent=>
-    '<tr class="'+(state.selectedRosterAgent===agent.id?"selected-roster-row":"")+'">'+
-      '<td><button type="button" class="roster-member-button" data-roster-agent="'+agent.id+'" aria-pressed="'+(state.selectedRosterAgent===agent.id)+'">'+memberCell(agent.name,agent.shift+" group")+'</button></td>'+
-      '<td>'+statusPill(agent.shift)+'</td>'+
-      '<td class="roster-time-cell">'+agent.start+'–'+agent.end+'</td>'+
-      '<td>'+statusPill(agent.availability)+'</td>'+
-      (imported?FOLDERS.map(()=>'<td>'+statusPill("Not supplied")+'</td>').join(""):rosterEligibilityCells(agent))+
-    '</tr>'
-  ),imported?"No roster profiles match these filters.":"No sample profiles match these filters.");
+  if(imported){
+    return dataTable(
+      ["Colleague","Shift group","Scheduled window · Egypt local","Fortnight status","Initial assignments","Current open workload"],
+      agents.map(agent=>
+        '<tr class="'+(state.selectedRosterAgent===agent.id?"selected-roster-row":"")+'">'+
+          '<td><button type="button" class="roster-member-button" data-roster-agent="'+agent.id+'" aria-pressed="'+(state.selectedRosterAgent===agent.id)+'">'+memberCell(agent.name,agent.agent_ref||"Roster profile")+'</button></td>'+
+          '<td>'+statusPill(agent.shift)+'</td>'+
+          '<td class="roster-time-cell">'+agent.start+'–'+agent.end+'</td>'+
+          '<td>'+statusPill(agent.availability)+'</td>'+
+          '<td class="total-cell">'+fmt(agent.assigned||0)+'</td>'+
+          '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
+        '</tr>'
+      ),
+      "No roster profiles match these filters."
+    );
+  }
+  return dataTable(
+    ["Member","Shift group","Indicative shift window · Egypt local","Availability sample","Agency","Detags","Transfers","Unadopts"],
+    agents.map(agent=>
+      '<tr class="'+(state.selectedRosterAgent===agent.id?"selected-roster-row":"")+'">'+
+        '<td><button type="button" class="roster-member-button" data-roster-agent="'+agent.id+'" aria-pressed="'+(state.selectedRosterAgent===agent.id)+'">'+memberCell(agent.name,agent.shift+" group")+'</button></td>'+
+        '<td>'+statusPill(agent.shift)+'</td>'+
+        '<td class="roster-time-cell">'+agent.start+'–'+agent.end+'</td>'+
+        '<td>'+statusPill(agent.availability)+'</td>'+
+        rosterEligibilityCells(agent)+
+      '</tr>'
+    ),
+    "No sample profiles match these filters."
+  );
 }
 function rosterCoverageAgents(){
   const profiles=rosterProfiles();
@@ -1848,7 +1867,7 @@ function rosterAgentDetail(id){
   if(!agent)return "";
   const imported=Boolean(state.importedSnapshot);
   const eligible=FOLDERS.filter(folder=>(agent.eligibleFolders||[]).includes(folder.id));
-  return '<section class="panel roster-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED ROSTER PROFILE</div><h2 class="panel-title">'+agent.name+' · '+agent.shift+' group</h2><p class="panel-subtitle">'+(imported?"Pseudonymised roster reference. The original colleague name and Outlook category are not included.":"Illustrative roster profile. No real colleague record or approved shift is loaded.")+'</p></div><button type="button" class="panel-action" data-action="close-roster-agent">Close profile</button></div>'+
+  return '<section class="panel roster-agent-detail"><div class="panel-heading"><div><div class="eyebrow">'+(imported?"TEAM & SHIFTS PROFILE":"SAMPLE ROSTER PROFILE")+'</div><h2 class="panel-title">'+esc(agent.name)+' · '+agent.shift+' group</h2><p class="panel-subtitle">'+(imported?"Display name comes from Team & Shifts. The exact Outlook category is never exported.":"Illustrative roster profile. No real colleague record or approved shift is loaded.")+'</p></div><button type="button" class="panel-action" data-action="close-roster-agent">Close profile</button></div>'+
     '<div class="roster-agent-metrics"><div><span>Scheduled shift · Egypt</span><strong>'+agent.start+'–'+agent.end+'</strong><small>'+(imported?"Supplied roster hours":"Egypt local · unapproved sample")+'</small></div><div><span>Fortnight status</span><strong>'+agent.availability+'</strong><small>'+(imported?"Source roster flag":"No timestamp or live status feed")+'</small></div><div><span>Inbox eligibility</span><strong>'+(imported?"Not supplied":eligible.length+" / "+FOLDERS.length)+'</strong><small>'+(imported?"No eligibility matrix in this export":"All four inboxes in the sample policy")+'</small></div></div>'+
     (imported?"":'<div class="roster-agent-eligibility"><strong>Eligible inboxes</strong>'+eligible.map(folder=>'<span>'+folder.name+'</span>').join("")+'</div>')+
     '<p class="roster-panel-note">Changing a shift, activity flag, eligibility or rota requires authenticated permissions, a validated preview and a confirmed write to the source of truth. This preview cannot change roster records.</p>'+
