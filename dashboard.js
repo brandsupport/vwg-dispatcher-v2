@@ -1086,8 +1086,9 @@ function renderLive(){
   const available=AGENTS.filter(a=>a.availability==="Available").length;
   const owners=[...new Set(TICKETS.map(t=>t.member).filter(name=>name!=="Unassigned"))].sort();
   const brands=[...new Set(TICKETS.map(t=>t.brand))].sort();
-  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is the working view — not the portfolio performance summary.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
+  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is a sample workbench, not a live mailbox connection.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
     '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> DEMONSTRATION DATA</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Preview only</span><span><b>Last sample refresh</b> Static dataset</span></div>'+
+    (state.importedSnapshot?'<div class="prototype-warning"><strong>Separate data source.</strong> Your sanitised aggregate snapshot is loaded in Overview and the aggregate analytics screens. It contains no ticket IDs or message details, so this individual queue and its sample ticket timelines remain demonstration-only.</div>':'')+
     kpiGrid([
       kpi("Open tickets",fmt(open.length),"In the current inbox scope","◷"),
       kpi("Unassigned",fmt(unassigned),"Awaiting an initial owner","＋",null,unassigned?"warning":"positive"),
@@ -1123,8 +1124,7 @@ function renderLive(){
         healthRow("Event history","Sample records","neutral","Synthetic timeline for interface testing")+
       '</div>','<button class="panel-action" data-go="reliability">Open reliability centre ↗</button>')
     '</div>';
-}
-function ticketQueueBase(){
+}function ticketQueueBase(){
   const folderName=FOLDERS.find(folder=>folder.id===state.folder)?.name;
   return TICKETS.filter(ticket=>
     (!folderName||ticket.folder===folderName) &&
@@ -1239,12 +1239,37 @@ function ticketTelemetryCard(title,reason){
   return '<article class="metric-panel ticket-metric-unavailable"><span>'+title+'</span><strong>Not available</strong><p>'+reason+'</p><small>Requires validated event-level timestamps</small></article>';
 }
 function renderTickets(){
+  if(state.importedSnapshot){
+    const t=totals(),assignmentAvailable=importedSourceAvailable("Assignment history");
+    const inboxRows=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder).map(folder=>
+      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+fmt(folder.resolved)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
+    );
+    const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30).map(row=>
+      '<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.ticket_records)+'</td></tr>'
+    );
+    pageContent.innerHTML=heading("TICKET FLOW INTELLIGENCE","Ticket snapshot analysis","This sanitised export contains aggregate ticket state and approved categories only. It intentionally excludes ticket references, subjects, message content and individual source rows.")+
+      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(state.importedSnapshot.tickets.total)+' ticket records</span><span>Ticket-level explorer not included</span></div>'+
+      kpiGrid([
+        kpi("Ticket records",fmt(t.received),"Unique current-state records","▤"),
+        kpi("Initially assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Validated first-assignment events":"Assignment history was not supplied","↗"),
+        kpi("Resolved / closed",fmt(t.resolved),"Current state at snapshot time","✓"),
+        kpi("Outstanding",fmt(t.open),"Current open-state records","◷")
+      ])+
+      '<div class="grid-two ticket-analytics-primary">'+
+        panel("Ticket state by inbox","Current-state records from the imported aggregate",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned"],inboxRows),'<span class="subtle-tag">SNAPSHOT</span>')+
+        panel("Current ticket state","Portfolio totals · current snapshot",dataTable(["Measure","Records"],[
+          '<tr><td>Ticket records</td><td class="total-cell">'+fmt(t.received)+'</td></tr>',
+          '<tr><td>Resolved / closed</td><td>'+fmt(t.resolved)+'</td></tr>',
+          '<tr><td>Outstanding</td><td>'+fmt(t.open)+'</td></tr>',
+          '<tr><td>Currently unassigned</td><td>'+fmt(t.unassigned)+'</td></tr>'
+        ]))+
+      '</div>'+
+      panel("Received-date coverage","Records with valid UTC received dates only. Records without a trustworthy timestamp are excluded from this date list.",dates.length?dataTable(["Received date · UTC","Inbox","Ticket records"],dates):'<div class="empty-state">No valid received dates were supplied in this snapshot.</div>')+
+      '<div class="prototype-warning"><strong>Why there is no ticket explorer:</strong> the Studio removes ticket references and source rows before export. To inspect individual tickets, use the approved source system; this public dashboard does not receive or store raw ticket-level data.</div>';
+    return;
+  }
   const t=totals();
-  const base=ticketQueueBase();
-  const rows=ticketRows();
-  const brands=brandRows();
-  const ageing=ticketAgeingSummary(base);
-  const statuses=ticketStatusSummary(base);
+  const base=ticketQueueBase(),rows=ticketRows(),brands=brandRows(),ageing=ticketAgeingSummary(base),statuses=ticketStatusSummary(base);
   const owners=[...new Set(TICKETS.map(ticket=>ticket.member))].sort();
   const brandOptions=[...new Set(TICKETS.map(ticket=>ticket.brand))].sort();
   const trend=overviewTrendData(t.received,t.resolved);
@@ -1298,11 +1323,8 @@ function renderTickets(){
       '</div>'+
       '<div class="live-queue-meta"><span id="ticketQueueCount">Showing '+rows.length+' of '+base.length+' sample records</span><button type="button" class="text-action" data-action="reset-ticket-filters">Reset explorer filters</button></div>'+
       '<div id="ticketExplorerRows">'+dataTable(["Reference / subject","Brand","Inbox","Owner","Age","Priority","Status","SLA preview","Last sample event"],rows)+'</div>'+
-    '</section>'+
-    '<div class="ticket-final-note"><strong>Important:</strong> all figures and ticket records on this screen are synthetic. Sample SLA previews use illustrative age/status rules and are not approved service targets. No live ticket history, event timing, mailbox or workbook data is connected.</div>';
-}
-
-function chartPair(a,b,labels){
+    '</section>';
+}function chartPair(a,b,labels){
   const max=Math.max(...a,...b),h=115;
   return '<div class="paired-chart">'+a.map((v,i)=>'<div class="paired-col"><div class="paired-bars"><span class="paired-bar received" style="height:'+v/max*100+'%"></span><span class="paired-bar resolved" style="height:'+b[i]/max*100+'%"></span></div><small>'+labels[i]+'</small></div>').join("")+'</div>';
 }
@@ -2012,20 +2034,21 @@ function renderAudit(){
     '<div class="audit-final-note"><strong>Prototype boundary:</strong> this page does not provide a tamper-evident ledger, authenticated actor identity, persistent audit storage, real approval workflow or production event ingestion. The “append-only” label describes the model being demonstrated, not a guarantee enforced by this static public site.</div>';
 }
 function renderReports(){
+  const imported=Boolean(state.importedSnapshot);
   pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
-    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>Separate reporting from live operations</strong><span>The studio processes selected CSV files locally in your browser. It has no mailbox, Worker or D1 connection and does not upload raw files.</span></div></div>'+
+    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The aggregate snapshot is held in browser memory only; it is not uploaded or saved. Refreshing the page clears it.":"The studio processes selected CSV files locally in your browser. It has no mailbox, Worker or D1 connection and does not upload raw files.")+'</span></div></div>'+
+    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, select approved CSV exports, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. Only the aggregate JSON is read by this dashboard.</div>'+
     '<div class="report-grid">'+
-      reportCard("Daily operations report","Tickets received, assigned, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
-      reportCard("Weekly performance report","Team allocation, shift comparison, handovers, flags and resolution trends.","Weekly","CSV export ready")+
-      reportCard("Monthly management report","Brand volumes, folder share, service performance and exception trends.","Monthly","CSV export ready")+
+      reportCard("Daily operations report","Ticket records, first assignments, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
+      reportCard("Weekly performance report","Team allocation, handovers, flags and validated event summaries. Shift comparison requires rota data.","Weekly","CSV export ready")+
+      reportCard("Monthly management report","Brand volumes, folder share and current-state summaries.","Monthly","CSV export ready")+
       reportCard("Individual performance report","Private per-agent workload and resolution summary with scheduled-hour context.","Individual","Permission required")+
       reportCard("Brand volume report","Distinct ticket counts and brand share across all inboxes.","By brand","CSV export ready")+
-      reportCard("Reliability report","Assignment failures, recoveries, retries and service health.","System","CSV export ready")+
+      reportCard("Reliability report","Assignment failures, recoveries, retries and service health.","System","Sample only")+
       '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Map tracker CSV columns, remove direct identifiers, create stable pseudonymous agent references and export aggregate reporting files.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
     '</div>'+
-    panel("Current report scope","The selected global period and inbox filters apply",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>Demonstration only</strong></div></div>',"");
-}
-function reportCard(title,copy,tag,foot){
+    panel("Current report scope","The selected inbox filter applies to this snapshot; period selection is unavailable for point-in-time aggregates",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>'+(imported?"Sanitised local snapshot":"Demonstration only")+'</strong></div></div>',"");
+}function reportCard(title,copy,tag,foot){
   return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="export-summary">Export ↗</button></div></article>';
 }
 function adminRoleById(id){
