@@ -410,19 +410,19 @@ function downloadBlob(name,content,type){
 function renderSnapshot(snapshot){
   $("resultsSection").hidden=false;
   const overall=snapshot.tickets.overall;
-  $("resultScope").textContent="Snapshot generated "+snapshot.generated_at_utc+" · "+snapshot.tickets.total+" unique ticket records · aggregate output only";
+  $("resultScope").textContent="Snapshot generated "+snapshot.generated_at_utc+" · "+snapshot.tickets.total+" ticket records · pseudonymised references and colleague names included in local snapshot";
   $("kpiResults").innerHTML=[
     ["Ticket records",overall.ticket_records],
     ["Initially assigned",overall.initially_assigned],
-    ["Resolved / closed",overall.resolved],
-    ["Outstanding",overall.outstanding],
-    ["Unassigned open",overall.unassigned]
+    ["Resolved / closed",snapshot.tickets.lifecycle_available?overall.resolved:"Not recorded"],
+    ["Outstanding",snapshot.tickets.lifecycle_available?overall.outstanding:"Not recorded"],
+    ["Unassigned open",snapshot.tickets.lifecycle_available?overall.unassigned:"Not recorded"]
   ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
   $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
-  $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
-  $("dailyResults").innerHTML=buildTable(["UTC date","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
-  $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
-  $("rosterResults").innerHTML=buildTable(["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
+  $("brandResults").innerHTML=snapshot.tickets.brand_available?buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"])):'<p class="muted-cell">Brand is not a field in the current tracker export. Add an explicit Brand field before reporting brand volumes.</p>';
+  $("dailyResults").innerHTML=buildTable(["Received date · UK local","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_local||row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
+  $("agentResults").innerHTML=buildTable(["Colleague","Agent reference","Inbox","First assignments","Share","Current owner records"],snapshot.allocations.map(row=>[row.agent_name||"Name not matched",row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_owner_records??row.current_open_workload]));
+  $("rosterResults").innerHTML=buildTable(["Colleague","Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_name||"Name not matched",row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
   const warnings=snapshot.data_quality.warnings;
@@ -503,7 +503,7 @@ async function sanitise(){
       const brandRaw=selectedValue(row,"tickets","brand");
       const brand=normaliseBrand(brandRaw);
       if(brand!=="unclassified")anyBrandValue=true;
-      if(brand==="unclassified"&&norm(brandRaw)&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
+      if(brand==="unclassified"&&mappings.tickets.brand)quality.tickets.unknown_brand++;
 
       const receivedRaw=selectedValue(row,"tickets","received_at");
       const receivedDate=parseSourceCalendarDate(receivedRaw,"Europe/London");
@@ -521,22 +521,28 @@ async function sanitise(){
       const ownerInfo=await agentInfo(owner);
       const ticketRef=await pseudonym(key,"ticket",ref);
       const status=resolved?"Resolved":trackerStatus;
+      const resolvedByInfo=resolvedByRaw?await agentInfo(resolvedByRaw):null;
       const record={
-        inbox,brand,resolved:resolved&&anyLifecycleValue,ownerRef:ownerInfo?.agent_ref||null,
+        inbox,brand,resolved:resolved&&lifecycleAvailable,ownerRef:ownerInfo?.agent_ref||null,
         ownerName:ownerInfo?.agent_name||null,unassigned:isUnassigned(owner),
-        receivedDate,resolvedDate,trackerStatus,lifecycleValue
+        receivedDate,resolvedDate,trackerStatus,lifecycleValue,
+        resolvedByRef:resolvedByInfo?.agent_ref||null,resolvedByName:resolvedByInfo?.agent_name||null
       };
       ticketMap.set(id,{...record,ticketRef,rawRef:id});
       ticketRows.push({
         ticket_ref:ticketRef,inbox_code:inbox,tracker_status:status,
         brand_code:brand,owner_ref:ownerInfo?.agent_ref||null,
         owner_name:ownerInfo?.agent_name||null,
-        received_date_uk:receivedDate
+        received_date_uk:receivedDate,
+        resolved_date_uk:resolvedDate,
+        resolved_by_ref:resolvedByInfo?.agent_ref||null,
+        resolved_by_name:resolvedByInfo?.agent_name||null,
+        lifecycle_status:lifecycleValue||null
       });
       quality.tickets.rows_accepted++;
     }
     const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue;
-    const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue;
+    const lifecycleAvailable=Boolean(lifecycleMapped);
     if(!brandAvailable&&mappings.tickets.brand)quality.tickets.unknown_brand+=ticketRows.length;
 
     // Event Type is the actual event name in the tracker. Assignment Flag is a
@@ -602,7 +608,7 @@ async function sanitise(){
         else {stats.outstanding++;if(ticket.unassigned)stats.unassigned++;}
       }
       brandStats[ticket.brand]=(brandStats[ticket.brand]||0)+1;
-      if(ticket.ownerRef&&!ticket.resolved){
+      if(ticket.ownerRef){
         const workloadKey=ticket.ownerRef+"|"+ticket.inbox;
         workload.set(workloadKey,(workload.get(workloadKey)||0)+1);
       }
@@ -625,7 +631,8 @@ async function sanitise(){
         agent_ref,agent_name:roster?.agent_name||null,inbox_code,
         initial_assignments:count,
         allocation_share_pct:total?count/total*100:0,
-        current_open_workload:workload.get(group)||0
+        current_open_workload:lifecycleAvailable?(workload.get(group)||0):0,
+        current_owner_records:workload.get(group)||0
       });
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
@@ -716,10 +723,7 @@ async function sanitise(){
     if(!files.workflow)warnings.push("No Activity Log worksheet was supplied. Workflow and Activity Log metrics are unavailable.");
 
     const dateList=[...dateSet].sort();
-    const ticketRowsWithInitial=ticketRows.map(row=>{
-      const original=[...ticketMap.values()].find(ticket=>ticket.ticketRef===row.ticket_ref);
-      return row;
-    });
+    const ticketRowsWithInitial=ticketRows;
     const snapshot={
       schema_version:"dispatcher-reporting-snapshot-1",
       generated_at_utc:new Date().toISOString(),
