@@ -471,7 +471,7 @@ async function sanitise(){
       const id=norm(ref);
       if(ticketMap.has(id)){quality.tickets.rows_skipped++;quality.tickets.duplicate_rows++;continue;}
       const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;const brandRaw=selectedValue(row,"tickets","brand");const brand=normaliseBrand(brandRaw);
-      if(brand==="unclassified"&&norm(brandRaw)&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
+      if(mappings.tickets.brand&&(!norm(brandRaw)||!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw))&&brand==="unclassified"))quality.tickets.unknown_brand++;
       const receivedRaw=selectedValue(row,"tickets","received_at");
       const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
       const receivedAtUtc=parseExplicitTimestamp(receivedRaw,"Europe/London");
@@ -654,7 +654,7 @@ async function sanitise(){
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
       tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
-        resolution_tracking:mappings.tickets.resolution_status?"source_status_present":"not_captured",
+        resolution_tracking:(mappings.tickets.resolution_status||mappings.tickets.resolved_at)?"source_status_present":"not_captured",
         resolution_metrics:resolutionMetrics,
         resolution_by_agent:resolutionByAgent,
         brand_field_mapped:Boolean(mappings.tickets.brand)},
