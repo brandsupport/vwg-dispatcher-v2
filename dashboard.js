@@ -1179,7 +1179,7 @@ function renderOverview(){
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
       '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
       '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
-      '<div class="overview-metric-tile overview-metric-na"><span>AVERAGE ELAPSED RESOLUTION</span><strong>'+(imported?formatDurationMinutes(resolutionAverage):"Not available")+'</strong><small>'+(imported?(resolutionTimedCount?fmt(resolutionTimedCount)+" tickets with valid received and resolved timestamps":"No validated resolved timestamp captured"):"No validated resolution feed")+'</small></div>'+
+      '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
       trendPanel+
