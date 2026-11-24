@@ -172,7 +172,7 @@ jobs:
             if (!js.includes(text)) throw new Error('Missing dashboard category: ' + text);
           }
           if (!readme.toLowerCase().includes('first assignment') || !readme.toLowerCase().includes('first assigned to member')) throw new Error('Initial allocation-share definition is missing.');
-          for (const text of ['Import snapshot','browser memory','Live Operations remains synthetic','Use demo']) {
+          for (const text of ['Import snapshot','in memory only','ticket workbench remains synthetic-data-only','public, unauthenticated','Use demo']) {
             if (!readme.includes(text)) throw new Error('Local snapshot import boundary is missing from README: ' + text);
           }
           if (!js.includes('DEMONSTRATION DATA') || !js.includes('READ ONLY') || !js.includes('Not connected')) {
