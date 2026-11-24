@@ -1,6 +1,6 @@
-/* Local-only VWG Dispatcher reporting sanitiser.
- * No network requests, storage writes, analytics, or API calls.
- * Raw CSV rows remain in memory in this browser tab and are discarded after processing.
+/* Browser-local VWG Dispatcher reporting sanitiser.
+ * No application API calls, telemetry or storage writes. SheetJS parser code is loaded from its pinned static CDN URL.
+ * Raw workbook and CSV rows remain in this browser tab and are discarded after processing.
  */
 "use strict";
 
@@ -200,15 +200,15 @@ function updateReadyState(){
   $("sanitiseButton").disabled=errors.length>0;
   $("sanitiseButton").title=errors.join(" ");
 }
-function clearWorkbookForCsv(){
+function clearWorkbookForCsv(keepKind=""){
   workbookData=null;
-  for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";$(kind+"File").value="";$(kind+"FileMeta").textContent="No file selected";}
+  for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";if(kind!==keepKind)$(kind+"File").value="";$(kind+"FileMeta").textContent="No file selected";}
   $("workbookFile").value="";$("workbookFileMeta").textContent="No workbook selected";
   $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
   sourceMode="csv";
 }
 async function readSource(kind,file){
-  if(sourceMode!=="csv")clearWorkbookForCsv();
+  if(sourceMode!=="csv")clearWorkbookForCsv(kind);
   const text=await file.text();
   const parsed=parseCSV(text);
   files[kind]={...parsed,rowCount:parsed.records.length};
