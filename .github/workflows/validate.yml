@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - "dashboard.js"
+      - "reporting-studio.html"
+      - "reporting-studio.css"
+      - "reporting-studio.js"
+      - "examples/**"
       - "dashboard.css"
       - "index.html"
       - "README.md"
@@ -14,6 +18,10 @@ on:
   pull_request:
     paths:
       - "dashboard.js"
+      - "reporting-studio.html"
+      - "reporting-studio.css"
+      - "reporting-studio.js"
+      - "examples/**"
       - "dashboard.css"
       - "index.html"
       - "README.md"
@@ -47,6 +55,32 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Check dashboard JavaScript syntax
         run: node --check dashboard.js
+      - name: Check offline reporting studio JavaScript syntax
+        run: node --check reporting-studio.js
+      - name: Validate local-only reporting studio boundary
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const html = fs.readFileSync('reporting-studio.html', 'utf8');
+          const js = fs.readFileSync('reporting-studio.js', 'utf8');
+          const pages = fs.readFileSync('.github/workflows/pages.yml', 'utf8');
+          for (const asset of ['reporting-studio.css', 'reporting-studio.js']) {
+            if (!html.includes(asset)) throw new Error('Reporting Studio asset is not linked: ' + asset);
+            if (!pages.includes(asset)) throw new Error('GitHub Pages workflow does not publish: ' + asset);
+          }
+          for (const file of ['examples/synthetic-ticket-snapshot.csv', 'examples/synthetic-assignment-history.csv', 'examples/synthetic-workflow-history.csv']) {
+            if (!fs.existsSync(file)) throw new Error('Missing synthetic example: ' + file);
+          }
+          const outbound = /\\b(fetch|XMLHttpRequest|WebSocket|EventSource)\\b|sendBeacon|localStorage|sessionStorage|indexedDB|serviceWorker/i;
+          if (outbound.test(js)) throw new Error('Reporting Studio must not make network calls or persist source data in browser storage.');
+          for (const text of ['HMAC', 'SHA-256', 'normaliseWorkflowEvent', 'initial_assignments', 'current_open_workload']) {
+            if (!js.includes(text)) throw new Error('Reporting Studio capability or safety guard missing: ' + text);
+          }
+          if (!html.includes('Local-only processing') || !html.includes('No file is uploaded')) {
+            throw new Error('Reporting Studio privacy disclosure is missing.');
+          }
+          console.log('Reporting Studio isolation and packaging checks passed.');
+          NODE
       - name: Validate all application screens and safety labels
         run: |
           node --input-type=module <<'NODE'
