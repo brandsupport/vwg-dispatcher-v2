@@ -1670,6 +1670,7 @@ function rosterShiftSummary(agents){
     };
   });
 }
+// Imported roster identities have already been HMAC-keyed in the local Studio; never reintroduce source names here.
 function rosterProfiles(){
   if(!state.importedSnapshot)return AGENTS;
   const roster=state.importedSnapshot.team_roster||[];
