@@ -97,8 +97,17 @@ jobs:
           const studioHtml = fs.readFileSync('reporting-studio.html', 'utf8');
           const studioCss = fs.readFileSync('reporting-studio.css', 'utf8');
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
-            if (!page.includes('class="vw-roundel"')) throw new Error(name + ' is missing the Volkswagen roundel.');
-            if (name === 'Offline Studio' && page.includes('<span class="brand-mark">V</span>')) throw new Error('Offline Studio reverted to a letter placeholder.');
+            if (!page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) throw new Error(name + ' is missing the original glowing VW logo artwork.');
+            if (page.includes('class="vw-roundel"') || page.includes('class="brand-mark"')) throw new Error(name + ' is still using the replacement roundel or placeholder.');
+          }
+          if (!css.includes('--vw-logo: url("data:image/png;base64,') ||
+              !studioCss.includes('--vw-logo: url("data:image/png;base64,') ||
+              !css.includes('@keyframes dispatch-mark-spin') ||
+              !studioCss.includes('@keyframes dispatch-mark-spin')) {
+            throw new Error('Both standalone pages must embed and animate the same original Volkswagen logo asset.');
+          }
+          for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
+            if (!sheet.includes('font-size: 17px !important')) throw new Error(name + ' is missing the larger base typography override.');
           }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
             const sizes = [...sheet.matchAll(/font-size\s*:\s*([\d.]+)px/g)].map(match => Number(match[1]));
