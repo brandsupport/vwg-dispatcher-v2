@@ -598,13 +598,14 @@ async function sanitise(){
     }
 
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{
-      ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0
+      ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0,no_current_owner:0
     }]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
     const agentCounts=new Map(),workload=new Map(),ownerRecordsByAgent=new Map(),dailyMap=new Map();
     const methodStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{automatic:0,manual:0}]));
     for(const [ticketKey,ticket] of ticketMap.entries()){
       const stats=inboxStats[ticket.inbox];stats.ticket_records++;
+      if(ticket.unassigned)stats.no_current_owner++;
       if(ticket.receivedDate){
         const dailyKey=ticket.receivedDate+"|"+ticket.inbox;
         const daily=dailyMap.get(dailyKey)||{date_local:ticket.receivedDate,time_zone:"Europe/London",inbox_code:ticket.inbox,ticket_records:0};
@@ -709,7 +710,8 @@ async function sanitise(){
       initially_assigned:validInitial.size,
       resolved:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.resolved,0):0,
       outstanding:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.outstanding,0):0,
-      unassigned:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.unassigned,0):0
+      unassigned:lifecycleAvailable?byInbox.reduce((sum,row)=>sum+row.unassigned,0):0,
+      no_current_owner:byInbox.reduce((sum,row)=>sum+row.no_current_owner,0)
     };
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({
       brand_code,count:brandStats[brand_code]||0
