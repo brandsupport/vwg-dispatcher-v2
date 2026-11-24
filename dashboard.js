@@ -727,7 +727,7 @@ function allocationShareData(rows,folderIndex){
   };
 }
 function shareMatrix(rows,full,denominatorRows){
-  const folders=scopeFolders();
+  const folders=scopeFolders(),missing=state.importedSnapshot&&!importedSourceAvailable("Assignment history");
   const denominator=denominatorRows||rows;
   const shareData=folders.map(folder=>allocationShareData(denominator,FOLDERS.findIndex(item=>item.id===folder.id)));
   const totalsByFolder=shareData.map(item=>item.total);
@@ -739,15 +739,16 @@ function shareMatrix(rows,full,denominatorRows){
     const cells=folders.map((folder,index)=>{
       const fi=FOLDERS.findIndex(item=>item.id===folder.id);
       const count=row.cells[fi]||0;
+      if(missing)return '<td class="matrix-cell"><span class="matrix-share">Not supplied</span></td>';
       const allocation=shareData[index].rows.find(item=>item.id===row.id);
       const share=allocation?allocation.share:0;
       return '<td class="matrix-cell"><span class="matrix-count">'+fmt(count)+'</span><span class="matrix-share"><span class="share-mini-track"><span class="share-mini-fill" style="width:'+share+'%"></span></span>'+share.toFixed(1)+'%</span></td>';
     }).join("");
     const visibleTotal=folders.reduce((sum,folder)=>sum+(row.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0);
     const overall=totalVisible?visibleTotal/totalVisible*100:0;
-    return '<tr><td>'+memberCell(row.name,row.shift)+'</td>'+cells+'<td class="total-cell">'+fmt(visibleTotal)+'</td>'+(full?'<td class="total-cell">'+overall.toFixed(1)+'%</td><td>'+fmt(row.open)+'</td>':'')+'</tr>';
+    return '<tr><td>'+memberCell(row.name,row.shift)+'</td>'+cells+'<td class="total-cell">'+(missing?"—":fmt(visibleTotal))+'</td>'+(full?'<td class="total-cell">'+(missing?"—":overall.toFixed(1)+'%')+'</td><td>'+fmt(row.open)+'</td>':'')+'</tr>';
   }).join("")+'</tbody>';
-  return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>';
+  return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>'+(missing?'<p class="team-panel-note">Assignment history was not included in this import. First-assignment counts and shares are unavailable; current ownership is not used as a substitute.</p>':'');
 }
 function memberCell(name,shift){
   return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
@@ -863,6 +864,9 @@ function overviewTeamPanel(){
   '<p class="overview-panel-foot">'+AGENTS.length+' anonymised sample profiles · '+other+' other status · Roster figures are independent of period and inbox filters; capacity and scheduled hours are not connected.</p>';
 }
 function overviewAllocationSummary(rows){
+  if(state.importedSnapshot&&!importedSourceAvailable("Assignment history")){
+    return '<div class="empty-state">No assignment-history file was supplied. First-assignment distribution and member share are not available in this snapshot.</div>';
+  }
   const folders=scopeFolders();
   const totalsByFolder=folders.map(folder=>{
     const fi=FOLDERS.findIndex(item=>item.id===folder.id);
@@ -871,25 +875,16 @@ function overviewAllocationSummary(rows){
   const total=totalsByFolder.reduce((sum,item)=>sum+item.count,0);
   const values=rows.map(row=>folders.reduce((sum,folder)=>sum+(row.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0)).filter(Number.isFinite);
   const low=values.length?Math.min(...values):0,high=values.length?Math.max(...values):0;
-  const missing=state.importedSnapshot&&!importedSourceAvailable("Assignment history");
   return '<div class="overview-allocation-summary">'+
     '<div><strong>'+fmt(total)+'</strong><span>Initial allocations '+(state.importedSnapshot?"in imported snapshot":"in sample matrix")+'</span></div>'+
-    '<div><strong>'+(missing?"Not supplied":fmt(low)+'–'+fmt(high))+'</strong><span>Member allocation range</span></div>'+
+    '<div><strong>'+fmt(low)+'–'+fmt(high)+'</strong><span>Member allocation range</span></div>'+
     '<div><strong>'+folders.length+'</strong><span>Inboxes in selected scope</span></div>'+
   '</div>'+
   '<div class="overview-allocation-bars">'+totalsByFolder.map(item=>{
     const share=total?item.count/total*100:0;
     return '<div><span>'+esc(item.name)+'</span><b>'+fmt(item.count)+'</b><i><em style="width:'+share.toFixed(1)+'%"></em></i></div>';
   }).join("")+'</div>'+
-  '<p class="overview-panel-foot">'+(missing?"Assignment history was not supplied. No first-assignment distribution is inferred from current owners.":"Initial allocation is separate from handovers, reassignments and recoveries. Allocation volume is descriptive, not a performance ranking or proof of fairness.")+'</p>';
-}function overviewIntegrationPanel(){
-  return '<div class="overview-integration-list">'+
-    healthRow("Outlook shared mailboxes","Not connected","warning","No mailbox messages are being read")+
-    healthRow("Excel dispatch tracker","Not connected","warning","No assignment records are being read or written")+
-    healthRow("Production data service","Not configured","warning","No live ticket database is connected")+
-    healthRow("Authentication and roles","Not configured","warning","This public preview is not a protected production application")+
-    healthRow("Demonstration dataset","Loaded","neutral","Synthetic records only · no operational side effects")+
-  '</div>';
+  '<p class="overview-panel-foot">Initial allocation is separate from handovers, reassignments and recoveries. Allocation volume is descriptive, not a performance ranking or proof of fairness.</p>';
 }
 function renderOverview(){
   const imported=Boolean(state.importedSnapshot);
@@ -947,8 +942,14 @@ function overviewSnapshotTrendTable(){
     .slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30)
     .map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.ticket_records)+'</td></tr>');
   return rows.length?dataTable(["Received date · UTC","Inbox","Ticket records"],rows):'<div class="empty-state">No valid timezone-explicit received dates were supplied. No date trend is inferred.</div>';
-}function healthRow(label,value,type,note){
-  return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
+}
+function snapshotQualityPanel(){
+  if(!state.importedSnapshot)return "";
+  const rows=state.importedSnapshot.data_quality.sources.map(source=>
+    '<tr><td>'+esc(source.source)+'</td><td>'+fmt(source.rows_read)+'</td><td>'+fmt(source.rows_accepted)+'</td><td>'+fmt(source.rows_skipped)+'</td><td>'+fmt(source.duplicate_rows)+'</td><td>'+fmt(source.unknown_inbox)+'</td><td>'+fmt(source.unknown_brand)+'</td><td>'+fmt(source.unknown_status)+'</td><td>'+fmt(source.ambiguous_time)+'</td></tr>'
+  );
+  rows.push('<tr><td>Ambiguous first assignments</td><td>—</td><td>—</td><td>'+fmt(state.importedSnapshot.data_quality.ambiguous_initial_assignment_tickets)+'</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>');
+  return dataTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],rows);
 }
 function liveBaseTickets(){
   return TICKETS.filter(ticket=>{
