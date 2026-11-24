@@ -2564,49 +2564,81 @@ function refreshAuditPanels(){
 }
 function renderAudit(){
   if(state.importedSnapshot){
-    const base=(state.importedSnapshot.activity_summary||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    const allRows=Array.isArray(state.importedSnapshot.activity_rows)?state.importedSnapshot.activity_rows:[];
+    const hasDetailedRows=allRows.length>0;
+    const grouped=state.importedSnapshot.activity_summary||[];
+    const sourceRows=hasDetailedRows?allRows:grouped;
+    const base=sourceRows.filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    const eventLabel=value=>String(value||"").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
+    const personFor=row=>hasDetailedRows
+      ?(row.current_owner_name||row.original_assignee_name||"Not attributed")
+      :(row.agent_name||"Not attributed");
+    const eventDateFor=row=>hasDetailedRows
+      ?(row.event_time_egypt||row.event_date_egypt||"Date not supplied")
+      :(row.event_date_egypt||"Date not supplied");
     const types=[...new Set(base.map(row=>row.event_type))].sort();
-    const agents=[...new Set(base.map(row=>row.agent_name).filter(Boolean))].sort();
+    const people=[...new Set(base.map(personFor).filter(name=>name!=="Not attributed"))].sort();
     if(state.auditCategory!=="all"&&!types.includes(state.auditCategory))state.auditCategory="all";
-    if(state.auditActor!=="all"&&!agents.includes(state.auditActor))state.auditActor="all";
+    if(state.auditActor!=="all"&&!people.includes(state.auditActor))state.auditActor="all";
     const term=String(state.auditSearch||"").trim().toLowerCase();
-    const filtered=base.filter(row=>
-      (state.auditCategory==="all"||row.event_type===state.auditCategory)&&
-      (state.auditActor==="all"||row.agent_name===state.auditActor)&&
-      (!term||[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt].join(" ").toLowerCase().includes(term))
-    );
-    const totalEvents=filtered.reduce((sum,row)=>sum+row.event_count,0);
-    const affectedOccurrences=filtered.reduce((sum,row)=>sum+row.distinct_tickets,0);
+    const filtered=base.filter(row=>{
+      const searchable=hasDetailedRows
+        ?[row.ticket_ref,row.event_time_egypt,row.event_date_egypt,row.event_type,row.inbox_code,row.original_assignee_name,row.current_owner_name,row.original_assignee_ref,row.current_owner_ref]
+        :[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt];
+      const personMatches=hasDetailedRows
+        ?(state.auditActor==="all"||row.original_assignee_name===state.auditActor||row.current_owner_name===state.auditActor)
+        :(state.auditActor==="all"||row.agent_name===state.auditActor);
+      return (state.auditCategory==="all"||row.event_type===state.auditCategory)&&personMatches&&
+        (!term||searchable.join(" ").toLowerCase().includes(term));
+    });
+    const totalEvents=hasDetailedRows?filtered.length:filtered.reduce((sum,row)=>sum+row.event_count,0);
+    const affectedCount=hasDetailedRows?new Set(filtered.map(row=>row.ticket_ref)).size:filtered.reduce((sum,row)=>sum+row.distinct_tickets,0);
     const eventTypes=new Set(filtered.map(row=>row.event_type)).size;
-    const attributed=filtered.filter(row=>row.agent_name).reduce((sum,row)=>sum+row.event_count,0);
-    const rows=filtered.slice().sort((a,b)=>(b.event_date_egypt||"").localeCompare(a.event_date_egypt||"")||
-      a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type)).map(row=>
-      '<tr><td>'+esc(row.event_date_egypt||"Date not supplied")+'</td>'+
-      '<td><strong>'+esc(row.event_type.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase()))+'</strong></td>'+
-      '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
-      '<td>'+esc(row.agent_name||"Not attributed")+'</td>'+
-      '<td class="total-cell">'+fmt(row.event_count)+'</td>'+
-      '<td>'+fmt(row.distinct_tickets)+'</td></tr>'
-    );
-    const activityFilters='<div class="audit-filter-toolbar">'+
-      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search colleague, event, inbox or Egypt date…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+    const attributed=hasDetailedRows
+      ?filtered.filter(row=>row.original_assignee_name||row.current_owner_name).length
+      :filtered.filter(row=>row.agent_name).reduce((sum,row)=>sum+row.event_count,0);
+    const initialFlags=hasDetailedRows?filtered.filter(row=>row.first_assignment_flag===true).length:null;
+    const rows=filtered.slice().sort((a,b)=>
+      (eventDateFor(b)||"").localeCompare(eventDateFor(a)||"")||
+      a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type)
+    ).map(row=>{
+      if(hasDetailedRows){
+        return '<tr><td>'+esc(eventDateFor(row))+'</td>'+
+          '<td><strong>'+esc(eventLabel(row.event_type))+'</strong></td>'+
+          '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
+          '<td>'+esc(row.original_assignee_name||"Not recorded")+'</td>'+
+          '<td>'+esc(row.current_owner_name||"Not recorded")+'</td>'+
+          '<td>'+((row.first_assignment_flag===true)?"Yes":(row.first_assignment_flag===false?"No":"Not recorded"))+'</td>'+
+          '<td class="mono">'+esc(row.ticket_ref)+'</td></tr>';
+      }
+      return '<tr><td>'+esc(eventDateFor(row))+'</td>'+
+        '<td><strong>'+esc(eventLabel(row.event_type))+'</strong></td>'+
+        '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
+        '<td>'+esc(row.agent_name||"Not attributed")+'</td>'+
+        '<td class="total-cell">'+fmt(row.event_count)+'</td>'+
+        '<td>'+fmt(row.distinct_tickets)+'</td></tr>';
+    });
+    const filters='<div class="audit-filter-toolbar">'+
+      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search HMAC ticket ref, event, inbox, colleague or date…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
       '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditCategory">'+auditSelectOptions(types,state.auditCategory,"All event types")+'</select></label>'+
-      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditActor">'+auditSelectOptions(agents,state.auditActor,"All colleagues")+'</select></label>'+
+      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditActor">'+auditSelectOptions(people,state.auditActor,"All colleagues")+'</select></label>'+
     '</div>';
-    pageContent.innerHTML=heading("ACTIVITY LOG","Dispatcher activity","A readable summary of recognised rows from the imported Activity Log worksheet. Times are Egypt-local calendar dates; raw ticket identifiers, email subjects and notes are removed.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
-      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> IMPORTED ACTIVITY LOG · READ ONLY</span><span>'+fmt(totalEvents)+' recognised event records</span><span>Agent attribution: '+fmt(attributed)+' events</span><span>Time zone: Africa/Cairo</span></div>'+
+    pageContent.innerHTML=heading("ACTIVITY LOG","Dispatcher activity","Actual imported Activity Log entries. The event name comes from Event Type; Assignment Flag is shown separately as a TRUE/FALSE first-assignment marker. All event dates are Egypt-local.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+      '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> IMPORTED ACTIVITY LOG · READ ONLY</span><span>'+fmt(totalEvents)+' event rows</span><span>'+fmt(affectedCount)+' affected tickets</span><span>Time zone: Africa/Cairo</span></div>'+
       kpiGrid([
-        kpi("Events recorded",fmt(totalEvents),"After inbox, type and colleague filters","⌁"),
-        kpi("Event types",String(eventTypes),"Recognised dispatcher activity categories","▤"),
-        kpi("Attributed to colleague",fmt(attributed),"Matched to Team & Shifts display name","♧"),
-        kpi("Affected-ticket occurrences",fmt(affectedOccurrences),"Can overlap across event types; not globally unique","◎")
+        kpi("Events recorded",fmt(totalEvents),"Source Activity Log rows after filters","⌁"),
+        kpi("Event types",String(eventTypes),"Recognised dispatcher event categories","▤"),
+        kpi("Events linked to a named colleague",fmt(attributed),"Original assignee or current owner matches the roster","♧"),
+        kpi("First-assignment markers",hasDetailedRows?fmt(initialFlags):"Not in legacy snapshot",hasDetailedRows?"TRUE flags in filtered event rows":"Regenerate snapshot to include row-level flags","✓")
       ])+
-      '<section class="panel activity-log-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">One row per event type, inbox, colleague and Egypt-local date. Event and ticket counts are preserved separately.</p></div><span class="subtle-tag">'+filtered.length+' GROUPED ROWS</span></div>'+
-      activityFilters+
-      '<div class="audit-result-count">Showing '+filtered.length+' of '+base.length+' grouped Activity Log rows in '+esc(state.folder==="all"?"all inboxes":scopeName())+'</div>'+
-      dataTable(["Event date · Egypt","Event type","Inbox","Colleague","Events","Tickets affected"],rows,"No Activity Log records match these filters.")+
+      '<section class="panel activity-log-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">'+(hasDetailedRows?"One source event per row, including HMAC ticket reference, original assignee, current owner and first-assignment flag.":"Legacy grouped Activity Log summary; re-run the Studio to include individual sanitised event rows.")+'</p></div><span class="subtle-tag">'+filtered.length+' ROWS</span></div>'+
+      filters+
+      '<div class="audit-result-count">Showing '+filtered.length+' of '+base.length+' imported Activity Log rows in '+esc(state.folder==="all"?"all inboxes":scopeName())+'</div>'+
+      dataTable(hasDetailedRows
+        ?["Event time · Egypt","Event type","Inbox","Original assignee","Current owner","First allocation?","Pseudonymised ticket reference"]
+        :["Event date · Egypt","Event type","Inbox","Colleague","Events","Tickets affected"],rows,"No Activity Log records match these filters.")+
       '</section>'+
-      '<div class="prototype-warning"><strong>Important.</strong> This is the imported Activity Log, not a security audit ledger. `Details / Notes` and raw Email Key / ID values are deliberately excluded. Affected-ticket counts are deduplicated within each event/inbox/colleague/date group, but may overlap between groups.</div>';
+      '<div class="prototype-warning"><strong>Privacy and counting.</strong> The ticket reference is an HMAC pseudonym, not the raw Email Key / ID. `Details / Notes`, email subjects, message bodies, Outlook Entry IDs and Outlook Store IDs are excluded. Each row is one source event; repeated events for one ticket remain separate.</div>';
     return;
   }
 
@@ -2617,7 +2649,7 @@ function renderAudit(){
   const filtered=auditFilteredEvents(),stats=auditStats(base);
   if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
   const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
-  pageContent.innerHTML=heading("ACTIVITY LOG · DEMONSTRATION","Example event ledger","Synthetic examples only. Import a sanitised Activity Log snapshot to see the real dispatcher event summary.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export sample ledger</button>')+
+  pageContent.innerHTML=heading("ACTIVITY LOG · DEMONSTRATION","Example event ledger","Synthetic examples only. Import a sanitised Activity Log snapshot to see real dispatcher event records.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export sample ledger</button>')+
     '<div class="audit-demo-strip"><span><i></i> SYNTHETIC EXAMPLES · NOT FROM OUTLOOK</span><span>Events <b>Sample only</b></span><span>Approval history <b>Not supplied</b></span></div>'+
     kpiGrid([
       kpi("Sample event records",fmt(stats.eventCount),"Illustrative rows only","⌁"),
@@ -2953,17 +2985,41 @@ function exportRoster(){
 }
 function exportAuditHistory(){
   if(state.importedSnapshot){
-    const base=(state.importedSnapshot.activity_summary||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+    const detailed=Array.isArray(state.importedSnapshot.activity_rows)?state.importedSnapshot.activity_rows:[];
+    const hasDetailedRows=detailed.length>0;
+    const base=(hasDetailedRows?detailed:(state.importedSnapshot.activity_summary||[]))
+      .filter(row=>state.folder==="all"||row.inbox_code===state.folder);
     const term=String(state.auditSearch||"").trim().toLowerCase();
-    const rowsFiltered=base.filter(row=>
-      (state.auditCategory==="all"||row.event_type===state.auditCategory)&&
-      (state.auditActor==="all"||row.agent_name===state.auditActor)&&
-      (!term||[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt].join(" ").toLowerCase().includes(term))
-    );
+    const rowsFiltered=base.filter(row=>{
+      const personMatches=hasDetailedRows
+        ?(state.auditActor==="all"||row.original_assignee_name===state.auditActor||row.current_owner_name===state.auditActor)
+        :(state.auditActor==="all"||row.agent_name===state.auditActor);
+      const searchable=hasDetailedRows
+        ?[row.ticket_ref,row.event_time_egypt,row.event_type,row.inbox_code,row.original_assignee_name,row.current_owner_name]
+        :[row.agent_name,row.agent_ref,row.event_type,row.inbox_code,row.event_date_egypt];
+      return (state.auditCategory==="all"||row.event_type===state.auditCategory)&&personMatches&&
+        (!term||searchable.join(" ").toLowerCase().includes(term));
+    });
+    if(hasDetailedRows){
+      csvDownload("dispatcher-local-activity-log.csv",[
+        ["ACTIVITY LOG — SANITISED LOCAL SNAPSHOT"],
+        ["Note","Ticket references are HMAC pseudonyms. Raw Email Key / ID, Outlook IDs, subjects, bodies and Details / Notes are excluded."],
+        ["Timestamp zone","Africa/Cairo · source local date/time"],
+        [],
+        ["Event time · Egypt","Event date · Egypt","Event type","Inbox","Original assignee","Original assignee reference","Current owner","Current owner reference","First assignment flag","Pseudonymised ticket reference"],
+        ...rowsFiltered.map(row=>[
+          row.event_time_egypt||"Not recorded",row.event_date_egypt||"Not recorded",row.event_type,row.inbox_code,
+          row.original_assignee_name||"Not recorded",row.original_assignee_ref||"",
+          row.current_owner_name||"Not recorded",row.current_owner_ref||"",
+          row.first_assignment_flag===null?"Not recorded":row.first_assignment_flag?"TRUE":"FALSE",
+          row.ticket_ref
+        ])
+      ]);
+      return;
+    }
     csvDownload("dispatcher-local-activity-log-summary.csv",[
       ["ACTIVITY LOG SUMMARY — SANITISED LOCAL SNAPSHOT"],
-      ["Note","Names are from Team & Shifts. Ticket references are HMAC-pseudonymised in ticket queue data; raw Activity Log IDs, subjects and notes are not exported."],
-      ["Timestamp zone","Africa/Cairo · source local date"],
+      ["Note","Legacy grouped event summary. Regenerate from the Studio to include individual event rows."],
       [],
       ["Event date · Egypt","Event type","Inbox","Colleague","Agent reference","Events","Tickets affected"],
       ...rowsFiltered.map(row=>[row.event_date_egypt||"Date not supplied",row.event_type,row.inbox_code,row.agent_name||"Not attributed",row.agent_ref||"",row.event_count,row.distinct_tickets])
@@ -3014,12 +3070,20 @@ function openTicket(ref){
     const owner=row.owner_name||row.owner_ref||"Unassigned";
     const brandNames={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other / unclassified",unclassified:"Not recorded"};
     const brand=state.importedSnapshot.tickets.brand_available?brandNames[row.brand_code]||"Other / unclassified":"Not recorded";
+    const events=(state.importedSnapshot.activity_rows||[]).filter(event=>event.ticket_ref===ref)
+      .slice().sort((a,b)=>(a.event_time_egypt||"").localeCompare(b.event_time_egypt||""));
+    const eventTimeline=events.length
+      ?'<div class="live-detail-section"><h3>Activity Log timeline</h3><div class="modal-timeline">'+events.map(event=>
+        '<div><i></i><strong>'+esc(String(event.event_type).replaceAll("_"," "))+'</strong><small>'+esc(event.event_time_egypt||event.event_date_egypt||"Time not supplied")+' · '+esc(FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+' · '+esc(event.current_owner_name||event.original_assignee_name||"No colleague matched")+'</small></div>'
+      ).join("")+'</div></div>'
+      :'<div class="live-detail-section"><h3>Activity Log timeline</h3><p class="modal-copy">No event rows were available for this ticket in the imported snapshot.</p></div>';
     modalRoot.innerHTML='<div class="modal-backdrop" data-modal-close><section class="modal-card live-ticket-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">'+
       '<div class="modal-head"><div><span class="eyebrow">IMPORTED TICKET RECORD · READ ONLY</span><h2 id="modalTitle">'+esc(row.ticket_ref)+'</h2></div><button class="icon-button" data-modal-close aria-label="Close">×</button></div>'+
       '<p class="modal-copy">Message subject, body, customer details and raw Outlook key are not included in this sanitised view.</p>'+
       '<div class="live-detail-status">'+statusPill(row.tracker_status)+'<span class="sla-pill neutral">SLA · Not supplied</span></div>'+
       '<div class="ticket-detail-grid"><div><span>Brand</span><strong>'+esc(brand)+'</strong></div><div><span>Inbox</span><strong>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</strong></div><div><span>Current owner</span><strong>'+esc(owner)+'</strong></div><div><span>Received date · UK</span><strong>'+esc(row.received_date_uk||"Not supplied")+'</strong></div><div><span>Lifecycle status</span><strong>'+esc(row.lifecycle_status||"Not recorded")+'</strong></div><div><span>Resolved date</span><strong>'+esc(row.resolved_date_uk||"Not recorded")+'</strong></div></div>'+
-      '<div class="prototype-warning"><strong>Source boundary.</strong> This is a point-in-time workbook row, not a live Outlook message. The Activity Log is summarised separately; ticket-level event correlation is not exposed because raw ticket IDs are removed before export.</div>'+
+      eventTimeline+
+      '<div class="prototype-warning"><strong>Source boundary.</strong> This is a point-in-time workbook row, not a live Outlook message. Event correlation uses the HMAC pseudonymous ticket reference; the raw Email Key / ID is not included.</div>'+
       '</section></div>';
     return;
   }
