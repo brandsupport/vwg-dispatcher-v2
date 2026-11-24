@@ -1,6 +1,6 @@
 # VWG Dispatcher 2.0 — Backend & Database Foundation 1.0
 
-**Status: foundation code and local tests only. Not deployed. No production database, Access application, mailbox connection or real data is configured.**
+**Status: staging foundation verified; not production-ready.** The D1 database `vwg-dispatcher-staging` was created and its `foundation-0001` schema, 12 application tables, 16 indexes, two audit triggers and four inbox seed records were verified. The staging Worker `vwg-dispatcher-api-staging` has a version in Cloudflare deployment history. Cloudflare Access, role-group variables and the audit HMAC secret are not configured; protected API routes therefore remain fail-closed. No production database, live Citrix/Outlook/Excel connection or real operational data is configured.
 
 The backend is a separate Cloudflare Worker service. The existing GitHub Pages frontend remains a public synthetic-data demo and is not connected to this API.
 
@@ -82,8 +82,8 @@ To connect the staging Worker through Cloudflare Workers Builds:
 
 1. In Cloudflare, create or select the Worker named exactly `vwg-dispatcher-api-staging`.
 2. Open **Settings → Builds → Connect** and connect `brandsupport/vwg-dispatcher-v2`, branch `main`.
-3. Set **Root directory** to `backend`. Leave the build command empty. Set the deploy command to `npx wrangler deploy --config wrangler.staging.toml`.
-4. Before deploying, configure the runtime variables and secret below, and protect the Worker with Cloudflare Access.
+3. Set **Root directory** to `backend`. Leave the build command empty. The staging build was configured to use `npx wrangler versions upload --config wrangler.staging.toml`; do not change it to `wrangler deploy` without first reviewing the active rollout and completing the security gate.
+4. The current API implementation still requires Cloudflare Access for protected routes. No Access policy or role groups have been configured because the authentication design is being reconsidered. Do not connect real data or use protected routes until an approved replacement/authentication design is implemented and tested.
 
 Required runtime configuration in **Settings → Variables & Secrets**:
 
@@ -99,7 +99,7 @@ Workers Builds deploys on commits to the connected production branch. Do not con
 
 ### Staging build activation policy
 
-The staging Worker's initial Git-connected build is configured to run `npx wrangler versions upload --config wrangler.staging.toml`, not `wrangler deploy`. This uploads a version for inspection without promoting it to serve traffic. Keep this command until the staging Access application, exact role-group identifiers, and `AUDIT_ACTOR_HASH_KEY` secret have been configured and verified. Promote a version only after those checks; do not use the public GitHub Pages demo as an authenticated client.
+The Git-connected staging build was configured with `npx wrangler versions upload --config wrangler.staging.toml`. However, the Cloudflare dashboard was subsequently inspected and showed version `9f4fb56e` in the active deployment view with 100% traffic allocation and 0 requests/sec at that time. Treat the staging Worker as potentially serving traffic until its current rollout is checked in Cloudflare. Do not infer exposure or non-exposure from the command name alone, and do not promote, roll back or change traffic as part of this reporting-studio work. Protected routes remain fail-closed because the Access identity and role mappings are not configured.
 
 ## Production gate — do not skip
 
@@ -119,7 +119,7 @@ A production command sequence, after replacing the placeholder database ID and c
 - npx wrangler d1 migrations apply vwg-dispatcher-foundation --remote --config wrangler.toml
 - npx wrangler deploy --config wrangler.toml
 
-Do not run those commands against a real account until the production gate above is signed off. No Cloudflare account changes or remote migrations were performed as part of this repository change.
+Do not run those commands against a real account until the production gate above is signed off. The staging D1 schema and Worker deployment were configured separately in the Cloudflare account before this reporting-studio branch. This repository change performs no Cloudflare account changes or remote migrations.
 
 ## Operational invariants for the next stage
 
