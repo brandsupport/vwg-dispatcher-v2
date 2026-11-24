@@ -95,7 +95,7 @@ function calculateDashboardViews(snapshot,folder="all"){
 const read=path=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
 
 test("the three synthetic exports pass through Studio, Dashboard validation and every aggregate adapter",async()=>{
-  const studio=await createStudioSnapshot();
+  const studio=JSON.parse(JSON.stringify(await createStudioSnapshot()));
 
   assert.equal(studio.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(studio.tickets.total,5);
