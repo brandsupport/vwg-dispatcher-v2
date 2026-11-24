@@ -1543,8 +1543,10 @@ function ticketTelemetryCard(title,reason){
 function renderTickets(){
   if(state.importedSnapshot){
     const t=totals(),assignmentAvailable=importedSourceAvailable("Assignment history");
+    const resolutionAvailable=state.importedSnapshot.tickets.resolution_tracking==="source_status_present";
+    const resolutionSummary=state.importedSnapshot.tickets.resolution_metrics?.overall||{timed_tickets:0,average_minutes:null,median_minutes:null,p90_minutes:null};
     const inboxRows=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder).map(folder=>
-      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+fmt(folder.resolved)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
+      '<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+(assignmentAvailable?fmt(folder.assigned):"Not supplied")+'</td><td>'+(resolutionAvailable?fmt(folder.resolved):"Not tracked")+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>'
     );
     const dates=state.importedSnapshot.tickets.daily_volume.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).slice(0,30).map(row=>
       '<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.ticket_records)+'</td></tr>'
@@ -1554,19 +1556,24 @@ function renderTickets(){
       kpiGrid([
         kpi("Ticket records",fmt(t.received),"Unique current-state records","▤"),
         kpi("Initially assigned",assignmentAvailable?fmt(t.assigned):"Not supplied",assignmentAvailable?"Validated first-assignment events":"Assignment history was not supplied","↗"),
-        kpi("Resolved / closed",fmt(t.resolved),"Current state at snapshot time","✓"),
+        kpi("Resolved / closed",resolutionAvailable?fmt(t.resolved):"Not tracked",resolutionAvailable?"Explicit Resolution Status / Resolved At source fields":"The current tracker does not record ticket closure","✓"),
         kpi("Outstanding",fmt(t.open),"Current open-state records","◷")
       ])+
       '<div class="grid-two ticket-analytics-primary">'+
         panel("Ticket state by inbox","Current-state records from the imported aggregate",dataTable(["Inbox","Ticket records","First assigned","Resolved","Outstanding","Unassigned"],inboxRows),'<span class="subtle-tag">SNAPSHOT</span>')+
         panel("Current ticket state","Portfolio totals · current snapshot",dataTable(["Measure","Records"],[
           '<tr><td>Ticket records</td><td class="total-cell">'+fmt(t.received)+'</td></tr>',
-          '<tr><td>Resolved / closed</td><td>'+fmt(t.resolved)+'</td></tr>',
+          '<tr><td>Resolved / closed</td><td>'+(resolutionAvailable?fmt(t.resolved):"Not tracked")+'</td></tr>',
           '<tr><td>Outstanding</td><td>'+fmt(t.open)+'</td></tr>',
           '<tr><td>Currently unassigned</td><td>'+fmt(t.unassigned)+'</td></tr>'
         ]))+
       '</div>'+
       panel("Received-date coverage","Records with valid UTC received dates only. Records without a trustworthy timestamp are excluded from this date list.",dates.length?dataTable(["Received date · UTC","Inbox","Ticket records"],dates):'<div class="empty-state">No valid received dates were supplied in this snapshot.</div>')+
+      panel("Elapsed resolution time","Calculated from Received At (UK) and Resolved At (UK) only for records with valid explicit resolution timestamps.",resolutionSummary.timed_tickets?dataTable(["Measure","Elapsed time","Timed tickets"],[
+        '<tr><td>Average</td><td class="total-cell">'+formatDurationMinutes(resolutionSummary.average_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>',
+        '<tr><td>Median</td><td>'+formatDurationMinutes(resolutionSummary.median_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>',
+        '<tr><td>90th percentile</td><td>'+formatDurationMinutes(resolutionSummary.p90_minutes)+'</td><td>'+fmt(resolutionSummary.timed_tickets)+'</td></tr>'
+      ]):'<div class="empty-state">Elapsed solve time is not tracked in this source. The tracker must provide Resolved At (UK) in addition to Received At (UK).</div>')+
       '<div class="prototype-warning"><strong>Why there is no ticket explorer:</strong> the Studio removes ticket references and source rows before export. To inspect individual tickets, use the approved source system; this public dashboard does not receive or store raw ticket-level data.</div>';
     return;
   }
