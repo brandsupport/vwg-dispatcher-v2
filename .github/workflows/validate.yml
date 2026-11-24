@@ -61,6 +61,8 @@ jobs:
         run: node --check reporting-studio.js
       - name: Test offline reporting sanitiser
         run: node --test tests/reporting-studio.test.mjs
+      - name: Test dashboard local snapshot import validation
+        run: node --test tests/dashboard-snapshot.test.mjs
       - name: Validate local-only reporting studio boundary
         run: |
           node --input-type=module <<'NODE'
@@ -96,6 +98,17 @@ jobs:
           const readme = fs.readFileSync('README.md', 'utf8');
           const studioHtml = fs.readFileSync('reporting-studio.html', 'utf8');
           const studioCss = fs.readFileSync('reporting-studio.css', 'utf8');
+          for (const id of ['importSnapshotButton','snapshotFileInput','resetSnapshotButton','datasetBadge']) {
+            if (!html.includes('id="' + id + '"')) throw new Error('Dashboard snapshot import control is missing: ' + id);
+          }
+          for (const token of ['validateAndSanitiseSnapshot','loadLocalSnapshot','clearLocalSnapshot','dispatcher-reporting-snapshot-1','SANITISED LOCAL SNAPSHOT','snapshotQualityPanel']) {
+            if (!js.includes(token)) throw new Error('Dashboard local snapshot capability or disclosure is missing: ' + token);
+          }
+          const dashboardOutbound = /\b(fetch\s*\(|new\s+XMLHttpRequest|new\s+WebSocket|sendBeacon|localStorage\s*\.|sessionStorage\s*\.|indexedDB\s*\.)/i;
+          if (dashboardOutbound.test(js)) throw new Error('Public dashboard snapshot import must not use a network client or browser persistence.');
+          for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button']) {
+            if (!css.includes(selector)) throw new Error('Dashboard snapshot import styling is missing: ' + selector);
+          }
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
             if (!page.includes('class="brand-mark"') || !page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) {
               throw new Error(name + ' is missing the Knowledge Base-style VW mark structure.');
@@ -159,6 +172,9 @@ jobs:
             if (!js.includes(text)) throw new Error('Missing dashboard category: ' + text);
           }
           if (!readme.toLowerCase().includes('first assignment') || !readme.toLowerCase().includes('first assigned to member')) throw new Error('Initial allocation-share definition is missing.');
+          for (const text of ['Import snapshot','browser memory','Live Operations remains synthetic','Use demo']) {
+            if (!readme.includes(text)) throw new Error('Local snapshot import boundary is missing from README: ' + text);
+          }
           if (!js.includes('DEMONSTRATION DATA') || !js.includes('READ ONLY') || !js.includes('Not connected')) {
             throw new Error('Live Operations must clearly identify synthetic data and unavailable integrations.');
           }
