@@ -22,7 +22,7 @@
     <section class="intro">
       <div class="eyebrow">LOCAL REPORTING WORKSPACE</div>
       <h1>Turn tracker exports into safe management insight.</h1>
-      <p>Select approved CSV exports, map their columns, and create a pseudonymised reporting snapshot. Processing stays in this browser tab; no file is uploaded to a server.</p>
+      <p>Select approved CSV exports, map their columns, and create a pseudonymised reporting snapshot. Processing stays in this browser tab; No file is uploaded to a server.</p>
       <div class="privacy-banner" role="note">
         <span class="privacy-icon">✓</span>
         <div><strong>Local-only processing</strong><span>Raw CSV contents stay on this device. This tool has no API connection, does not call the V2 Worker, and does not save raw records to browser storage.</span></div>
@@ -78,6 +78,7 @@
       <div class="result-grid">
         <section class="result-panel"><h3>Inbox summary</h3><div id="inboxResults"></div></section>
         <section class="result-panel"><h3>Brand mix</h3><div id="brandResults"></div></section>
+        <section class="result-panel"><h3>Daily ticket records</h3><div id="dailyResults"></div><p class="table-note">Only dates parsed as date-only UTC values or timezone-explicit timestamps are included.</p></section>
         <section class="result-panel"><h3>Initial allocation by agent</h3><div id="agentResults"></div><p class="table-note">Shares use first assignments only. Handovers, reassignments and recoveries do not increase allocation share.</p></section>
         <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
       </div>
