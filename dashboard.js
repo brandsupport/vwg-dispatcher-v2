@@ -478,7 +478,7 @@ const VIEW_TITLES = {
   roster:"Roster & Coverage",
   rules:"Dispatch Configuration",
   reliability:"Reliability Centre",
-  audit:"Audit History",
+  audit:"Activity Log",
   reports:"Reports & Exports",
   admin:"Administration"
 };
