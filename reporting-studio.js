@@ -41,7 +41,7 @@ const SOURCE_CONFIG={
     title:"Assignment history export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
-      {id:"agent",label:"Owner recorded at this event",required:true,aliases:["current owner","new owner","assigned to","assignee","original assignee","agent","colleague","owner","allocated to"]},
+      {id:"agent",label:"Original assignee / first owner",required:true,aliases:["original assignee","first assignee","initial owner","current owner","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
       {id:"kind",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","assignment type","assignment kind","type"]},
       {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
@@ -53,7 +53,7 @@ const SOURCE_CONFIG={
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"event_type",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","type"]},
-      {id:"actor",label:"Colleague recorded on event",aliases:["current owner","actor","assigned to","original assignee","agent","colleague"]},
+      {id:"actor",label:"Owner recorded at this event",aliases:["current owner","owner","original assignee","actor","assigned to","agent","colleague"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
@@ -327,6 +327,8 @@ function normaliseWorkflowEvent(value){
     received:["received","ticket received","created","new mail queued"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
+    assignment_pending:["auto assignment pending verification","assignment pending verification","initial assignment pending verification"],
+    baseline_registered:["baseline registered","backlog discovery complete","baseline state registered"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
     flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending"],
@@ -360,7 +362,8 @@ function parseSourceCalendarDate(value,zone){
     if(date.getUTCFullYear()!==Number(dateMatch[1])||date.getUTCMonth()+1!==Number(dateMatch[2])||date.getUTCDate()!==Number(dateMatch[3]))return null;
     if(/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)){
       const parsed=new Date(raw);if(Number.isNaN(parsed.getTime()))return null;
-      return new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).format(parsed);
+      const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(parsed).map(part=>[part.type,part.value]));
+      return parts.year+"-"+parts.month+"-"+parts.day;
     }
     return date.toISOString().slice(0,10);
   }
@@ -417,7 +420,7 @@ function renderSnapshot(snapshot){
     ["Resolved / closed",snapshot.tickets.lifecycle_available?overall.resolved:"Not recorded"],
     ["Outstanding",snapshot.tickets.lifecycle_available?overall.outstanding:"Not recorded"],
     ["Unassigned open",snapshot.tickets.lifecycle_available?overall.unassigned:"Not recorded"]
-  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
+  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+(typeof value==="number"?value.toLocaleString("en-GB"):escapeHtml(value))+'</strong></div>').join("");
   $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
   $("brandResults").innerHTML=snapshot.tickets.brand_available?buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"])):'<p class="muted-cell">Brand is not a field in the current tracker export. Add an explicit Brand field before reporting brand volumes.</p>';
   $("dailyResults").innerHTML=buildTable(["Received date · UK local","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_local||row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
@@ -523,7 +526,7 @@ async function sanitise(){
       const status=resolved?"Resolved":trackerStatus;
       const resolvedByInfo=resolvedByRaw?await agentInfo(resolvedByRaw):null;
       const record={
-        inbox,brand,resolved:resolved&&lifecycleAvailable,ownerRef:ownerInfo?.agent_ref||null,
+        inbox,brand,resolved:resolved,ownerRef:ownerInfo?.agent_ref||null,
         ownerName:ownerInfo?.agent_name||null,unassigned:isUnassigned(owner),
         receivedDate,resolvedDate,trackerStatus,lifecycleValue,
         resolvedByRef:resolvedByInfo?.agent_ref||null,resolvedByName:resolvedByInfo?.agent_name||null
@@ -541,6 +544,7 @@ async function sanitise(){
       });
       quality.tickets.rows_accepted++;
     }
+    const lifecycleAvailable=Boolean(lifecycleMapped)&&anyLifecycleValue;
     const brandAvailable=Boolean(mappings.tickets.brand)&&anyBrandValue;
     const lifecycleAvailable=Boolean(lifecycleMapped);
     if(!brandAvailable&&mappings.tickets.brand)quality.tickets.unknown_brand+=ticketRows.length;
