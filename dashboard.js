@@ -1670,9 +1670,34 @@ function rosterShiftSummary(agents){
     };
   });
 }
+function rosterProfiles(){
+  if(!state.importedSnapshot)return AGENTS;
+  const roster=state.importedSnapshot.team_roster||[];
+  if(!roster.length)return [];
+  const matrix=allocationMatrix();
+  const byId=new Map(matrix.map(agent=>[agent.id,agent]));
+  return roster.map(meta=>{
+    const base=byId.get("snapshot-"+meta.agent_ref)||{};
+    return {
+      ...base,
+      id:"snapshot-"+meta.agent_ref,
+      name:meta.agent_ref,
+      shift:meta.shift_group,
+      start:meta.shift_start_egypt,
+      end:meta.shift_end_egypt,
+      availability:meta.active_this_fortnight?"Active this fortnight":"Inactive this fortnight",
+      activeThisFortnight:meta.active_this_fortnight,
+      eligibleFolders:[],
+      assigned:base.assigned||0,
+      open:base.open||0,
+      cells:base.cells||FOLDERS.map(()=>0)
+    };
+  });
+}
 function rosterFilteredAgents(){
   const query=String(state.rosterSearch||"").trim().toLowerCase();
-  return AGENTS.filter(agent=>
+  const profiles=rosterProfiles();
+  return profiles.filter(agent=>
     (!state.search||activeSearch(agent.name))&&
     (!query||[agent.name,agent.shift,agent.start,agent.end,agent.availability].join(" ").toLowerCase().includes(query))&&
     (state.rosterShift==="all"||agent.shift===state.rosterShift)&&
@@ -1680,36 +1705,47 @@ function rosterFilteredAgents(){
   );
 }
 function rosterEligibilityCells(agent){
+  if(state.importedSnapshot)return FOLDERS.map(()=>'<td>'+statusPill("Not supplied")+'</td>').join("");
   return FOLDERS.map(folder=>{
     const eligible=(agent.eligibleFolders||[]).includes(folder.id);
     return '<td>'+statusPill(eligible?"Eligible":"Not eligible")+'</td>';
   }).join("");
 }
 function rosterDirectoryRows(agents){
-  return dataTable(["Member","Shift group","Indicative shift window · Egypt local","Availability sample","Agency","Detags","Transfers","Unadopts"],agents.map(agent=>
+  const imported=Boolean(state.importedSnapshot);
+  const headers=imported
+    ?["Agent reference","Shift group","Scheduled window · Egypt local","Fortnight status","Agency eligibility","Detags eligibility","Transfers eligibility","Unadopts eligibility"]
+    :["Member","Shift group","Indicative shift window · Egypt local","Availability sample","Agency","Detags","Transfers","Unadopts"];
+  return dataTable(headers,agents.map(agent=>
     '<tr class="'+(state.selectedRosterAgent===agent.id?"selected-roster-row":"")+'">'+
       '<td><button type="button" class="roster-member-button" data-roster-agent="'+agent.id+'" aria-pressed="'+(state.selectedRosterAgent===agent.id)+'">'+memberCell(agent.name,agent.shift+" group")+'</button></td>'+
       '<td>'+statusPill(agent.shift)+'</td>'+
       '<td class="roster-time-cell">'+agent.start+'–'+agent.end+'</td>'+
       '<td>'+statusPill(agent.availability)+'</td>'+
-      rosterEligibilityCells(agent)+
+      (imported?FOLDERS.map(()=>'<td>'+statusPill("Not supplied")+'</td>').join(""):rosterEligibilityCells(agent))+
     '</tr>'
-  ),"No sample profiles match these filters.");
+  ),imported?"No roster profiles match these filters.":"No sample profiles match these filters.");
+}
+function rosterCoverageAgents(){
+  const profiles=rosterProfiles();
+  return state.importedSnapshot?profiles.filter(agent=>agent.activeThisFortnight===true):profiles;
 }
 function rosterCoveragePanel(){
-  const segments=coverageSegments(AGENTS);
-  if(!segments.length)return '<div class="empty-state">No valid sample shift windows are configured.</div>';
+  const agents=rosterCoverageAgents();
+  const segments=coverageSegments(agents);
+  if(!segments.length)return '<div class="empty-state">No active roster shift windows are available in this snapshot.</div>';
   const first=segments[0].start,last=segments[segments.length-1].end;
   const totalDuration=Math.max(1,last-first);
   const overlapMinutes=segments.filter(segment=>segment.early>0&&segment.late>0).reduce((sum,segment)=>sum+segment.duration,0);
-  const breaks=AGENTS.filter(agent=>agent.availability==="Break").length;
+  const inactive=state.importedSnapshot?rosterProfiles().filter(agent=>agent.activeThisFortnight===false).length:agents.filter(agent=>agent.availability==="Break").length;
   const gaps=segments.filter(segment=>segment.headcount===0).length;
+  const imported=Boolean(state.importedSnapshot);
   return '<div class="roster-coverage-summary">'+
-    '<div><span>ILLUSTRATIVE WINDOW</span><strong>'+rosterClockLabel(first)+'–'+rosterClockLabel(last)+'</strong></div>'+
+    '<div><span>'+(imported?"ACTIVE WINDOW · EGYPT":"ILLUSTRATIVE WINDOW")+'</span><strong>'+rosterClockLabel(first)+'–'+rosterClockLabel(last)+'</strong></div>'+
     '<div><span>CROSS-SHIFT OVERLAP</span><strong>'+Math.floor(overlapMinutes/60)+'h '+String(overlapMinutes%60).padStart(2,"0")+'m</strong></div>'+
-    '<div><span>UNSTAFFED SAMPLE INTERVALS</span><strong>'+gaps+' intervals</strong></div>'+
+    '<div><span>'+(imported?"INACTIVE THIS FORTNIGHT":"UNSTAFFED SAMPLE INTERVALS")+'</span><strong>'+inactive+'</strong></div>'+
   '</div>'+
-  '<div class="roster-coverage-track" role="img" aria-label="Illustrative sample shift coverage. '+segments.map(segment=>rosterClockLabel(segment.start)+" to "+rosterClockLabel(segment.end)+": "+segment.headcount+" profiles").join("; ")+'.">'+
+  '<div class="roster-coverage-track" role="img" aria-label="'+(imported?"Active fortnight shift coverage":"Illustrative sample shift coverage")+'. '+segments.map(segment=>rosterClockLabel(segment.start)+" to "+rosterClockLabel(segment.end)+": "+segment.headcount+" profiles").join("; ")+'.">'+
     segments.map(segment=>{
       const width=segment.duration/totalDuration*100;
       const kind=segment.headcount===0?"gap":segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":segment.late>0?"late":"other";
@@ -1717,80 +1753,113 @@ function rosterCoveragePanel(){
     }).join("")+
   '</div>'+
   '<div class="roster-coverage-legend">'+segments.map(segment=>
-    '<div><span class="roster-coverage-dot '+(segment.headcount===0?"gap":segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":segment.late>0?"late":"other")+'"></span><strong>'+segment.label+'</strong><span>'+rosterClockLabel(segment.start)+'–'+rosterClockLabel(segment.end)+'</span><b>'+segment.headcount+' profiles</b></div>'
+    '<div><span class="roster-coverage-dot '+(segment.headcount===0?"gap":segment.early>0&&segment.late>0?"overlap":segment.early>0?"early":segment.late>0?"late":"other")+'"></span><strong>'+segment.label+'</strong><span>'+rosterClockLabel(segment.start)+'–'+rosterClockLabel(segment.end)+'</span><b>'+segment.headcount+' '+(imported?"active colleagues":"sample profiles")+'</b></div>'
   ).join("")+'</div>'+
-  '<p class="roster-panel-note">Headcount is derived from placeholder shift windows only. '+breaks+' break snapshots have no timestamp, so they are not deducted from coverage. Empty intervals are shown as gaps, but no staffing target exists to assess sufficiency.</p>';
+  '<p class="roster-panel-note">'+(imported
+    ?"Coverage counts active roster entries only. The inactive colleague is excluded from the shift coverage timeline. This shows scheduled headcount, not live availability, breaks, inbox eligibility or capacity."
+    :"Headcount is derived from placeholder shift windows only. Untimestamped break snapshots are not deducted from coverage. Empty intervals are shown as gaps, but no staffing target exists to assess sufficiency.")+'</p>';
 }
 function rosterReadinessPanel(){
+  if(state.importedSnapshot){
+    const roster=state.importedSnapshot.team_roster||[];
+    return '<div class="health-list">'+
+      healthRow("Team & Shifts roster","Loaded","good",roster.length+" pseudonymised roster references included")+
+      healthRow("Shift groups and Egypt-local times","Loaded","good","Early / Late groups and scheduled start/end times are available")+
+      healthRow("Fortnight activity","Loaded","good",roster.filter(agent=>agent.active_this_fortnight).length+" active · "+roster.filter(agent=>!agent.active_this_fortnight).length+" inactive")+
+      healthRow("Inbox eligibility","Not supplied","warning","The roster export does not define per-inbox eligibility")+
+      healthRow("Live availability and breaks","Not connected","warning","No timestamped break, absence or availability events are included")+
+      healthRow("Minimum staffing targets","Not configured","neutral","No approved minimum headcount by time or inbox is included")+
+      healthRow("Shift timezone","Egypt local","neutral","UK mailbox timestamps remain a separate timezone")+
+    '</div>';
+  }
   return '<div class="health-list">'+
     healthRow("Approved fortnightly roster","Not connected","warning","No approved rota source is loaded")+
     healthRow("Minimum staffing targets","Not configured","warning","No required headcount by time or inbox has been approved")+
-    healthRow("Inbox eligibility source","Illustrative only","neutral","The sample model marks all profiles eligible for all four inboxes")+
+    healthRow("Inbox eligibility source","Illustrative only","neutral","The sample model marks each profile eligible for all four inboxes")+
     healthRow("Availability timestamps","Not connected","warning","Break and availability states cannot be placed on a live timeline")+
     healthRow("Shift timezone","Egypt local sample","neutral","UK mailbox timestamps remain a separate timezone")+
   '</div>';
 }
 function rosterAgentDetail(id){
-  const agent=AGENTS.find(item=>item.id===id);
+  const agent=rosterProfiles().find(item=>item.id===id);
   if(!agent)return "";
+  const imported=Boolean(state.importedSnapshot);
   const eligible=FOLDERS.filter(folder=>(agent.eligibleFolders||[]).includes(folder.id));
-  return '<section class="panel roster-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED ROSTER PROFILE</div><h2 class="panel-title">'+agent.name+' · '+agent.shift+' group</h2><p class="panel-subtitle">Illustrative roster profile. No real colleague record or approved shift is loaded.</p></div><button type="button" class="panel-action" data-action="close-roster-agent">Close profile</button></div>'+
-    '<div class="roster-agent-metrics"><div><span>Indicative shift window</span><strong>'+agent.start+'–'+agent.end+'</strong><small>Egypt local · unapproved sample</small></div><div><span>Availability sample</span><strong>'+agent.availability+'</strong><small>No timestamp or live status feed</small></div><div><span>Inbox eligibility</span><strong>'+eligible.length+' / '+FOLDERS.length+'</strong><small>All four inboxes in the sample policy</small></div></div>'+
-    '<div class="roster-agent-eligibility"><strong>Eligible inboxes</strong>'+eligible.map(folder=>'<span>'+folder.name+'</span>').join("")+'</div>'+
-    '<p class="roster-panel-note">Changing a shift, break, eligibility or rota requires authenticated permissions, a validated preview and a confirmed write to the source of truth. This preview cannot change roster records.</p>'+
+  return '<section class="panel roster-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED ROSTER PROFILE</div><h2 class="panel-title">'+agent.name+' · '+agent.shift+' group</h2><p class="panel-subtitle">'+(imported?"Pseudonymised roster reference. The original colleague name and Outlook category are not included.":"Illustrative roster profile. No real colleague record or approved shift is loaded.")+'</p></div><button type="button" class="panel-action" data-action="close-roster-agent">Close profile</button></div>'+
+    '<div class="roster-agent-metrics"><div><span>Scheduled shift · Egypt</span><strong>'+agent.start+'–'+agent.end+'</strong><small>'+(imported?"Supplied roster hours":"Egypt local · unapproved sample")+'</small></div><div><span>Fortnight status</span><strong>'+agent.availability+'</strong><small>'+(imported?"Source roster flag":"No timestamp or live status feed")+'</small></div><div><span>Inbox eligibility</span><strong>'+(imported?"Not supplied":eligible.length+" / "+FOLDERS.length)+'</strong><small>'+(imported?"No eligibility matrix in this export":"All four inboxes in the sample policy")+'</small></div></div>'+
+    (imported?"":'<div class="roster-agent-eligibility"><strong>Eligible inboxes</strong>'+eligible.map(folder=>'<span>'+folder.name+'</span>').join("")+'</div>')+
+    '<p class="roster-panel-note">Changing a shift, activity flag, eligibility or rota requires authenticated permissions, a validated preview and a confirmed write to the source of truth. This preview cannot change roster records.</p>'+
     '</section>';
 }
 function renderRoster(){
+  const imported=Boolean(state.importedSnapshot);
+  const allProfiles=rosterProfiles();
   const profiles=rosterFilteredAgents();
   if(state.selectedRosterAgent&&!profiles.some(agent=>agent.id===state.selectedRosterAgent))state.selectedRosterAgent=null;
-  const shifts=rosterShiftSummary(profiles);
+  const activeProfiles=allProfiles.filter(agent=>!imported||agent.activeThisFortnight===true);
+  const shifts=rosterShiftSummary(activeProfiles);
   const early=shifts.find(item=>item.shift==="Early");
   const late=shifts.find(item=>item.shift==="Late");
-  const eligibilityPairs=profiles.reduce((sum,agent)=>sum+(agent.eligibleFolders||[]).length,0);
-  const totalPairs=profiles.length*FOLDERS.length;
-  const breaks=profiles.filter(agent=>agent.availability==="Break").length;
-  const available=profiles.filter(agent=>agent.availability==="Available").length;
-  const overlapMinutes=coverageSegments(AGENTS).filter(segment=>segment.early>0&&segment.late>0).reduce((sum,segment)=>sum+segment.duration,0);
+  const overlapMinutes=coverageSegments(activeProfiles).filter(segment=>segment.early>0&&segment.late>0).reduce((sum,segment)=>sum+segment.duration,0);
   const overlapLabel=Math.floor(overlapMinutes/60)+"h "+String(overlapMinutes%60).padStart(2,"0")+"m";
+  const activeCount=imported?activeProfiles.length:allProfiles.length;
+  const inactiveCount=imported?allProfiles.length-activeCount:0;
+  const availabilityOptions=imported
+    ?'<option value="all">All statuses</option><option value="Active this fortnight" '+(state.rosterAvailability==="Active this fortnight"?"selected":"")+'>Active this fortnight</option><option value="Inactive this fortnight" '+(state.rosterAvailability==="Inactive this fortnight"?"selected":"")+'>Inactive this fortnight</option>'
+    :'<option value="all">All states</option><option value="Available" '+(state.rosterAvailability==="Available"?"selected":"")+'>Available</option><option value="Break" '+(state.rosterAvailability==="Break"?"selected":"")+'>Break</option>';
+  const directoryStatus=imported
+    ?'Showing '+profiles.length+' of '+allProfiles.length+' pseudonymised profiles · '+activeCount+' active · '+inactiveCount+' inactive'
+    :'Showing '+profiles.length+' of '+allProfiles.length+' sample profiles';
+  const eligibilityPanel=imported
+    ?panel("Inbox eligibility","Not supplied by the Team & Shifts export",'<div class="empty-state">The roster provides shift group, scheduled hours and active-fortnight status only. Per-inbox eligibility is not inferred.</div>','<span class="subtle-tag">NOT SUPPLIED</span>')
+    :panel("Inbox eligibility matrix","Four-inbox sample policy; no per-agent exclusions configured",dataTable(["Inbox","Eligible profiles","Total profiles","Policy state"],FOLDERS.map(folder=>{
+      const count=profiles.filter(agent=>(agent.eligibleFolders||[]).includes(folder.id)).length;
+      return '<tr><td>'+folder.name+'</td><td class="total-cell">'+count+'</td><td>'+profiles.length+'</td><td>'+statusPill("Illustrative")+'</td></tr>';
+    })),'<span class="subtle-tag">'+profiles.reduce((sum,agent)=>sum+(agent.eligibleFolders||[]).length,0)+' / '+(profiles.length*FOLDERS.length)+' ELIGIBLE PAIRS IN VIEW</span>');
+  if(imported&&!allProfiles.length){
+    pageContent.innerHTML=heading("ROSTER & COVERAGE INTELLIGENCE","No roster included in this snapshot","Import a sanitised reporting snapshot that includes the optional Team & Shifts CSV to view real shift-group and coverage totals.")+
+      '<div class="empty-state">No sample roster is substituted when an imported snapshot omits the roster.</div>';
+    return;
+  }
   pageContent.innerHTML=
-    heading("ROSTER & COVERAGE INTELLIGENCE","Know who is planned — and where shifts overlap.","Explore anonymised shift groups, inbox eligibility and derived sample coverage without presenting placeholder hours as an approved rota.",'<button class="btn btn-secondary" data-action="export-roster">↓ Export roster & coverage</button>')+
-    '<div class="roster-demo-strip"><span><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Shift windows are illustrative</span><span>Approved fortnightly rota <b>Not connected</b></span><span>Availability feed <b>Not connected</b></span></div>'+
+    heading("ROSTER & COVERAGE INTELLIGENCE","Know who is planned — and where shifts overlap.",imported?"Review the imported fortnightly roster, active Early/Late coverage and Egypt-local shift windows. Names and Outlook categories remain pseudonymised.":"Explore anonymised shift groups, inbox eligibility and derived sample coverage without presenting placeholder hours as an approved rota.",'<button class="btn btn-secondary" data-action="export-roster">↓ Export roster & coverage</button>')+
+    '<div class="roster-demo-strip '+(imported?"local-snapshot-strip":"")+'"><span><i></i> '+(imported?"SANITISED SNAPSHOT · READ ONLY":"DEMONSTRATION DATA · READ ONLY")+'</span><span>'+(imported?"Roster supplied for this fortnight":"Shift windows are illustrative")+'</span><span>Approved rota source <b>'+(imported?"Imported snapshot":"Not connected")+'</b></span><span>Live availability <b>Not connected</b></span></div>'+
     kpiGrid([
-      kpi("Profiles in view",String(profiles.length),"Anonymised sample profiles · filters apply","♧"),
-      kpi("Early shift group",String(early.count),"Indicative window "+(early.start===null?"—":rosterClockLabel(early.start)+"–"+rosterClockLabel(early.end)),"☼"),
-      kpi("Late shift group",String(late.count),"Indicative window "+(late.start===null?"—":rosterClockLabel(late.start)+"–"+rosterClockLabel(late.end)),"☾"),
-      kpi("Cross-shift overlap",overlapLabel,"Derived from all sample shift windows · not live coverage","⇄")
+      kpi("Roster profiles",String(profiles.length),imported?"Anonymised roster references · filters apply":"Anonymised sample profiles · filters apply","♧"),
+      kpi("Active Early",String(early.count),imported?"10:00–19:00 Egypt":"Indicative window "+(early.start===null?"—":rosterClockLabel(early.start)+"–"+rosterClockLabel(early.end)),"☼"),
+      kpi("Active Late",String(late.count),imported?"11:00–20:00 Egypt":"Indicative window "+(late.start===null?"—":rosterClockLabel(late.start)+"–"+rosterClockLabel(late.end)),"☾"),
+      kpi(imported?"Inactive this fortnight":"Cross-shift overlap",imported?String(inactiveCount):overlapLabel,imported?"Retained in the roster but excluded from coverage": "Derived from all sample shift windows · not live coverage","⇄")
     ])+
-    '<div class="roster-scope-note"><strong>Interpretation:</strong> shift windows are sample Egypt-local placeholders, not confirmed scheduled hours. UK mailbox time is separate. Availability values have no timestamps, so break states are not deducted from the coverage timeline. No minimum staffing requirement or coverage target is configured.</div>'+
+    '<div class="roster-scope-note"><strong>Interpretation:</strong> '+(imported
+      ?"Coverage is calculated from active-fortnight roster entries only. It describes scheduled headcount, not live availability, breaks, inbox eligibility or capacity. The source does not supply absence dates or minimum staffing targets. Egypt-local shifts remain separate from UK mailbox timestamps."
+      :"Shift windows are sample Egypt-local placeholders, not confirmed scheduled hours. UK mailbox time is separate. Availability values have no timestamps, so break states are not deducted from the coverage timeline. No minimum staffing requirement or coverage target is configured.")+'</div>'+
     '<div class="grid-two roster-primary-grid">'+
-      panel("Shift overlap map","Headcount is calculated from the sample start and end times",rosterCoveragePanel(),'<span class="subtle-tag">ILLUSTRATIVE WINDOWS</span>')+
-      panel("Roster data readiness","What still needs a trusted source before operational use",rosterReadinessPanel(),'<span class="subtle-tag">NOT CONNECTED</span>')+
+      panel("Shift coverage map",imported?"Active roster headcount by Egypt-local scheduled interval":"Headcount is calculated from the sample start and end times",rosterCoveragePanel(),'<span class="subtle-tag">'+(imported?"ACTIVE ROSTER":"ILLUSTRATIVE WINDOWS")+'</span>')+
+      panel("Roster data readiness","Source fields and outstanding coverage controls",rosterReadinessPanel(),'<span class="subtle-tag">'+(imported?"ROSTER LOADED":"NOT CONNECTED")+'</span>')+
     '</div>'+
-    '<div class="section-heading roster-section-heading"><div><h2>Roster directory & inbox eligibility</h2><p>Search and filter anonymised profiles. Select a member to inspect the sample shift and eligible inboxes.</p></div><span class="subtle-tag">NO LIVE EDITING</span></div>'+
+    '<div class="section-heading roster-section-heading"><div><h2>Roster directory'+(imported?" · pseudonymised references":" & inbox eligibility")+'</h2><p>'+ (imported?"Search and filter the imported roster by shift and fortnight status.":"Search and filter anonymised sample profiles. Select a member to inspect the sample shift and eligible inboxes.")+'</p></div><span class="subtle-tag">NO LIVE EDITING</span></div>'+
     '<section class="panel roster-directory-panel">'+
       '<div class="roster-filter-toolbar">'+
-        '<label class="live-queue-search"><span>⌕</span><input type="search" data-roster-search value="'+esc(state.rosterSearch)+'" placeholder="Search member or shift…" autocomplete="off" aria-label="Search roster"></label>'+
+        '<label class="live-queue-search"><span>⌕</span><input type="search" data-roster-search value="'+esc(state.rosterSearch)+'" placeholder="Search agent reference or shift…" autocomplete="off" aria-label="Search roster"></label>'+
         '<label><span class="live-filter-label">SHIFT GROUP</span><select class="live-select" data-roster-filter="rosterShift"><option value="all">All shifts</option><option value="Early" '+(state.rosterShift==="Early"?"selected":"")+'>Early</option><option value="Late" '+(state.rosterShift==="Late"?"selected":"")+'>Late</option></select></label>'+
-        '<label><span class="live-filter-label">AVAILABILITY SNAPSHOT</span><select class="live-select" data-roster-filter="rosterAvailability"><option value="all">All states</option><option value="Available" '+(state.rosterAvailability==="Available"?"selected":"")+'>Available</option><option value="Break" '+(state.rosterAvailability==="Break"?"selected":"")+'>Break</option></select></label>'+
+        '<label><span class="live-filter-label">'+(imported?"FORTNIGHT STATUS":"AVAILABILITY SNAPSHOT")+'</span><select class="live-select" data-roster-filter="rosterAvailability">'+availabilityOptions+'</select></label>'+
       '</div>'+
-      '<div class="live-queue-meta"><span id="rosterDirectoryCount">Showing '+profiles.length+' of '+AGENTS.length+' sample profiles · '+available+' available snapshots · '+breaks+' break snapshots</span><button type="button" class="text-action" data-action="reset-roster-filters">Reset filters</button></div>'+
+      '<div class="live-queue-meta"><span id="rosterDirectoryCount">'+directoryStatus+'</span><button type="button" class="text-action" data-action="reset-roster-filters">Reset filters</button></div>'+
       '<div id="rosterDirectoryRows">'+rosterDirectoryRows(profiles)+'</div>'+
     '</section>'+
     '<div id="rosterAgentDetail">'+(state.selectedRosterAgent?rosterAgentDetail(state.selectedRosterAgent):'')+'</div>'+
     '<div class="grid-two roster-secondary-grid">'+
-      panel("Inbox eligibility matrix","Four-inbox sample policy; no per-agent exclusions configured",dataTable(["Inbox","Eligible profiles","Total profiles","Policy state"],FOLDERS.map(folder=>{
-        const count=profiles.filter(agent=>(agent.eligibleFolders||[]).includes(folder.id)).length;
-        return '<tr><td>'+folder.name+'</td><td class="total-cell">'+count+'</td><td>'+profiles.length+'</td><td>'+statusPill("Illustrative")+'</td></tr>';
-      })),'<span class="subtle-tag">'+eligibilityPairs+' / '+totalPairs+' ELIGIBLE PAIRS IN VIEW</span>')+
-      panel("Coverage guardrails","Checks that cannot be completed without approved operational rules",'<div class="roster-guardrail-list">'+
-        '<div><strong>Scheduled hours</strong>'+statusPill("Unverified")+'<small>Sample windows only</small></div>'+
-        '<div><strong>Minimum headcount by interval</strong>'+statusPill("Not configured")+'<small>No target to compare against</small></div>'+
+      eligibilityPanel+
+      panel("Coverage guardrails","Controls not included in the current roster export",'<div class="roster-guardrail-list">'+
+        '<div><strong>Scheduled shift hours</strong>'+statusPill(imported?"Supplied":"Unverified")+'<small>'+(imported?"Egypt-local roster values":"Sample windows only")+'</small></div>'+
+        '<div><strong>Minimum headcount by interval</strong>'+statusPill("Not configured")+'<small>No approved target to compare against</small></div>'+
         '<div><strong>Break and absence cover</strong>'+statusPill("Not connected")+'<small>No timestamped availability feed</small></div>'+
-        '<div><strong>Fortnightly rotation</strong>'+statusPill("Not connected")+'<small>No approved Week A / Week B source</small></div>'+
-      '</div>','<span class="subtle-tag">NO FALSE GAP ALERTS</span>')+
+        '<div><strong>Inbox eligibility</strong>'+statusPill(imported?"Not supplied":"Illustrative")+'<small>'+(imported?"Requires a separate approved eligibility source":"Sample policy only")+'</small></div>'+
+      '</div>','<span class="subtle-tag">COVERAGE LIMITS</span>')+
     '</div>'+
-    '<div class="roster-final-note"><strong>Before this becomes operational:</strong> load the approved fortnightly rota, define minimum cover by time and inbox, connect timestamped availability, validate inbox eligibility and add authenticated preview/approval/write controls. This screen does not change the Outlook dispatcher or Excel tracker.</div>';
+    '<div class="roster-final-note"><strong>Reporting boundary:</strong> this imported roster updates the read-only reporting view only. It does not change Outlook assignments, the workbook or dispatcher eligibility. Authenticated approval and a validated write path are not configured.</div>';
 }
+
 function configurationPreviewRows(folderId,weightPct){
   const folder=FOLDERS.find(item=>item.id===folderId);
   if(!folder)return [];
