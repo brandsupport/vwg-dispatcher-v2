@@ -709,6 +709,33 @@ function validateAndSanitiseSnapshot(raw){
     }
   }
 
+  const ticketRefSet=new Set(ticketRows.map(row=>row.ticket_ref));
+  const activityRows=(raw.activity_rows||[]).map(row=>{
+    if(!isObject(row)||!/^Ref-[A-F0-9]{10}$/.test(String(row.ticket_ref||""))||!ticketRefSet.has(row.ticket_ref)||
+      !eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code)){
+      fail("An Activity Log entry contains an invalid pseudonymous ticket reference, event type or inbox.");
+    }
+    if(row.time_zone!=="Africa/Cairo")fail("Activity Log event timestamps must identify the Africa/Cairo timezone.");
+    const eventTime=row.event_time_egypt===null||row.event_time_egypt===undefined?null:String(row.event_time_egypt);
+    if(eventTime&&eventTime.length>50)fail("An Activity Log timestamp is too long.");
+    const eventDate=row.event_date_egypt===null||row.event_date_egypt===undefined?null:String(row.event_date_egypt);
+    if(eventDate&&!validDate(eventDate))fail("An Activity Log event date is invalid.");
+    const originalRef=row.original_assignee_ref===null||row.original_assignee_ref===undefined?null:String(row.original_assignee_ref);
+    const currentRef=row.current_owner_ref===null||row.current_owner_ref===undefined?null:String(row.current_owner_ref);
+    if(originalRef&&!/^Agent-[A-F0-9]{10}$/.test(originalRef))fail("An Activity Log original-assignee reference is invalid.");
+    if(currentRef&&!/^Agent-[A-F0-9]{10}$/.test(currentRef))fail("An Activity Log current-owner reference is invalid.");
+    if(row.first_assignment_flag!==null&&row.first_assignment_flag!==undefined&&typeof row.first_assignment_flag!=="boolean"){
+      fail("An Activity Log first-assignment flag must be Boolean or unavailable.");
+    }
+    return {
+      ticket_ref:row.ticket_ref,event_time_egypt:eventTime,event_date_egypt:eventDate,
+      event_type:row.event_type,inbox_code:row.inbox_code,
+      original_assignee_ref:originalRef,original_assignee_name:cleanName(row.original_assignee_name),
+      current_owner_ref:currentRef,current_owner_name:cleanName(row.current_owner_name),
+      first_assignment_flag:row.first_assignment_flag??null,time_zone:"Africa/Cairo"
+    };
+  });
+  if(activityRows.length>150000)fail("The Activity Log contains too many event rows for this local dashboard import.");
   const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
@@ -727,7 +754,7 @@ function validateAndSanitiseSnapshot(raw){
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
     tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,brand_available:brandAvailable,lifecycle_available:lifecycleAvailable,ticket_rows:ticketRows},
-    allocations,team_roster:teamRoster,workflow,assignment_methods:assignmentMethods,activity_summary:activitySummary,
+    allocations,team_roster:teamRoster,workflow,assignment_methods:assignmentMethods,activity_summary:activitySummary,activity_rows:activityRows,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
