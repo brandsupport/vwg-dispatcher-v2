@@ -27,6 +27,9 @@ function loadStudio(){
       normaliseInbox,
       normaliseWorkflowEvent,
       parseExplicitDate,
+      parseExplicitTimestamp,
+      autoMap,
+      sourceConfig:SOURCE_CONFIG,
       async process(csvs) {
         const ticketData=parseCSV(csvs.tickets);
         const assignmentData=parseCSV(csvs.assignments);
@@ -40,6 +43,19 @@ function loadStudio(){
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
         return currentSnapshot;
+      },
+      async processVwg(ticketCsv,activityCsv) {
+        const ticketData=parseCSV(ticketCsv);
+        const activityData=parseCSV(activityCsv);
+        files.tickets={...ticketData,rowCount:ticketData.records.length};
+        files.assignments={...activityData,rowCount:activityData.records.length};
+        files.workflow={...activityData,rowCount:activityData.records.length};
+        mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",received_at:"Received At (UK)",current_owner:"Current Owner"};
+        mappings.assignments={ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"};
+        mappings.workflow={ticket_ref:"Email Key / ID",event_type:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",original_assignee:"Original Assignee",current_owner:"Current Owner",assignment_flag:"Assignment Flag",incident_count:"Incident Count"};
+        document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        await sanitise();
+        return {snapshot:currentSnapshot,privateLookup:privateAgentLookup};
       }
     };
   `;
@@ -97,6 +113,41 @@ test("synthetic exports produce reconciled aggregate metrics without raw identif
     assert.equal(exported.includes(raw),false,"raw value leaked into snapshot: "+raw);
   }
   assert.ok(snapshot.allocations.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
+});
+
+test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",async()=>{
+  const hooks=loadStudio();
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner",
+    "KEY-001,Detags,Assigned,Audi,2026-11-24 08:30:00,Belal",
+    "KEY-002,Agency Detags,Assigned,Volkswagen,2026-11-24 09:00:00,Balqees"
+  ].join("\\r\\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    "2026-11-24 10:30:00,AUTO_ASSIGNMENT,KEY-001,Detags,Belal,Belal,TRUE,0,",
+    "2026-11-24 11:00:00,MANUAL_ASSIGNMENT_CAPTURED,KEY-002,Agency Detags,Balqees,Balqees,TRUE,0,",
+    "2026-11-24 11:30:00,HANDOVER,KEY-001,Detags,Belal,Mariam,TRUE,0,",
+    "2026-11-24 12:00:00,CATEGORY_REMOVAL_DETECTED,KEY-001,Detags,Belal,Mariam,TRUE,1,",
+    "2026-11-24 12:30:00,CATEGORY_RESTORED,KEY-001,Detags,Belal,Mariam,TRUE,1,"
+  ].join("\\r\\n");
+  const result=await hooks.processVwg(tickets,activity);
+  const snapshot=result.snapshot;
+  assert.equal(hooks.autoMap(["Event Type","Assignment Flag"],hooks.sourceConfig.assignments.fields.find(field=>field.id==="kind").aliases),"Event Type");
+  assert.equal(hooks.autoMap(["Event Type","Assignment Flag"],hooks.sourceConfig.workflow.fields.find(field=>field.id==="event_type").aliases),"Event Type");
+  assert.equal(snapshot.tickets.total,2);
+  assert.equal(snapshot.tickets.overall.initially_assigned,2);
+  assert.deepEqual(snapshot.assignment_methods,{automatic:1,manual:1,other:0});
+  assert.equal(snapshot.workflow.find(row=>row.event_type==="handover").event_count,1);
+  assert.equal(snapshot.workflow.find(row=>row.event_type==="flagged").event_count,1);
+  assert.equal(snapshot.workflow.find(row=>row.event_type==="recovery_restored").event_count,1);
+  assert.equal(snapshot.activity_log.length,5);
+  assert.ok(snapshot.activity_log.every(row=>row.event_time_utc&&/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
+  assert.ok(snapshot.activity_log.every(row=>row.assignment_flag===true));
+  const json=JSON.stringify(snapshot);
+  for(const raw of ["KEY-001","KEY-002","Belal","Balqees","Mariam","Details / Notes"])assert.equal(json.includes(raw),false,"raw source value leaked: "+raw);
+  assert.ok(result.privateLookup.some(row=>row.display_name==="Belal"));
+  assert.ok(result.privateLookup.some(row=>row.display_name==="Balqees"));
+  assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
 });
 
 test("the same local workspace key keeps agent references stable between runs",async()=>{
