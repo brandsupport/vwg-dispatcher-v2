@@ -796,12 +796,20 @@ function distribute(total,weights){
 }
 function folderAssignedRows(){
   if(state.importedSnapshot){
+    const lifecycle=state.importedSnapshot.tickets.lifecycle_available===true;
     return FOLDERS.map(folder=>{
       const row=state.importedSnapshot.tickets.by_inbox.find(item=>item.inbox_code===folder.id)||{};
-      return {...folder,received:row.ticket_records||0,assigned:row.initially_assigned||0,resolved:row.resolved||0,open:row.outstanding||0,unassigned:row.unassigned||0};
+      const ownerRecords=state.importedSnapshot.allocations.filter(item=>item.inbox_code===folder.id)
+        .reduce((sum,item)=>sum+(item.current_owner_records??item.current_open_workload),0);
+      return {
+        ...folder,received:row.ticket_records||0,assigned:row.initially_assigned||0,
+        resolved:lifecycle?(row.resolved||0):null,
+        open:lifecycle?(row.outstanding||0):ownerRecords,
+        owner_records:ownerRecords,unassigned:lifecycle?(row.unassigned||0):null
+      };
     });
   }
-  return FOLDERS.map(folder=>({...folder,assigned:scaled(folder.assigned),received:scaled(folder.received),resolved:scaled(folder.resolved),open:scaled(folder.open)}));
+  return FOLDERS.map(folder=>({...folder,assigned:scaled(folder.assigned),received:scaled(folder.received),resolved:scaled(folder.resolved),open:scaled(folder.open),owner_records:scaled(folder.open)}));
 }
 function allocationMatrix(){
   if(state.importedSnapshot){
@@ -811,12 +819,13 @@ function allocationMatrix(){
       if(!agents.has(agentRef)){
         const roster=rosterByRef.get(agentRef);
         agents.set(agentRef,{
-          id:"snapshot-"+agentRef,name:agentRef,
+          id:"snapshot-"+agentRef,name:roster?.agent_name||agentRef,agentRef,
           shift:roster?roster.shift_group:"Shift data not included",
           availability:roster?(roster.active_this_fortnight?"Active this fortnight":"Inactive this fortnight"):"Not supplied",
           activeThisFortnight:roster?roster.active_this_fortnight:null,
           start:roster?roster.shift_start_egypt:"—",end:roster?roster.shift_end_egypt:"—",
-          eligibleFolders:[],assigned:0,open:0,cells:FOLDERS.map(()=>0),openByFolder:FOLDERS.map(()=>0),total:0
+          eligibleFolders:[],assigned:0,open:0,ownerRecords:0,
+          cells:FOLDERS.map(()=>0),openByFolder:FOLDERS.map(()=>0),ownerRecordsByFolder:FOLDERS.map(()=>0),total:0
         });
       }
       return agents.get(agentRef);
@@ -824,8 +833,15 @@ function allocationMatrix(){
     for(const agentRef of rosterByRef.keys())ensureAgent(agentRef);
     state.importedSnapshot.allocations.forEach(item=>{
       const agent=ensureAgent(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
-      if(index>=0){agent.cells[index]=item.initial_assignments;agent.openByFolder[index]=item.current_open_workload;}
-      agent.assigned+=item.initial_assignments;agent.open+=item.current_open_workload;agent.total+=item.initial_assignments;
+      if(index>=0){
+        agent.cells[index]=item.initial_assignments;
+        agent.openByFolder[index]=item.current_open_workload;
+        agent.ownerRecordsByFolder[index]=item.current_owner_records??item.current_open_workload;
+      }
+      agent.assigned+=item.initial_assignments;
+      agent.open+=item.current_open_workload;
+      agent.ownerRecords+=item.current_owner_records??item.current_open_workload;
+      agent.total+=item.initial_assignments;
     });
     return [...agents.values()].sort((a,b)=>a.name.localeCompare(b.name));
   }
@@ -840,7 +856,7 @@ function brandRows(){
     return BRANDS.map(brand=>{
       const code=brand.id==="vw"?"volkswagen":brand.id;
       const value=brand.id==="other"?(counts.other||0)+(counts.unclassified||0):(counts[code]||0);
-      return {...brand,value};
+      return {...brand,value:state.importedSnapshot.tickets.brand_available===false?null:value};
     });
   }
   const folders=scopeFolders();
@@ -856,10 +872,13 @@ function totals(){
   const folders=folderAssignedRows().filter(f=>state.folder==="all"||f.id===state.folder);
   const received=folders.reduce((a,f)=>a+f.received,0);
   const assigned=folders.reduce((a,f)=>a+f.assigned,0);
-  const resolved=folders.reduce((a,f)=>a+f.resolved,0);
-  const open=folders.reduce((a,f)=>a+f.open,0);
-  const unassigned=state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned);
-  return {received,assigned,resolved,open,unassigned};
+  const lifecycleAvailable=!state.importedSnapshot||state.importedSnapshot.tickets.lifecycle_available===true;
+  const resolved=lifecycleAvailable?folders.reduce((a,f)=>a+(f.resolved||0),0):null;
+  const open=lifecycleAvailable?folders.reduce((a,f)=>a+(f.open||0),0):null;
+  const unassigned=lifecycleAvailable
+    ?(state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned))
+    :null;
+  return {received,assigned,resolved,open,unassigned,lifecycleAvailable};
 }
 function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
 function heading(eyebrow,title,copy,actions){
@@ -918,7 +937,12 @@ function shareMatrix(rows,full,denominatorRows){
   return '<div class="table-wrap"><table class="data-table matrix-table">'+header+body+'</table></div>'+(missing?'<p class="team-panel-note">Assignment history was not included in this import. First-assignment counts and shares are unavailable; current ownership is not used as a substitute.</p>':'');
 }
 function memberCell(name,shift){
-  return '<div class="member-cell"><span class="member-avatar">'+esc(name.replace("Agent ","A"))+'</span><span><span class="member-name">'+esc(name)+'</span><span class="member-role">'+(shift||"Team member")+'</span></span></div>';
+  const display=String(name||"Team member").trim();
+  const parts=display.split(/\s+/).filter(Boolean);
+  const initials=display.startsWith("Agent-")
+    ?display.slice(6,8).toUpperCase()
+    :parts.length>1?(parts[0][0]+parts[parts.length-1][0]).toUpperCase():display.slice(0,2).toUpperCase();
+  return '<div class="member-cell"><span class="member-avatar">'+esc(initials)+'</span><span class="member-cell-copy"><span class="member-name">'+esc(display)+'</span><span class="member-role">'+esc(shift||"Team member")+'</span></span></div>';
 }
 function dataTable(headers,rows,empty){
   if(!rows.length)return '<div class="empty-state">'+(empty||"No records match the current filters.")+'</div>';
