@@ -43,7 +43,7 @@ const SOURCE_CONFIG={
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"agent",label:"Original assignee / first owner",required:true,aliases:["original assignee","first assignee","initial owner","current owner","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
       {id:"kind",label:"Actual event name",required:true,aliases:["event type","event name","activity type","workflow event","activity","action","assignment type","assignment kind","type"]},
-      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",aliases:["assignment flag","first assignment flag","initial assignment flag"]},
+      {id:"first_assignment_flag",label:"First-assignment flag (TRUE/FALSE)",required:true,aliases:["assignment flag","first assignment flag","initial assignment flag"]},
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp (Egypt local)",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
