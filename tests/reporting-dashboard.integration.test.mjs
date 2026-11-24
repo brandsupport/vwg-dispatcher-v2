@@ -233,6 +233,27 @@ test("the complete workbook selects Assignments for ticket state and first alloc
   assert.equal(names.length,5,"the other two workbook tabs remain untouched");
 });
 
+test("a manually registered TRUE Assignment Flag without Allocated At is not counted as automatic first allocation",async()=>{
+  const assignments=[
+    "Email Key / ID,Source Inbox,Status,Original Assignee,Current Owner,Assignment Flag,Allocated At (Egypt)",
+    "SYN-MANUAL-01,Agency Detags,Assigned,Agent Manual,Agent Manual,TRUE,"
+  ].join("\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count",
+    "2026-11-22 12:00:00,MANUAL_ASSIGNMENT_CAPTURED,SYN-MANUAL-01,Agency Detags,Agent Manual,Agent Manual,TRUE,0"
+  ].join("\n");
+  const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
+    tickets:assignments,assignments,workflow:activity
+  })));
+  const snapshot=run.snapshot;
+  assert.equal(snapshot.tickets.total,1);
+  assert.equal(snapshot.tickets.overall.initially_assigned,0,
+    "TRUE alone must not count; manually registered categories have no automatic allocation timestamp");
+  assert.equal(snapshot.allocations.reduce((sum,row)=>sum+row.initial_assignments,0),0);
+  assert.equal(snapshot.workflow.find(row=>row.event_type==="manual_assignment")?.event_count,1);
+  assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Assignment history").rows_skipped,1);
+});
+
 test("the committed synthetic inputs are the three documented sample files",()=>{
   for(const path of [
     "examples/synthetic-ticket-snapshot.csv",
