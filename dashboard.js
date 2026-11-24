@@ -51,18 +51,22 @@ const WORKFLOW_EVENT_SUMMARY = [
 function workflowSummaryRows(){
   if(!state.importedSnapshot)return WORKFLOW_EVENT_SUMMARY;
   const definitions=[
-    {id:"handover",label:"Handover",codes:["handover"],color:"#ff5c91"},
-    {id:"flag",label:"Flagged",codes:["flagged"],color:"#ffbd68"},
+    {id:"assigned",label:"Automatic assignment",codes:["assigned"],color:"#ff5c91"},
     {id:"manual",label:"Manual assignment",codes:["manual_assignment"],color:"#c2a0ff"},
-    {id:"recovery",label:"Recovery",codes:["recovery_requested","recovery_held","recovery_restored"],color:"#76e7ce"},
-    {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"}
+    {id:"handover",label:"Handover",codes:["handover"],color:"#76e7ce"},
+    {id:"flag",label:"Flagged / category removed",codes:["flagged"],color:"#ffbd68"},
+    {id:"recovery",label:"Recovery",codes:["recovery_requested","recovery_held","recovery_restored","reconciliation"],color:"#76e7ce"},
+    {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"},
+    {id:"pending",label:"Pending assignment",codes:["assignment_pending","queued"],color:"#a9a1b8"},
+    {id:"exception",label:"Exceptions",codes:["exception"],color:"#ff7698"},
+    {id:"dry_run",label:"Dry-run previews",codes:["dry_run"],color:"#b6bdc8"}
   ];
   return definitions.map(definition=>{
     const matches=state.importedSnapshot.workflow.filter(row=>
       definition.codes.includes(row.event_type)&&(state.folder==="all"||row.inbox_code===state.folder)
     );
     return {...definition,events:matches.reduce((sum,row)=>sum+row.event_count,0),
-      uniqueTickets:null,rate:"Not available"};
+      uniqueTickets:matches.reduce((sum,row)=>sum+row.distinct_tickets,0),rate:"Not available"};
   });
 }
 function workflowEvent(id){
@@ -1235,7 +1239,54 @@ function liveAttentionPanel(base){
     '<button class="live-attention-item" type="button" data-ticket="'+esc(ticket.ref)+'"><span class="live-attention-mark '+(ticket.status==="Overdue"?"danger":"warning")+'"></span><span class="live-attention-copy"><strong>'+esc(ticket.ref)+' · '+esc(ticket.status)+'</strong><small>'+esc(ticket.subject)+'</small></span><span class="live-attention-age">'+esc(ticket.age)+'</span></button>'
   ).join("")+'</div>';
 }
+function activityEventTimestamp(event){
+  if(!event||!event.occurred_at_utc)return "Time not recorded";
+  try{return new Intl.DateTimeFormat("en-GB",{timeZone:"Africa/Cairo",dateStyle:"medium",timeStyle:"short"}).format(new Date(event.occurred_at_utc));}
+  catch(error){return "Time not recorded";}
+}
+function importedActivityRows(events){
+  if(!events.length)return '<div class="empty-state">No Activity Log events match this inbox scope or search.</div>';
+  return dataTable(["Recorded · Egypt local","Event","Inbox","Ticket reference","Original assignee","Current owner","Incidents","Run type"],events.map(event=>
+    '<tr>'+
+      '<td class="activity-time-cell">'+esc(activityEventTimestamp(event))+'</td>'+
+      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong></td>'+
+      '<td>'+esc(FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td class="mono">'+esc(event.ticket_ref)+'</td>'+
+      '<td>'+esc(event.original_agent_name||"Not recorded")+'</td>'+
+      '<td>'+esc(event.current_agent_name||"Not recorded")+'</td>'+
+      '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
+      '<td>'+statusPill(event.dry_run?"Dry run":"Recorded")+'</td>'+
+    '</tr>'
+  ),"No Activity Log events were included in this snapshot.");
+}
+function renderImportedLive(){
+  const snapshot=state.importedSnapshot;
+  const events=(snapshot.activity_events||[]).filter(event=>state.folder==="all"||event.inbox_code===state.folder)
+    .slice().sort((a,b)=>(b.occurred_at_utc||"").localeCompare(a.occurred_at_utc||""));
+  const baseEvents=events.filter(event=>!event.dry_run);
+  const handovers=baseEvents.filter(event=>event.event_type==="handover").length;
+  const exceptions=baseEvents.filter(event=>event.event_type==="exception").length;
+  const t=totals();
+  const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
+  const latest=events[0];
+  pageContent.innerHTML=
+    heading("SOURCE ACTIVITY","Operations activity feed","A chronological view of the imported Activity Log. This is a point-in-time workbook extract, not a live Outlook queue or dispatch control.",'<button class="btn btn-secondary" data-go="audit">Open full Activity Log ↗</button>')+
+    '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> IMPORTED WORKBOOK SNAPSHOT</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch controls</b> Not available here</span><span><b>Latest recorded event</b> '+esc(latest?activityEventTimestamp(latest):"Not supplied")+'</span></div>'+
+    kpiGrid([
+      kpi("Current ticket records",fmt(t.received),"Unique Assignments register rows in this snapshot","▤"),
+      kpi("Outstanding records",fmt(t.open),"Current non-resolved tracker status","◷",null,"warning"),
+      kpi("Activity Log events",fmt(baseEvents.length),"Recognised non-dry-run events in this extract","⌁"),
+      kpi("Handovers / exceptions",fmt(handovers)+" / "+fmt(exceptions),"Event occurrences, not tickets or agent actions","⇄")
+    ])+
+    '<div class="prototype-warning"><strong>Not live:</strong> this view does not refresh from Outlook or change categories. It shows only events present in the workbook at the time it was exported. Dry-run previews are excluded from the event KPI above but remain visible in the table.</div>'+
+    '<div class="grid-two live-bottom-grid">'+
+      panel("Current inbox state","Current-state rows from Assignments · selected inbox scope",dataTable(["Inbox","Ticket records","Outstanding","Unassigned"],inboxes.map(folder=>'<tr><td>'+esc(folder.name)+'</td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.open)+'</td><td>'+fmt(folder.unassigned)+'</td></tr>')),'<span class="subtle-tag">SNAPSHOT</span>')+
+      panel("Recent Activity Log entries","Latest recognised events from the imported workbook",importedActivityRows(events.slice(0,8)),'<button class="panel-action" type="button" data-go="audit">See all events ↗</button>')+
+    '</div>'+
+    '<div class="live-final-note"><strong>Operational boundary:</strong> actual ticket assignment and recovery still happen through the approved Outlook dispatcher. The public dashboard has no connected dispatch engine, mailbox permission or write route. Use the Activity Log screen to search the complete imported event extract.</div>';
+}
 function renderLive(){
+  if(state.importedSnapshot){renderImportedLive();return;}
   const base=liveBaseTickets();
   const open=base.filter(t=>!["Resolved","Closed"].includes(t.status));
   const unassigned=base.filter(t=>t.status==="Unassigned").length;
