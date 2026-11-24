@@ -6,7 +6,7 @@ A standalone operations intelligence and management platform for the VWG Brand S
 
 ## Readability and typography & brand consistency
 
-The dashboard and Offline Reporting Studio use a shared inline Volkswagen roundel SVG rather than a text-letter substitute. Small interface text has been enlarged across both screens, including navigation, labels, tables and supporting notes. The UI validation workflow checks that both pages retain the VW mark and that compact text does not regress to very small sizes.
+The dashboard and Offline Reporting Studio use a shared inline Volkswagen roundel SVG rather than a text-letter substitute. Small interface text has been enlarged across both screens, including navigation, labels, tables and supporting notes. The UI validation workflow checks that both pages retain the VW mark and that compact text does not regress to very small sizes. Because the roundel is inline, it also appears when the Studio is opened from a local folder without a network connection.
 
 ## Product direction
 
