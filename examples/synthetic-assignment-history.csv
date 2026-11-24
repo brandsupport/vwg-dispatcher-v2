@@ -1,0 +1,6 @@
+ticket_ref,agent,assignment_kind,inbox,occurred_at
+SAMPLE-001,Sample Agent A,Initial,Agency Detags,2026-11-22T09:14:00Z
+SAMPLE-002,Sample Agent B,First assignment,Detags,2026-11-22T09:30:00Z
+SAMPLE-003,Sample Agent C,Initial,Transfers,2026-11-22T10:05:00Z
+SAMPLE-003,Sample Agent D,Handover,Transfers,2026-11-22T10:25:00Z
+SAMPLE-005,Sample Agent B,Initial,Detags,2026-11-22T11:04:00Z
