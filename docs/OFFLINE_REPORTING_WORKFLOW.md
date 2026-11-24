@@ -81,7 +81,7 @@ Do not commit, email, upload or include the key with any reporting file. The stu
 
 ## Outputs
 
-The studio produces one aggregate JSON snapshot and six aggregate CSVs:
+The studio produces one aggregate JSON snapshot and seven aggregate CSVs:
 
 - Inbox summary — ticket-record count, first assignments, resolved, open and unassigned.
 - Brand summary — approved brand counts and share.
