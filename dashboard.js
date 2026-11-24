@@ -991,7 +991,7 @@ function overviewInboxSnapshot(inboxes){
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
       '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+fmt(folder.resolved)+'</b></span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(imported&&state.importedSnapshot.tickets.resolution_tracking!=="source_status_present"?"Not tracked":fmt(folder.resolved))+'</b></span></div>'+
       '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
       '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
     '</article>';
@@ -1292,7 +1292,7 @@ function renderImportedLiveOperations(){
   const methods=state.importedSnapshot.assignment_methods;
   const workflow=(state.importedSnapshot.workflow||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
   const statusRows=folders.map(folder=>
-    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(folder.open)+'</td><td>'+(resolutionTrackingAvailable()?fmt(folder.resolved):"Not tracked")+'</td></tr>'
+    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(folder.open)+'</td><td>'+(state.importedSnapshot.tickets.resolution_tracking==="source_status_present"?fmt(folder.resolved):"Not tracked")+'</td></tr>'
   );
   const ownerRows=team.map(agent=>
     '<tr><td>'+memberCell(agent.name,agent.shift||"Shift data not included")+'</td><td class="total-cell">'+fmt(agent.open)+'</td><td>'+fmt(agent.assigned)+'</td><td>'+esc(agent.availability||"Not supplied")+'</td></tr>'
