@@ -1693,8 +1693,8 @@ function agentPerformanceReviewPanel(profiles){
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
-      '<td>'+fmt(hasActivity?metrics.automatic:state.importedSnapshot.assignment_methods.automatic&&state.importedSnapshot.assignment_methods.automatic?"—":0)+'</td>'+
-      '<td>'+fmt(hasActivity?metrics.manual:0)+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.automatic):"Not supplied")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.manual):"Not supplied")+'</td>'+
       '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.handovers):"Not supplied")+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.recovery):"Not supplied")+'</td>'+
