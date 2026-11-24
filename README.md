@@ -245,3 +245,8 @@ node --check dashboard.js
 ```
 
 A GitHub Pages workflow is provided for a public, synthetic-data-only UI preview. It publishes only `index.html`, `dashboard.css` and `dashboard.js` from the repository to the Pages artifact. Cloudflare Pages Functions, D1 schema, authentication and production deployment remain unconfigured.
+
+
+## Original VW brand mark and readability
+
+The dashboard and Offline Reporting Studio use the same original embedded Volkswagen artwork, warm gradient, glow treatment and rotating accent ring. The Studio carries its own embedded CSS asset so it remains a standalone page. Both interfaces use a final readability pass with visibly larger body copy, controls, navigation, labels and table text, with responsive sizing for narrow screens.
