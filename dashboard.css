@@ -2360,3 +2360,48 @@ body { font-size: 17px !important; line-height: 1.58; }
   .page-content .panel-title { font-size: 18px !important; }
   .page-content .heading-copy { font-size: 15.5px !important; }
 }
+
+/* Knowledge Base home logo cloned faithfully; cyan/purple translated to coral/copper. */
+@property --kb-brand-spin { syntax:"<angle>"; initial-value:0deg; inherits:false; }
+.brand-mark {
+  position:relative; width:46px; height:46px; flex:0 0 auto; border-radius:14px;
+  background:linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02));
+  border:1px solid rgba(241,132,111,0.34);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.12), 0 0 22px -6px var(--coral);
+  display:flex; align-items:center; justify-content:center;
+  transition:box-shadow .25s ease, transform .25s ease, border-color .25s ease;
+}
+.brand:hover .brand-mark {
+  transform:translateY(-1px) scale(1.04); border-color:var(--coral);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), 0 0 26px -2px var(--coral), 0 0 40px -10px var(--copper);
+}
+.brand-mark::after {
+  content:""; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none;
+  background:conic-gradient(from var(--kb-brand-spin), transparent 0 72%, var(--coral) 88%, var(--copper) 96%, transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  padding:1.5px; opacity:.9; animation:kb-brandmark-spin 5s linear infinite;
+}
+@keyframes kb-brandmark-spin { to { --kb-brand-spin:360deg; } }
+.brand-mark .logo-glow {
+  position:relative; z-index:1; display:block; width:30px; height:30px;
+  filter:drop-shadow(0 0 5px var(--coral)) drop-shadow(0 0 12px rgba(212,154,104,0.45));
+}
+.brand-mark .logo-glyph {
+  display:block; width:100%; height:100%;
+  background:linear-gradient(135deg, var(--coral) 10%, var(--copper) 95%);
+  -webkit-mask:var(--vw-logo) center/contain no-repeat;
+  mask:var(--vw-logo) center/contain no-repeat;
+}
+.brand-copy strong {
+  font-family:"Space Grotesk", Manrope, sans-serif; font-weight:700; font-size:17px;
+  line-height:1.15; letter-spacing:.01em;
+  background:linear-gradient(120deg, var(--coral), var(--copper));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.brand-copy small { color:#c0a294; font-size:12px !important; letter-spacing:.10em; }
+@media (prefers-reduced-motion:reduce) { .brand-mark::after { animation:none; } }
+@media (max-width:560px) {
+  .brand-mark, .brand-mark.small { width:40px; height:40px; border-radius:12px; }
+  .brand-mark .logo-glow { width:26px; height:26px; }
+}
