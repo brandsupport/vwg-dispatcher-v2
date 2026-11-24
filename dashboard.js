@@ -461,6 +461,24 @@ const state = {
   auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020",
   adminRole:"operations_manager", adminRequestSearch:"", adminRequestStatus:"all", selectedAdminRequest:"ACCESS-SAMPLE-004"
 };
+
+const VIEW_TITLES = {
+  overview:"Overview",
+  live:"Live Operations",
+  tickets:"Ticket Analytics",
+  brands:"Brand Insights",
+  workflow:"Workflow Analytics",
+  folders:"Folder Share",
+  team:"Team Performance",
+  my:"My Performance",
+  roster:"Roster & Coverage",
+  rules:"Dispatch Configuration",
+  reliability:"Reliability Centre",
+  audit:"Audit History",
+  reports:"Reports & Exports",
+  admin:"Administration"
+};
+
 function validateAndSanitiseSnapshot(raw){
   const fail=message=>{throw new Error(message);};
   const isObject=value=>Boolean(value)&&typeof value==="object"&&!Array.isArray(value);

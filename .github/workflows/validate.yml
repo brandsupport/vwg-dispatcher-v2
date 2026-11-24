@@ -57,6 +57,8 @@ jobs:
         run: python -m unittest discover -s tests -p "test_*.py"
       - name: Check dashboard JavaScript syntax
         run: node --check dashboard.js
+      - name: Test dashboard startup and navigation wiring
+        run: node --test tests/dashboard-startup.test.mjs
       - name: Check offline reporting studio JavaScript syntax
         run: node --check reporting-studio.js
       - name: Test offline reporting sanitiser
