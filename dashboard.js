@@ -1572,7 +1572,7 @@ function brandFolderTable(){
 }
 function renderWorkflow(){
   const imported=Boolean(state.importedSnapshot);
-  const manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
+  const automatic=workflowEvent("assigned"),manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
   const sourceAvailable=!imported||importedSourceAvailable("Workflow history");
   const summaries=workflowSummaryRows();
   const actualRows=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
@@ -1580,13 +1580,19 @@ function renderWorkflow(){
   ):null;
   const importedNote=sourceAvailable?"Event totals are aggregated; distinct-ticket counts remain visible by inbox below.":"No workflow-history file supplied";
   const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
+  const methodTotal=automatic.events+manual.events;
   const allocationMethodPanel=imported
-    ? panel("Allocation method split","The snapshot distinguishes first allocations from workflow events but does not identify automatic versus manual allocation method.",'<div class="empty-state">Not available in this source export. No allocation method split is inferred.</div>','<span class="subtle-tag">NOT IN SOURCE</span>')
-    : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
+    ? panel("Allocation method split","Derived from actual Activity Log event names: AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED.",methodTotal
+      ?dataTable(["Method","Events","Share of recorded assignment events"],[
+        '<tr><td>Automatic assignment</td><td class="total-cell">'+fmt(automatic.events)+'</td><td>'+(methodTotal?((automatic.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>',
+        '<tr><td>Manual assignment captured</td><td class="total-cell">'+fmt(manual.events)+'</td><td>'+(methodTotal?((manual.events/methodTotal)*100).toFixed(1):"0.0")+'%</td></tr>'
+      ])
+      :'<div class="empty-state">No recognised automatic or manual assignment event was found in Activity Log.</div>','<span class="subtle-tag">SOURCE EVENT TYPES</span>')
+    : panel("Assignment method mix","Method split is illustrative in demo mode only",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">DEMO ESTIMATE</span>');
   pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event timestamps retained in the safe Activity Log view</span></div>':'')+
     kpiGrid([
-      kpi("Automatic allocation",imported?"Not available":"1,064",imported?"The source does not classify automatic versus manual first assignments":"89.5% of assigned tickets","↗"),
+      kpi("Automatic allocation",sourceAvailable?fmt(automatic.events):"Not supplied",sourceAvailable?(imported?"AUTO_ASSIGNMENT events recorded":"89.5% of assigned tickets · demo estimate"):"Activity Log not supplied","↗"),
       kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",eventDescription(manual),"✎"),
       kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",eventDescription(handover),"⇄"),
       kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",eventDescription(recovery),"↺")
@@ -2636,16 +2642,15 @@ function exportRoster(){
   csvDownload(imported?"dispatcher-local-snapshot-roster-coverage.csv":"dispatcher-sample-roster-coverage.csv",rows);
 }
 function exportAuditHistory(){
+  if(!state.importedSnapshot){showToast("Import a workbook snapshot with Activity Log events before exporting this view.");return;}
   const rows=[
-    ["Event ID","Recorded time (UK sample)","Category","Event","Actor","Actor role","Affected entity","Inbox","Ticket","Correlation ID","Outcome","Reason","Approver","Approval","Before","After","Source","Evidence"],
+    ["Recorded time (Egypt)","Event","Inbox","Pseudonymised ticket","Original assignee","Current owner","Incident count","Dry run"],
     ...auditFilteredEvents().map(event=>[
-      event.id,event.occurredAt,event.category,event.event,event.actor,event.role,event.entity,
-      event.folder?FOLDERS.find(folder=>folder.id===event.folder)?.name||event.folder:"Platform scope",
-      event.ticket,event.correlation,event.outcome,event.reason,event.approver,event.approval,
-      JSON.stringify(event.before),JSON.stringify(event.after),event.source,event.evidence
+      activityEventTimestamp(event),event.event_type,event.inbox_code,event.ticket_ref,
+      event.original_agent_name||"",event.current_agent_name||"",event.incident_count,event.dry_run?"Yes":"No"
     ])
   ];
-  csvDownload("dispatcher-sample-audit-history.csv",rows);
+  csvDownload("dispatcher-activity-log-sanitised.csv",rows);
 }
 function exportAdminSecurityBlueprint(){
   const rows=[["Section","Name","Scope / detail","Status / permission","Evidence / notes"]];
