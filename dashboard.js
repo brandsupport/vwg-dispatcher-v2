@@ -919,6 +919,12 @@ function totals(){
   const unassigned=state.importedSnapshot?folders.reduce((a,f)=>a+(f.unassigned||0),0):Math.max(0,received-assigned);
   return {received,assigned,resolved,open,unassigned};
 }
+function hasResolutionTracking(){
+  return !state.importedSnapshot||state.importedSnapshot.tickets.resolution_tracking==="source_status_present";
+}
+function currentOwnerRecordCount(folder){
+  return Math.max(0,folder.received-(folder.unassigned||0));
+}
 function activeSearch(text){return !state.search||String(text).toLowerCase().includes(state.search.toLowerCase());}
 function heading(eyebrow,title,copy,actions){
   return '<div class="page-heading"><div><div class="eyebrow">'+eyebrow+'</div><h1>'+title+'</h1><p class="heading-copy">'+copy+'</p></div><div class="heading-actions">'+(actions||'')+'<span class="period-pill">'+PERIODS[state.period].label+'</span></div></div>';
@@ -959,7 +965,8 @@ function shareMatrix(rows,full,denominatorRows){
   const totalVisible=totalsByFolder.reduce((sum,value)=>sum+value,0);
   const visibleRows=rows.filter(row=>activeSearch(row.name)&&(!state.memberSearch||row.name.toLowerCase().includes(state.memberSearch.toLowerCase())));
   if(!visibleRows.length)return '<div class="empty-state">No members match this search.</div>';
-  const header='<thead><tr><th>Team member</th>'+folders.map(folder=>'<th>'+folder.short+' · count / share</th>').join("")+'<th>Total allocated</th>'+(full?'<th>Scope share</th><th>Open work snapshot</th>':'')+'</tr></thead>';
+  const workloadColumn=hasResolutionTracking()?"Open work snapshot":"Current owner records";
+  const header='<thead><tr><th>Team member</th>'+folders.map(folder=>'<th>'+folder.short+' · count / share</th>').join("")+'<th>Total allocated</th>'+(full?'<th>Scope share</th><th>'+workloadColumn+'</th>':'')+'</tr></thead>';
   const body='<tbody>'+visibleRows.map(row=>{
     const cells=folders.map((folder,index)=>{
       const fi=FOLDERS.findIndex(item=>item.id===folder.id);
@@ -1038,16 +1045,19 @@ function overviewRiskSummary(tickets){
 }
 function overviewInboxSnapshot(inboxes){
   if(!inboxes.length)return '<div class="empty-state">No inboxes match the selected scope.</div>';
-  const imported=Boolean(state.importedSnapshot);
+  const imported=Boolean(state.importedSnapshot),resolutionTracked=hasResolutionTracking();
   return '<div class="overview-inbox-grid">'+inboxes.map(folder=>{
     const allocationRate=folder.received?folder.assigned/folder.received*100:0;
-    const outstandingRate=folder.received?folder.open/folder.received*100:0;
+    const ownerRecords=currentOwnerRecordCount(folder);
+    const workloadValue=resolutionTracked?folder.open:ownerRecords;
+    const workloadRate=folder.received?workloadValue/folder.received*100:0;
+    const workloadLabel=resolutionTracked?"outstanding":"with current owner";
     return '<article class="overview-inbox-card">'+
       '<div class="overview-inbox-head"><strong>'+esc(folder.name)+'</strong><span>'+esc(folder.short)+'</span></div>'+
-      '<div class="overview-inbox-open"><strong>'+fmt(folder.open)+'</strong><span>outstanding</span></div>'+
-      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(imported&&state.importedSnapshot.tickets.resolution_tracking!=="source_status_present"?"Not tracked":fmt(folder.resolved))+'</b></span></div>'+
-      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' outstanding volume as a share of ticket records"><span style="width:'+Math.min(100,outstandingRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
-      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+outstandingRate.toFixed(1)+'% open / records</span></div>'+
+      '<div class="overview-inbox-open"><strong>'+fmt(workloadValue)+'</strong><span>'+workloadLabel+'</span></div>'+
+      '<div class="overview-inbox-metrics"><span><small>'+(imported?"TICKET RECORDS":"RECEIVED")+'</small><b>'+fmt(folder.received)+'</b></span><span><small>FIRST ASSIGNED</small><b>'+(imported&&!importedSourceAvailable("Assignment history")?"—":fmt(folder.assigned))+'</b></span><span><small>RESOLVED</small><b>'+(resolutionTracked?fmt(folder.resolved):"Not tracked")+'</b></span></div>'+
+      '<div class="overview-inbox-track" role="img" aria-label="'+esc(folder.name)+' '+workloadLabel+' as a share of ticket records"><span style="width:'+Math.min(100,workloadRate).toFixed(1)+'%;background:'+folder.color+'"></span></div>'+
+      '<div class="overview-inbox-foot"><span>'+(imported&&!importedSourceAvailable("Assignment history")?"First-assignment history not supplied":allocationRate.toFixed(1)+'% initially allocated')+'</span><span>'+workloadRate.toFixed(1)+'% '+(resolutionTracked?"open":"have an owner")+'</span></div>'+
     '</article>';
   }).join("")+'</div>';
 }
@@ -1091,7 +1101,7 @@ function overviewTeamPanel(){
         '<strong>'+fmt(agent.open)+'</strong>'+
       '</div>'
     ).join("")+'</div>'+
-    '<p class="overview-panel-foot">'+roster.length+' pseudonymised roster profiles · '+active.length+' active this fortnight · open workload is a point-in-time count, not hours-adjusted capacity.</p>';
+    '<p class="overview-panel-foot">'+roster.length+' pseudonymised roster profiles · '+active.length+' active this fortnight · '+(hasResolutionTracking()?"open workload is a point-in-time count":"counts show current owner records; resolution state is not tracked")+' and is not hours-adjusted capacity.</p>';
   }
   const available=AGENTS.filter(agent=>agent.availability==="Available").length;
   const onBreak=AGENTS.filter(agent=>agent.availability==="Break").length;
@@ -1151,9 +1161,11 @@ function renderOverview(){
   const inboxes=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
-  const resolutionRate=!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"
+  const resolutionRate=!imported||hasResolutionTracking()
     ?(t.received?t.resolved/t.received*100:null):null;
   const resolutionAverage=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes:null;
+  const workloadTracked=hasResolutionTracking();
+  const currentOwnerRecords=Math.max(0,t.received-t.unassigned);
   const resolutionTimedCount=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.timed_tickets||0:0;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
@@ -1173,12 +1185,12 @@ function renderOverview(){
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
       kpi("Initially assigned",allocationValue,imported?(assignmentsAvailable?"Distinct tickets with one validated first allocation":"Assignment history was not supplied"):"Distinct tickets with a first allocation","↗"),
       kpi(imported?"Resolved / closed":"Tickets resolved",resolutionRate===null?"Not tracked":fmt(t.resolved),imported?(resolutionRate===null?"The dispatcher does not yet record resolved / closed events":"Explicit resolved states in the snapshot"):"Recorded completed tickets in sample totals","✓"),
-      kpi("Outstanding workload",fmt(t.open),imported?"Open records at snapshot time":"Illustrative open snapshot for selected scope","◷",null,"warning")
+      kpi(imported&&!workloadTracked?"Records with current owner":"Outstanding workload",workloadTracked?fmt(t.open):fmt(currentOwnerRecords),imported?(workloadTracked?"Open records at snapshot time":"Current owner records only; resolution state is not tracked"):"Illustrative open snapshot for selected scope","◷",null,"warning")
     ])+
     '<div class="overview-metric-strip">'+
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
       '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
-      '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>'+(imported?"WITHOUT CURRENT OWNER":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?(workloadTracked?"Open records with no current owner":"Records without a current owner; not a resolution measure"):"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
@@ -1341,14 +1353,19 @@ function liveAttentionPanel(base){
 function renderImportedLiveOperations(){
   const folders=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const team=allocationMatrix().filter(agent=>activeSearch(agent.name)).sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
+  const resolutionTracked=hasResolutionTracking();
   const received=folders.reduce((sum,folder)=>sum+folder.received,0);
   const assigned=folders.reduce((sum,folder)=>sum+folder.assigned,0);
   const open=folders.reduce((sum,folder)=>sum+folder.open,0);
   const unassigned=folders.reduce((sum,folder)=>sum+folder.unassigned,0);
+  const currentOwnerRecords=Math.max(0,received-unassigned);
+  const workloadValue=resolutionTracked?open:currentOwnerRecords;
+  const workloadLabel=resolutionTracked?"Open workload":"Records with current owner";
+  const unassignedLabel=resolutionTracked?"Unassigned open":"No current owner";
   const methods=state.importedSnapshot.assignment_methods;
   const workflow=(state.importedSnapshot.workflow||[]).filter(row=>state.folder==="all"||row.inbox_code===state.folder);
   const statusRows=folders.map(folder=>
-    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(folder.open)+'</td><td>'+(state.importedSnapshot.tickets.resolution_tracking==="source_status_present"?fmt(folder.resolved):"Not tracked")+'</td></tr>'
+    '<tr><td><strong>'+esc(folder.name)+'</strong></td><td class="total-cell">'+fmt(folder.received)+'</td><td>'+fmt(folder.assigned)+'</td><td>'+fmt(folder.unassigned)+'</td><td>'+fmt(resolutionTracked?folder.open:currentOwnerRecordCount(folder))+'</td><td>'+(resolutionTracked?fmt(folder.resolved):"Not tracked")+'</td></tr>'
   );
   const ownerRows=team.map(agent=>
     '<tr><td>'+memberCell(agent.name,agent.shift||"Shift data not included")+'</td><td class="total-cell">'+fmt(agent.open)+'</td><td>'+fmt(agent.assigned)+'</td><td>'+esc(agent.availability||"Not supplied")+'</td></tr>'
@@ -1361,11 +1378,11 @@ function renderImportedLiveOperations(){
     kpiGrid([
       kpi("Ticket records",fmt(received),"Current Assignments register rows","▤"),
       kpi("Initial allocations",fmt(assigned),fmt(methods.automatic)+" automatic · "+fmt(methods.manual)+" manual","↗"),
-      kpi("Open workload",fmt(open),"Current owner / status snapshot","◷"),
-      kpi("Unassigned open",fmt(unassigned),"Rows without a current owner","＋",null,unassigned?"warning":"positive")
+      kpi(workloadLabel,fmt(workloadValue),resolutionTracked?"Explicit resolution state is present":"Owner count only; resolved / open state is not captured","◷"),
+      kpi(unassignedLabel,fmt(unassigned),"Rows without a current owner","＋",null,unassigned?"warning":"positive")
     ])+
     '<div class="grid-two live-import-primary">'+
-      panel("Inbox workstream status","Current row counts from Assignments, split by the four monitored Inbox folders",dataTable(["Inbox","Ticket records","First assigned","Unassigned","Open workload","Resolved / closed"],statusRows),'<span class="subtle-tag">SOURCE SNAPSHOT</span>')+
+      panel("Inbox workstream status","Current row counts from Assignments, split by the four monitored inbox folders",dataTable(["Inbox","Ticket records","First assigned","No current owner",workloadLabel,"Resolved / closed"],statusRows),'<span class="subtle-tag">SOURCE SNAPSHOT</span>')+
       panel("Allocation method","Initial allocation events read from Activity Log column B",dataTable(["Method","Tickets","Share"],[
         ["Automatic",fmt(methods.automatic),(assigned?methods.automatic/assigned*100:0).toFixed(1)+"%"],
         ["Manual",fmt(methods.manual),(assigned?methods.manual/assigned*100:0).toFixed(1)+"%"],
@@ -1373,7 +1390,7 @@ function renderImportedLiveOperations(){
       ]),'<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
     '</div>'+
     '<div class="grid-two live-import-secondary">'+
-      panel("Current owner workload","Open records grouped by the current owner captured in Assignments",team.length?dataTable(["Colleague","Open workload","First assigned","Fortnight status"],ownerRows):'<div class="empty-state">No owner counts are available in this snapshot.</div>','<button class="panel-action" data-go="team">Agent review ↗</button>')+
+      panel("Current owner records",resolutionTracked?"Open records grouped by the current owner captured in Assignments":"Records with a current owner; resolution state is not available",team.length?dataTable(["Colleague",workloadLabel,"First assigned","Fortnight status"],ownerRows):'<div class="empty-state">No owner counts are available in this snapshot.</div>','<button class="panel-action" data-go="team">Agent review ↗</button>')+
       panel("Recent event categories","Activity Log event totals in the imported snapshot. Event counts are not live.",eventRows.length?dataTable(["Event","Inbox","Events","Tickets affected"],eventRows):'<div class="empty-state">No mapped Activity Log events are included.</div>','<button class="panel-action" data-go="workflow">Workflow insights ↗</button>')+
     '</div>'+
     '<div class="live-import-footer"><div><strong>Actions are deliberately read-only.</strong><span>The dashboard cannot assign, resolve, reassign or move Outlook messages. Use Classic Outlook and the dispatcher for operational actions; use this screen to review the imported state.</span></div><button class="btn btn-primary" type="button" data-go="audit">Review Activity Log ↗</button></div>';
@@ -1716,21 +1733,23 @@ function donutChart(items){
 function renderFolders(){
   const rows=allocationMatrix(),scope=folderAssignedRows().filter(folder=>state.folder==="all"||folder.id===state.folder);
   const folderCount=scope.length,assignmentsAvailable=!state.importedSnapshot||importedSourceAvailable("Assignment history");
+  const resolutionTracked=hasResolutionTracking();
   const assigned=scope.reduce((sum,folder)=>sum+folder.assigned,0);
-  const open=scope.reduce((sum,folder)=>sum+folder.open,0);
-  pageContent.innerHTML=heading("WORKLOAD DISTRIBUTION","Every member. Every folder.",state.importedSnapshot?"Review first allocations and current open workload from pseudonymised snapshot references. Imported shift details appear where a matching Team & Shifts roster was supplied.":"See each member’s share of initial ticket allocations in each inbox. Current open workload is measured separately.",'<button class="btn btn-secondary" data-action="export-folders">↓ Export matrix</button>')+
+  const open=scope.reduce((sum,folder)=>sum+(resolutionTracked?folder.open:currentOwnerRecordCount(folder)),0);
+  const workloadLabel=resolutionTracked?"Open workload":"Current owner records";
+  pageContent.innerHTML=heading("WORKLOAD DISTRIBUTION","Every member. Every folder.",state.importedSnapshot?"Review first allocations and current owner records from pseudonymised snapshot references. Open / resolved status is reported only where the tracker explicitly records it.":"See each member’s share of initial ticket allocations in each inbox. Current open workload is measured separately.",'<button class="btn btn-secondary" data-action="export-folders">↓ Export matrix</button>')+
     (state.importedSnapshot?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Agent IDs are pseudonymised</span><span>'+(state.importedSnapshot.team_roster?.length?"Rota / shift data included":"Rota / shift data not included")+'</span></div>':'')+
     kpiGrid([
-      kpi(state.importedSnapshot?"Pseudonymised agents":"Team members",String(rows.length),state.importedSnapshot?"References present in allocation or workload data":"Illustrative team roster","♧"),
+      kpi(state.importedSnapshot?"Pseudonymised agents":"Team members",String(rows.length),state.importedSnapshot?"References present in allocation or current-owner data":"Illustrative team roster","♧"),
       kpi("Initial allocations",assignmentsAvailable?fmt(assigned):"Not supplied","Distinct tickets first assigned","↗"),
       kpi("Folders in scope",String(folderCount),"Four monitored workstreams","▤"),
-      kpi("Open workload",fmt(open),state.importedSnapshot?"Current-state snapshot · selected inboxes":"Current-state sample snapshot","◷")
+      kpi(workloadLabel,fmt(open),resolutionTracked?"Explicit current resolution state":"Current owner count only; resolution state is not tracked","◷")
     ])+
     '<div class="prototype-warning"><strong>Share definition.</strong> Each percentage is the member’s distinct tickets first assigned in that folder divided by all first-assigned tickets in that folder. Handovers, recoveries and reassignments do not inflate original allocation share. '+(state.importedSnapshot&&!assignmentsAvailable?"Assignment history was not supplied; the matrix does not infer first allocation from current ownership.":"")+'</div>'+
-    panel("Member allocation matrix","Counts and percentage share are shown for every visible folder",'<div class="table-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search pseudonymous agents…" value="'+esc(state.memberSearch)+'"></div>'+shareMatrix(rows,true),'<span class="subtle-tag">'+(state.importedSnapshot?rows.length+" PSEUDONYMISED REFERENCES":"14 SAMPLE MEMBERS")+'</span>')+
+    panel("Member allocation matrix","Counts and percentage share are shown for every visible folder",'<div class="table-toolbar"><input class="search-control" id="memberSearch" type="search" placeholder="Search pseudonymised agents…" value="'+esc(state.memberSearch)+'"></div>'+shareMatrix(rows,true),'<span class="subtle-tag">'+(state.importedSnapshot?rows.length+" PSEUDONYMISED REFERENCES":"14 SAMPLE MEMBERS")+'</span>')+
     '<div class="grid-two">'+
       panel("Folder allocation share","How the selected team shares initial allocations",assignmentsAvailable?barRows(scope.map(folder=>({label:folder.name,value:folder.assigned,color:folder.color}))):'<div class="empty-state">Initial-assignment history was not supplied.</div>',"")+
-      panel("Current open workload","Snapshot of open tickets by folder",barRows(scope.map(folder=>({label:folder.name,value:folder.open,color:folder.color}))),"")+
+      panel(workloadLabel,resolutionTracked?"Snapshot of explicitly open tickets by folder":"Counts of records with a current owner; not a confirmed open backlog",barRows(scope.map(folder=>({label:folder.name,value:resolutionTracked?folder.open:currentOwnerRecordCount(folder),color:folder.color}))),"")+
     '</div>';
   const search=document.getElementById("memberSearch");
   if(search)search.addEventListener("input",e=>{state.memberSearch=e.target.value;const pos=e.target.selectionStart;renderFolders();const el=document.getElementById("memberSearch");el.focus();el.setSelectionRange(pos,pos);});
@@ -1755,10 +1774,11 @@ function teamWorkloadPanel(rows){
   if(!rows.length)return '<div class="empty-state">No anonymised profiles match the current search.</div>';
   const ordered=rows.slice().sort((a,b)=>b.open-a.open||a.name.localeCompare(b.name));
   const maximum=Math.max(1,...ordered.map(agent=>agent.open));
+  const tracked=hasResolutionTracking();
   return '<div class="team-workload-list">'+ordered.map(agent=>
     '<div class="team-workload-row"><div class="team-workload-person">'+memberCell(agent.name,agent.shift||"Pseudonymised reference")+'</div><div class="team-workload-track"><span style="width:'+(agent.open/maximum*100).toFixed(1)+'%"></span></div><strong>'+fmt(agent.open)+'</strong></div>'
   ).join("")+'</div>'+
-  '<p class="team-panel-note">'+(state.importedSnapshot?"Open counts are taken from the current-state ticket snapshot and grouped by pseudonymised owner and inbox. They are not time-scoped or adjusted for scheduled hours, eligibility or ticket complexity.":"Open counts are a static current-workload sample. They are not period-scaled, inbox-scoped or adjusted for scheduled hours, eligibility or ticket complexity.")+'</p>';
+  '<p class="team-panel-note">'+(state.importedSnapshot?(tracked?"Open counts are taken from the explicit resolution-aware snapshot and grouped by pseudonymised owner and inbox. They are not time-scoped or adjusted for scheduled hours, eligibility or ticket complexity.":"Counts show records with a current owner grouped by pseudonymised identity. They are not confirmed open-ticket counts because this workbook has no resolution status. They are not time-scoped or adjusted for scheduled hours, eligibility or ticket complexity."):"Open counts are a static current-workload sample. They are not period-scaled, inbox-scoped or adjusted for scheduled hours, eligibility or ticket complexity.")+'</p>';
 }
 function teamEventLedger(){
   const imported=Boolean(state.importedSnapshot),sourceAvailable=!imported||importedSourceAvailable("Workflow history");
@@ -1825,7 +1845,7 @@ function agentPerformanceReviewPanel(profiles){
       '<td><span class="not-tracked-value">Not tracked</span></td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, current open work and event involvement. When the tracker provides an explicit resolver and timestamps, resolved counts and average elapsed solve time appear here. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual","Open workload","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
+  return panel("Agent performance review","First assignments, automatic/manual method, owner records and workflow involvement. Resolution counts and solve time appear only when the tracker supplies explicit resolver and timestamp fields. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
     '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague&#39;s original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
 }
 function teamEvidencePanel(){
@@ -1855,22 +1875,22 @@ function renderTeam(){
     kpiGrid([
       kpi(state.importedSnapshot?"Agent references in view":"Agent profiles in view",String(profiles.length),state.importedSnapshot?"Pseudonymised snapshot references · global search applies":"Anonymised sample profiles · global search applies","♧"),
       kpi("First assignments",assignmentsAvailable?fmt(firstAssigned):"Not supplied",state.importedSnapshot?"Current snapshot totals · not period-filtered":"Distinct tickets first assigned · selected period and inbox","↗"),
-      kpi("Current open workload",fmt(openWorkload),state.importedSnapshot?"Owner snapshot · independent of inbox filter":"All-profile sample snapshot · not period or inbox scoped","◷"),
+      kpi(state.importedSnapshot&&!hasResolutionTracking()?"Current owner records":"Current open workload",fmt(openWorkload),state.importedSnapshot?(hasResolutionTracking()?"Owner snapshot · independent of inbox filter":"Current owner counts; resolution state not tracked"):"All-profile sample snapshot · not period or inbox scoped","◷"),
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
-    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent names can be loaded from a separate private lookup kept only in this browser; the shared JSON remains pseudonymised. Current open workload is a point-in-time count. First-assignment counts are explicit; event involvement is not the same as authenticated action attribution. Resolution rate is not tracked yet.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
-    '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and current open-work '+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile.")+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
+    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent names can be loaded from a separate private lookup kept only in this browser; the shared JSON remains pseudonymised. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolution status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; event involvement is not the same as authenticated action attribution. Resolution rate is not tracked yet.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
+    '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and '+(state.importedSnapshot&&!hasResolutionTracking()?"records with a current owner. Resolution state is not tracked.": "current open-work "+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile."))+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
       '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
         '<div class="team-profile-head">'+memberCell(agent.name,agent.shift||"Pseudonymised reference")+'<span class="team-profile-chevron">↗</span></div>'+
-        '<div class="team-profile-metrics"><div><strong>'+fmt(agent.open)+'</strong><span>OPEN WORKLOAD</span></div><div><strong>'+(assignmentsAvailable?fmt(agent.firstAssigned):"—")+'</strong><span>FIRST ASSIGNED</span></div></div>'+
+        '<div class="team-profile-metrics"><div><strong>'+fmt(agent.open)+'</strong><span>'+(state.importedSnapshot&&!hasResolutionTracking()?"CURRENT OWNER RECORDS":"OPEN WORKLOAD")+'</span></div><div><strong>'+(assignmentsAvailable?fmt(agent.firstAssigned):"—")+'</strong><span>FIRST ASSIGNED</span></div></div>'+
         '<div class="team-profile-foot">'+(state.importedSnapshot?"Pseudonymous reference · no personal attribution":"Open profile · sample data only")+'</div>'+
       '</button>'
     ).join("")+'</div>':'<div class="empty-state">No team members match the global search.</div>')+
     (state.selectedAgent?agentDetail(state.selectedAgent):'')+
     agentPerformanceReviewPanel(profiles)+
     '<div class="grid-two team-overview-grid">'+
-      panel("Current open-work distribution",state.importedSnapshot?"Current-state open workload by pseudonymised owner · independent of date selection": "Current-state sample by member · independent of period and inbox filters",teamWorkloadPanel(profiles),'<span class="subtle-tag">SNAPSHOT</span>')+
+      panel(state.importedSnapshot&&!hasResolutionTracking()?"Records with a current owner":"Current open-work distribution",state.importedSnapshot?(hasResolutionTracking()?"Current-state open workload by pseudonymised owner · independent of date selection":"Records with a current owner; resolved/open state is not captured"):"Current-state sample by member · independent of period and inbox filters",teamWorkloadPanel(profiles),'<span class="subtle-tag">SNAPSHOT</span>')+
       panel("First assignments by inbox","Distinct tickets first assigned in the selected scope",assignmentsAvailable?barRows(folders.map(folder=>({label:folder.name,value:folder.assigned,color:folder.color}))):'<div class="empty-state">Assignment history was not supplied.</div>','<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
     '</div>'+
     panel("Member allocation matrix","Count and first-assignment share by inbox",'<p class="team-panel-note">Each share uses all first-assigned tickets in that inbox as its denominator. Searching for members filters visible rows but does not change the denominator. Open work remains a separate snapshot.</p>'+shareMatrix(matrix,true,matrix),'<span class="subtle-tag">INITIAL ASSIGNMENT ONLY</span>')+
@@ -1887,7 +1907,7 @@ function agentDetail(id){
   const folders=scopeFolders();
   const firstAssigned=folders.reduce((sum,folder)=>sum+(allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0);
   return '<section class="panel team-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED MEMBER BREAKDOWN</div><h2 class="panel-title">'+esc(agent.name)+' · '+(state.importedSnapshot?"pseudonymous reference":agent.shift+" shift group")+'</h2><p class="panel-subtitle">'+(state.importedSnapshot?"Imported aggregate only. No direct colleague identity or individual workflow history is included.":"Synthetic sample only. This is a workload and allocation breakdown, not an individual performance rating.")+'</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
-    '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+(state.importedSnapshot&&!importedSourceAvailable("Assignment history")?"Not supplied":fmt(firstAssigned))+'</strong></div><div><span>Current open workload</span><strong>'+fmt(agent.open)+'</strong></div><div><span>'+(state.importedSnapshot?"Roster information":"Shift group")+'</span><strong>'+(state.importedSnapshot?(agent.shift==="Shift data not included"?"Not supplied":esc(agent.shift+" · "+agent.start+"–"+agent.end)):esc(agent.shift))+'</strong><small>'+(state.importedSnapshot?(agent.activeThisFortnight===null?"No roster match was supplied.":agent.activeThisFortnight?"Active this fortnight":"Inactive this fortnight"):"Indicative roster label; scheduled hours are not verified.")+'</small></div></div>'+
+    '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+(state.importedSnapshot&&!importedSourceAvailable("Assignment history")?"Not supplied":fmt(firstAssigned))+'</strong></div><div><span>'+(state.importedSnapshot&&!hasResolutionTracking()?"Records with current owner":"Current open workload")+'</span><strong>'+fmt(agent.open)+'</strong></div><div><span>'+(state.importedSnapshot?"Roster information":"Shift group")+'</span><strong>'+(state.importedSnapshot?(agent.shift==="Shift data not included"?"Not supplied":esc(agent.shift+" · "+agent.start+"–"+agent.end)):esc(agent.shift))+'</strong><small>'+(state.importedSnapshot?(agent.activeThisFortnight===null?"No roster match was supplied.":agent.activeThisFortnight?"Active this fortnight":"Inactive this fortnight"):"Indicative roster label; scheduled hours are not verified.")+'</small></div></div>'+
     '<div class="grid-two"><div><h3 class="mini-heading">First assignments by inbox</h3>'+barRows(folders.map(folder=>({label:folder.name,value:allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],color:folder.color})))+'</div><div class="team-private-state"><strong>Individual workflow events · Not available</strong><p>Handover, reassignment, recovery and flag events are not attributed to individual profiles in the snapshot. The aggregate event ledger is shown separately and must not be distributed across members.</p></div></div>'+
     '</section>';
 }

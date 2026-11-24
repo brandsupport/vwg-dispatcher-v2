@@ -360,6 +360,14 @@ function parseExplicitTimestamp(value,timeZone="Europe/London"){
   if(match)return zonedLocalTimestamp({year:+match[1],month:+match[2],day:+match[3],hour:+match[4],minute:+match[5],second:+(match[6]||0)},timeZone);
   match=raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if(match)return zonedLocalTimestamp({year:+match[3],month:+match[2],day:+match[1],hour:+match[4],minute:+match[5],second:+(match[6]||0)},timeZone);
+  // Excel displays the export as e.g. 23/Nov/2026 10:50:00 or 23-Nov-2026 10:50:00.
+  match=raw.match(/^(\d{1,2})[\/-]([A-Za-z]{3,9})[\/-](\d{4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/i);
+  if(match){
+    const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    const month=months[match[2].slice(0,3).toLowerCase()];
+    if(!month)return null;
+    return zonedLocalTimestamp({year:+match[3],month,day:+match[1],hour:+(match[4]||0),minute:+(match[5]||0),second:+(match[6]||0)},timeZone);
+  }
   return null;
 }
 function parseExplicitDate(value,timeZone="Europe/London"){
@@ -399,16 +407,18 @@ function downloadBlob(name,content,type){
 function renderSnapshot(snapshot){
   $("resultsSection").hidden=false;
   const overall=snapshot.tickets.overall;
+  const resolutionTracked=snapshot.tickets.resolution_tracking==="source_status_present";
+  const brandTracked=snapshot.tickets.brand_field_mapped===true;
   $("resultScope").textContent="Snapshot generated "+snapshot.generated_at_utc+" · "+snapshot.tickets.total+" unique ticket records · aggregate output only";
   $("kpiResults").innerHTML=[
     ["Ticket records",overall.ticket_records],
     ["Initially assigned",overall.initially_assigned],
-    ["Resolved / closed",overall.resolved],
-    ["Outstanding",overall.outstanding],
-    ["Unassigned open",overall.unassigned]
-  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
-  $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
-  $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
+    ["Resolved / closed",resolutionTracked?overall.resolved:"Not tracked"],
+    ["Outstanding",resolutionTracked?overall.outstanding:"Not tracked"],
+    ["Unassigned open",resolutionTracked?overall.unassigned:"Not tracked"]
+  ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+((typeof value==="number")?Number(value).toLocaleString("en-GB"):escapeHtml(value))+'</strong></div>').join("");
+  $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,resolutionTracked?row.resolved:"Not tracked",resolutionTracked?row.outstanding:"Not tracked",resolutionTracked?row.unassigned:"Not tracked"]));
+  $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],brandTracked?snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]):[["Brand field not captured","Not available","—"]]);
   $("dailyResults").innerHTML=buildTable(["UTC date","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
   $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
   $("rosterResults").innerHTML=buildTable(["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
@@ -661,7 +671,8 @@ async function sanitise(){
     if(quality.workflow?.unknown_inbox)warnings.push(quality.workflow.unknown_inbox+" workflow row(s) had an unknown inbox and were excluded.");
     if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
     if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
-    if(!mappings.tickets.brand)warnings.push("No Brand field exists in the mapped ticket source. Brand totals are therefore unclassified; the dashboard will not guess a brand from the email subject.");
+    if(!mappings.tickets.brand)warnings.push("No Brand field exists in the mapped ticket source. Brand totals are not captured; the dashboard will not guess a brand from the email subject.");
+    if(!mappings.tickets.resolution_status&&!mappings.tickets.resolved_at)warnings.push("No explicit Resolution Status or Resolved At field is mapped. Resolved and outstanding totals, resolution rate and solve-time metrics are not tracked by this workbook.");
     if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Imported agents will not have shift-group or active-fortnight metadata.");
     if(files.roster){
       const usedAgentRefs=new Set();
