@@ -2220,27 +2220,23 @@ function exportReliability(){
 }
 
 function auditBaseEvents(){
-  return AUDIT_LEDGER.filter(event=>state.folder==="all"||event.folder===state.folder);
+  if(!state.importedSnapshot)return [];
+  return (state.importedSnapshot.activity_events||[]).filter(event=>state.folder==="all"||event.inbox_code===state.folder);
 }
 function auditFilteredEvents(){
-  let events=auditBaseEvents();
-  if(state.auditCategory!=="all")events=events.filter(event=>event.category===state.auditCategory);
-  if(state.auditOutcome!=="all")events=events.filter(event=>event.outcome===state.auditOutcome);
-  if(state.auditActor!=="all")events=events.filter(event=>event.actor===state.auditActor);
   const term=state.auditSearch.trim().toLowerCase();
-  if(term)events=events.filter(event=>[
-    event.id,event.occurredAt,event.category,event.event,event.actor,event.role,event.entity,event.folder,event.ticket,
-    event.correlation,event.outcome,event.reason,event.approver,event.approval,event.source,event.evidence,
-    JSON.stringify(event.before),JSON.stringify(event.after)
-  ].join(" ").toLowerCase().includes(term));
-  return events;
+  return auditBaseEvents().filter(event=>!term||[
+    event.event_ref,event.event_type,event.inbox_code,event.ticket_ref,event.original_agent_name,
+    event.current_agent_name,event.incident_count,activityEventTimestamp(event)
+  ].join(" ").toLowerCase().includes(term)).sort((a,b)=>(b.occurred_at_utc||"").localeCompare(a.occurred_at_utc||""));
 }
 function auditStats(events){
   return {
     eventCount:events.length,
-    ticketCount:new Set(events.map(event=>event.ticket).filter(Boolean)).size,
-    configurationCount:events.filter(event=>event.category==="Configuration").length,
-    exceptionCount:events.filter(event=>event.category==="Exception"||event.outcome==="Held for review"||event.outcome==="Blocked — no backend").length
+    ticketCount:new Set(events.map(event=>event.ticket_ref).filter(Boolean)).size,
+    handovers:events.filter(event=>event.event_type==="handover").length,
+    exceptions:events.filter(event=>event.event_type==="exception"||event.event_type==="recovery_held").length,
+    dryRuns:events.filter(event=>event.dry_run).length
   };
 }
 function auditSelectOptions(values,selected,label){
@@ -2311,42 +2307,33 @@ function auditTimelineMarkup(event){
 }
 function refreshAuditPanels(){
   const filtered=auditFilteredEvents();
-  if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
-  const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
   const count=document.getElementById("auditLedgerCount");
   const rows=document.getElementById("auditLedgerRows");
-  const detail=document.getElementById("auditEventDetail");
-  const timeline=document.getElementById("auditRelatedTimeline");
-  if(count)count.textContent="Showing "+filtered.length+" of "+auditBaseEvents().length+" sample events · "+(state.folder==="all"?"All four inboxes":scopeName());
-  if(rows)rows.innerHTML=auditEventRows();
-  if(detail)detail.innerHTML=auditDetailMarkup(selected);
-  if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
+  if(count)count.textContent="Showing "+filtered.length+" of "+auditBaseEvents().length+" Activity Log events · "+(state.folder==="all"?"All four inboxes":scopeName());
+  if(rows)rows.innerHTML=importedActivityRows(filtered);
 }
 function renderAudit(){
-  const base=auditBaseEvents();
-  for(const [key,field] of [["auditCategory","category"],["auditOutcome","outcome"],["auditActor","actor"]]){
-    if(state[key]!=="all"&&!base.some(event=>event[field]===state[key]))state[key]="all";
+  const imported=Boolean(state.importedSnapshot);
+  if(!imported){
+    pageContent.innerHTML=heading("ACTIVITY LOG","Import a tracker snapshot to inspect events","This screen is reserved for the real Activity Log export. The dashboard no longer substitutes a fictional audit ledger for mailbox or dispatcher history.")+
+      '<div class="empty-state activity-log-empty"><strong>No imported Activity Log</strong><span>Open Reporting Studio, upload the complete tracker workbook and include the Activity Log worksheet to see the chronological event history here.</span></div>';
+    return;
   }
-  const filtered=auditFilteredEvents(),stats=auditStats(base);
-  if(!filtered.some(event=>event.id===state.selectedAuditEvent))state.selectedAuditEvent=filtered[0]?.id||null;
-  const selected=filtered.find(event=>event.id===state.selectedAuditEvent)||null;
-  pageContent.innerHTML=heading("AUDIT HISTORY 2.0","Trace every change, decision and outcome.","Investigate sample ticket events, manager approvals, configuration history and exception evidence. This is a read-only demonstration ledger, not a production audit source.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset filters</button><button class="btn btn-primary" data-action="export-audit">↓ Export filtered ledger</button>')+
-    '<div class="audit-demo-strip"><span><i></i> SYNTHETIC AUDIT DATA · READ ONLY</span><span>Persistent audit store <b>Not configured</b></span><span>Verified actor identity <b>Not available</b></span><span>Event integrity <b>Not verified</b></span></div>'+
+  const base=auditBaseEvents(),filtered=auditFilteredEvents(),stats=auditStats(base);
+  const hasWorkflow=importedSourceAvailable("Workflow history");
+  pageContent.innerHTML=
+    heading("DISPATCHER ACTIVITY LOG","What the dispatcher recorded","A simple, chronological view of recognised Activity Log events from the imported workbook. The source does not record a verified human actor for every event; original and current owners are shown separately.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+    '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> IMPORTED ACTIVITY LOG</span><span>'+fmt(stats.eventCount)+' recognised events</span><span>'+fmt(stats.ticketCount)+' pseudonymised tickets affected</span><span>Notes / subjects / raw IDs excluded</span></div>'+
     kpiGrid([
-      kpi("Sample audit events",fmt(stats.eventCount),"Unique event records in this inbox scope","◷"),
-      kpi("Ticket timelines",fmt(stats.ticketCount),"Distinct ticket references represented","▤"),
-      kpi("Configuration records",fmt(stats.configurationCount),"Draft, review and blocked examples","⚙"),
-      kpi("Exceptions / holds",fmt(stats.exceptionCount),"Exception, hold or blocked outcomes","!")
+      kpi("Recorded events",fmt(stats.eventCount),"Recognised event rows in this extract","⌁"),
+      kpi("Tickets affected",fmt(stats.ticketCount),"Distinct pseudonymised references","▤"),
+      kpi("Handovers",fmt(stats.handovers),"Handover events · not misconduct","⇄"),
+      kpi("Exceptions / recovery holds",fmt(stats.exceptions),"Events that require interpretation","!")
     ])+
-    '<div class="audit-filter-wrap">'+auditFilterToolbar()+'<div class="audit-result-count" id="auditLedgerCount">Showing '+filtered.length+' of '+base.length+' sample events · '+(state.folder==="all"?"All four inboxes":esc(scopeName()))+'</div></div>'+
-    '<div class="audit-workspace"><div class="audit-ledger-column">'+
-      panel("Event ledger","Every row is one synthetic event record; repeated attempts are retained inside the record where relevant.",'<div id="auditLedgerRows">'+auditEventRows()+'</div>','<span class="subtle-tag">APPEND-ONLY MODEL · NOT PERSISTED</span>')+
-    '</div><div class="audit-detail-column">'+
-      panel("Event investigation","Actor, context, approval and value changes",'<div id="auditEventDetail">'+auditDetailMarkup(selected)+'</div>','<span class="subtle-tag">READ ONLY</span>')+
-    '</div></div>'+
-    panel("Related ticket and correlation timeline","Follow the sequence for the selected ticket, or the correlation chain for a configuration or access record.",'<div id="auditRelatedTimeline">'+auditTimelineMarkup(selected)+'</div>')+
-    panel("Production audit contract","The fields the future authenticated audit service must preserve",'<div class="audit-contract-grid"><div><strong>Stable event identity</strong><span>Unique event ID, source ID and idempotency reference.</span></div><div><strong>Trusted actor attribution</strong><span>Authenticated principal, role, initiator and approver.</span></div><div><strong>Timezone-aware time</strong><span>UTC timestamp plus explicit UK mailbox or Egypt shift context.</span></div><div><strong>Change evidence</strong><span>Before / after values, reason, approval and source reference.</span></div><div><strong>Verified outcome</strong><span>Requested, approved, applied, acknowledged, reconciled or failed.</span></div><div><strong>Append-only corrections</strong><span>Corrections create linked events; earlier records are never silently overwritten.</span></div></div>','<span class="subtle-tag">DESIGN REQUIREMENTS</span>')+
-    '<div class="audit-final-note"><strong>Prototype boundary:</strong> this page does not provide a tamper-evident ledger, authenticated actor identity, persistent audit storage, real approval workflow or production event ingestion. The “append-only” label describes the model being demonstrated, not a guarantee enforced by this static public site.</div>';
+    (stats.dryRuns?'<div class="prototype-warning"><strong>Dry-run records included:</strong> '+fmt(stats.dryRuns)+' preview events are retained in the log and labelled Dry run. They are not counted as completed assignments.</div>':"")+
+    (!hasWorkflow?'<div class="prototype-warning"><strong>Activity Log source missing:</strong> the snapshot did not include a mapped Workflow history input.</div>':"")+
+    panel("Find an activity event","Search event type, pseudonymised ticket, inbox, original assignee or current owner",'<div class="audit-filter-toolbar activity-log-filter"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search Activity Log…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label></div><div class="audit-result-count" id="auditLedgerCount">Showing '+filtered.length+' of '+base.length+' Activity Log events · '+(state.folder==="all"?"All four inboxes":esc(scopeName()))+'</div><div id="auditLedgerRows">'+importedActivityRows(filtered)+'</div>','<span class="subtle-tag">SOURCE EVENT ROWS</span>')+
+    '<div class="audit-final-note"><strong>Source limitations:</strong> this is an imported event extract, not a tamper-evident security audit. Details / Notes are deliberately excluded because they may contain email subjects or other free text. The saved Activity Log schema has no separate actioned-by field, so owner fields must not be treated as proof of who performed an action.</div>';
 }
 function renderReports(){
   const imported=Boolean(state.importedSnapshot);
