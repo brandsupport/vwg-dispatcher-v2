@@ -49,7 +49,7 @@ Do **not** map `Assignment Flag` as the event type. It is a separate Boolean val
 
 Current event interpretation in the sanitiser (using the actual column B event codes):
 
-| Assignment Flag | Sanitised event / treatment |
+| Event Type | Sanitised event / treatment |
 |---|---|
 | `AUTO_ASSIGNMENT` | Automatic first allocation |
 | `MANUAL_ASSIGNMENT_CAPTURED` | Manual first allocation |
@@ -74,6 +74,7 @@ Select the **Team & Shifts** worksheet from the same five-tab workbook in the ro
 | Shift start | Yes | `Shift Start (Egypt)` | Must be `HH:mm`; retained as Egypt-local schedule metadata |
 | Shift end | Yes | `Shift End (Egypt)` | Must be `HH:mm` and later than the shift start |
 | Active this fortnight | Yes | `Active This Fortnight` | Accepts Yes/No (or equivalent Boolean values) |
+| Private display name | No | `Colleague` | Used only for the separate private agent-name lookup; never included in the shared JSON |
 
 `Colleague` is not required as a second identity field; the exact Outlook category is the join key. The roster may include inactive colleagues so the snapshot can distinguish the whole roster from the active-fortnight headcount. Shift metadata is included only as pseudonymous agent reference, shift group, start/end time and active-fortnight Boolean. Colleague names and Outlook category values are not written to the JSON snapshot or public repository. After processing, the Studio offers a separate `dispatcher-private-agent-name-lookup.csv` download. Keep it private. Import the sanitised JSON into the dashboard first, then use **Import private names** to load this CSV locally in the same browser tab. The name lookup is not embedded in the JSON.
 
