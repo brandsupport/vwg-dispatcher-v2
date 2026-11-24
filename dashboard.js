@@ -492,13 +492,14 @@ function validateAndSanitiseSnapshot(raw){
   };
   const inboxCodes=["agency","detags","transfers","unadopts"];
   const brandCodes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
-  const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception"];
+  const eventCodes=["received","flagged","handover","assigned","assignment_pending","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","reconciliation","queued","dry_run","resolved","reopened","exception"];
   const validDate=value=>{
     if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
     const parsed=new Date(value+"T00:00:00Z");
     return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===value;
   };
-  if(!isObject(raw)||raw.schema_version!=="dispatcher-reporting-snapshot-1"||raw.source_mode!=="offline_sanitised_aggregate"){
+  const schemaVersion=isObject(raw)?raw.schema_version:null;
+  if(!isObject(raw)||!["dispatcher-reporting-snapshot-1","dispatcher-reporting-snapshot-2"].includes(schemaVersion)||raw.source_mode!=="offline_sanitised_aggregate"){
     fail("This is not a supported sanitised Dispatcher reporting snapshot.");
   }
   if(typeof raw.generated_at_utc!=="string"||!raw.generated_at_utc.endsWith("Z")||!Number.isFinite(Date.parse(raw.generated_at_utc))){
@@ -544,6 +545,20 @@ function validateAndSanitiseSnapshot(raw){
     return {brand_code:row.brand_code,count:count(row.count,"brand count")};
   });
   if(new Set(byBrand.map(row=>row.brand_code)).size!==byBrand.length||sum(byBrand,"count")!==total)fail("Brand totals are duplicated or do not reconcile with the ticket total.");
+  const brandFieldAvailable=typeof raw.tickets.brand_field_available==="boolean"?raw.tickets.brand_field_available:true;
+  const resolutionDataAvailable=typeof raw.tickets.resolution_data_available==="boolean"?raw.tickets.resolution_data_available:true;
+  const brandByInbox=(raw.tickets.brand_by_inbox||[]).map(row=>{
+    if(!isObject(row)||!brandCodes.includes(row.brand_code)||!inboxCodes.includes(row.inbox_code))fail("The snapshot contains an invalid brand-by-inbox row.");
+    return {brand_code:row.brand_code,inbox_code:row.inbox_code,count:count(row.count,"brand-by-inbox count")};
+  });
+  if(brandByInbox.length){
+    const brandKeys=new Set();
+    for(const row of brandByInbox){const key=row.brand_code+"|"+row.inbox_code;if(brandKeys.has(key))fail("Duplicate brand-by-inbox rows were found.");brandKeys.add(key);}
+    for(const inbox of byInbox){
+      const brandTotal=brandByInbox.filter(row=>row.inbox_code===inbox.inbox_code).reduce((n,row)=>n+row.count,0);
+      if(brandTotal!==inbox.ticket_records)fail("Brand-by-inbox counts do not reconcile for "+inbox.inbox_code+".");
+    }
+  }
   const dailyVolume=raw.tickets.daily_volume.map(row=>{
     if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||!validDate(row.date_utc)){
       fail("The snapshot contains an invalid daily-volume row.");
@@ -587,8 +602,9 @@ function validateAndSanitiseSnapshot(raw){
     const toMinutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
     if(toMinutes(row.shift_end_egypt)<=toMinutes(row.shift_start_egypt))fail("A roster shift end must be later than its start.");
     if(typeof row.active_this_fortnight!=="boolean")fail("The roster contains an invalid active-fortnight flag.");
+    const agentName=typeof row.agent_name==="string"&&row.agent_name.trim()?row.agent_name.trim().slice(0,100):row.agent_ref;
     return {
-      agent_ref:row.agent_ref,shift_group:row.shift_group,
+      agent_ref:row.agent_ref,agent_name:agentName,shift_group:row.shift_group,
       shift_start_egypt:row.shift_start_egypt,shift_end_egypt:row.shift_end_egypt,
       active_this_fortnight:row.active_this_fortnight
     };
@@ -622,6 +638,34 @@ function validateAndSanitiseSnapshot(raw){
     if(workflowKeys.has(key))fail("Duplicate workflow event and inbox rows were found.");
     workflowKeys.add(key);
   }
+  const rawActivityEvents=raw.activity_events===undefined?[]:raw.activity_events;
+  if(!Array.isArray(rawActivityEvents))fail("The Activity Log event section is invalid.");
+  const activityEvents=rawActivityEvents.map(row=>{
+    if(!isObject(row)||!/^Event-[A-F0-9]{10}$/.test(String(row.event_ref||""))||
+       !/^Ticket-[A-F0-9]{10}$/.test(String(row.ticket_ref||""))||
+       !eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code)){
+      fail("An Activity Log event contains an invalid pseudonymous reference, event or inbox.");
+    }
+    const validAgentRef=value=>value===null||value===undefined||/^Agent-[A-F0-9]{10}$/.test(String(value));
+    if(!validAgentRef(row.original_agent_ref)||!validAgentRef(row.current_agent_ref))fail("An Activity Log event contains an invalid agent reference.");
+    const validName=value=>value===null||value===undefined||(typeof value==="string"&&value.length<=100);
+    if(!validName(row.original_agent_name)||!validName(row.current_agent_name))fail("An Activity Log event contains an invalid display name.");
+    let occurredAt=null;
+    if(row.occurred_at_utc!==null&&row.occurred_at_utc!==undefined){
+      if(typeof row.occurred_at_utc!=="string"||!row.occurred_at_utc.endsWith("Z")||!Number.isFinite(Date.parse(row.occurred_at_utc)))fail("An Activity Log event has an invalid timestamp.");
+      occurredAt=row.occurred_at_utc;
+    }
+    if(typeof row.dry_run!=="boolean")fail("An Activity Log event has an invalid dry-run flag.");
+    return {
+      event_ref:row.event_ref,event_type:row.event_type,inbox_code:row.inbox_code,ticket_ref:row.ticket_ref,
+      occurred_at_utc:occurredAt,original_agent_ref:row.original_agent_ref||null,
+      original_agent_name:row.original_agent_name||null,current_agent_ref:row.current_agent_ref||null,
+      current_agent_name:row.current_agent_name||null,
+      incident_count:count(row.incident_count,"event incident count"),dry_run:row.dry_run
+    };
+  });
+  const activityRefs=new Set();
+  for(const event of activityEvents){if(activityRefs.has(event.event_ref))fail("Duplicate Activity Log event references were found.");activityRefs.add(event.event_ref);}
   const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
@@ -635,12 +679,12 @@ function validateAndSanitiseSnapshot(raw){
   const sourceSet=new Set(sources.map(row=>row.source));
   if(sourceSet.size!==sources.length)fail("Duplicate data-quality source rows were found.");
   return {
-    schema_version:"dispatcher-reporting-snapshot-1",
+    schema_version:schemaVersion,
     generated_at_utc:raw.generated_at_utc,
     source_mode:"offline_sanitised_aggregate",
     reporting_period:reportingPeriod,
-    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
-    allocations,team_roster:teamRoster,workflow,
+    tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,brand_by_inbox:brandByInbox,brand_field_available:brandFieldAvailable,resolution_data_available:resolutionDataAvailable,daily_volume:dailyVolume},
+    allocations,team_roster:teamRoster,workflow,activity_events:activityEvents,
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
