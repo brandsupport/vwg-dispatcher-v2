@@ -63,6 +63,8 @@ jobs:
         run: node --test tests/reporting-studio.test.mjs
       - name: Test dashboard local snapshot import validation
         run: node --test tests/dashboard-snapshot.test.mjs
+      - name: Test Reporting Studio to Dashboard synthetic integration
+        run: node --test tests/reporting-dashboard.integration.test.mjs
       - name: Validate local-only reporting studio boundary
         run: |
           node --input-type=module <<'NODE'
