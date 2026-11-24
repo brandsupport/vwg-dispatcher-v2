@@ -241,7 +241,7 @@ function renderSnapshot(snapshot){
   ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+Number(value).toLocaleString("en-GB")+'</strong></div>').join("");
   $("inboxResults").innerHTML=buildTable(["Inbox","Ticket records","First assigned","Resolved","Open","Unassigned"],snapshot.tickets.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]));
   $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
-  $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%"]));
+  $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
   const warnings=snapshot.data_quality.warnings;
@@ -293,10 +293,10 @@ async function sanitise(){
     }
     const validInitial=new Map();let ambiguousInitial=0;
     for(const [ticketKey,items] of initialRows.entries()){
-      if(items.length!==1){ambiguousInitial++;quality.assignments.rows_skipped+=items.length;continue;}
+      if(items.length!==1){ambiguousInitial++;quality.assignments.rows_accepted-=items.length;quality.assignments.rows_skipped+=items.length;continue;}
       const ticket=ticketMap.get(ticketKey);
       if(ticket&&items[0].inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await pseudonym(key,"agent",items[0].agent),inbox_code:items[0].inbox});
-      else if(ticket){quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
+      else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
