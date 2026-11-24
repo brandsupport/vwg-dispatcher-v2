@@ -158,7 +158,7 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
     received:5,assigned:4,resolved:null,open:null,unassigned:null,noOwner:1,lifecycleAvailable:false
   });
   assert.deepEqual(overall.folders.map(row=>[
-    row.id,row.received,row.assigned,row.resolved,row.open,row.unassigned
+    row.id,row.received,row.assigned,row.resolved,row.open,row.unassigned,row.no_current_owner
   ]),[
     ["agency",1,1,null,null,null,0],
     ["detags",2,2,null,null,null,0],
@@ -179,7 +179,7 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
 
   const detags=calculateDashboardViews(imported,"detags");
   assert.deepEqual(detags.totals,{
-    received:2,assigned:2,resolved:null,open:null,unassigned:null,lifecycleAvailable:false
+    received:2,assigned:2,resolved:null,open:null,unassigned:null,noOwner:0,lifecycleAvailable:false
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
     ["handover",1],["flag",0],["manual",0],["recovery",1],["reassignment",0]
