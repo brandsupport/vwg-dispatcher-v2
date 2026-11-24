@@ -790,17 +790,42 @@ async function sanitise(){
 function downloadSnapshot(){if(!currentSnapshot)return;downloadBlob("dispatcher-reporting-snapshot.json",JSON.stringify(currentSnapshot,null,2),"application/json");}
 function downloadCSVs(){
   if(!currentSnapshot)return;
-  const s=currentSnapshot;
+  const snapshot=currentSnapshot;
+  const lifecycle=snapshot.tickets.lifecycle_available===true;
+  const brandAvailable=snapshot.tickets.brand_available===true;
   const filesToDownload=[
-    ["dispatcher-daily-volume.csv",["date_utc","inbox_code","ticket_records"],s.tickets.daily_volume.map(r=>[r.date_utc,r.inbox_code,r.ticket_records])],
-    ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","initially_assigned","resolved","outstanding","unassigned"],s.tickets.by_inbox.map(r=>[r.inbox_code,INBOX_LABELS[r.inbox_code],r.ticket_records,r.initially_assigned,r.resolved,r.outstanding,r.unassigned])],
-    ["dispatcher-brand-summary.csv",["brand_code","brand_name","ticket_count","share_pct"],s.tickets.by_brand.map(r=>[r.brand_code,BRAND_LABELS[r.brand_code],r.count,s.tickets.total?(r.count/s.tickets.total*100).toFixed(2):"0.00"])],
-    ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
-    ["dispatcher-team-roster.csv",["agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],(s.team_roster||[]).map(r=>[r.agent_ref,r.shift_group,r.shift_start_egypt,r.shift_end_egypt,r.active_this_fortnight?"Yes":"No"])],
-    ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],s.workflow.map(r=>[r.event_type,r.inbox_code,r.event_count,r.distinct_tickets])],
-    ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],s.data_quality.sources.map(r=>[r.source,r.rows_read,r.rows_accepted,r.rows_skipped,r.duplicate_rows,r.unknown_inbox,r.unknown_brand,r.unknown_status,r.ambiguous_time])]
+    ["dispatcher-daily-volume.csv",["received_date_uk","time_zone","inbox_code","ticket_records"],snapshot.tickets.daily_volume.map(row=>[row.date_local||row.date_utc,row.time_zone||"UTC",row.inbox_code,row.ticket_records])],
+    ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","first_assignments","resolved","outstanding","unassigned_open","current_owner_records_without_owner"],snapshot.tickets.by_inbox.map(row=>[
+      row.inbox_code,INBOX_LABELS[row.inbox_code],row.ticket_records,row.initially_assigned,
+      lifecycle?row.resolved:"Not recorded",lifecycle?row.outstanding:"Not recorded",
+      lifecycle?row.unassigned:"Not recorded",row.no_current_owner||0
+    ])],
+    ["dispatcher-brand-summary.csv",brandAvailable?["brand_code","brand_name","ticket_count","share_pct"]:["availability","message"],
+      brandAvailable?snapshot.tickets.by_brand.map(row=>[row.brand_code,BRAND_LABELS[row.brand_code],row.count,snapshot.tickets.total?(row.count/snapshot.tickets.total*100).toFixed(2):"0.00"]):
+      [["NOT RECORDED","The current Assignments worksheet does not contain an explicit Brand field."]]],
+    ["dispatcher-agent-allocation.csv",["colleague","agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_owner_records","current_open_workload"],
+      snapshot.allocations.map(row=>[row.agent_name||"Name not matched",row.agent_ref,row.inbox_code,row.initial_assignments,row.allocation_share_pct.toFixed(2),row.current_owner_records??0,lifecycle?row.current_open_workload:"Not recorded"])],
+    ["dispatcher-assignment-methods.csv",["inbox_code","automatic_first_assignments","manual_first_assignments","total_first_assignments"],
+      snapshot.assignment_methods.map(row=>[row.inbox_code,row.automatic,row.manual,row.total])],
+    ["dispatcher-team-roster.csv",["colleague","agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],
+      (snapshot.team_roster||[]).map(row=>[row.agent_name||"Name not supplied",row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"])],
+    ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],
+      snapshot.workflow.map(row=>[row.event_type,row.inbox_code,row.event_count,row.distinct_tickets])],
+    ["dispatcher-activity-log.csv",["event_time_egypt","event_date_egypt","event_type","inbox_code","original_assignee","current_owner","first_assignment_flag","ticket_ref_hmac"],
+      (snapshot.activity_rows||[]).map(row=>[row.event_time_egypt||"Not recorded",row.event_date_egypt||"Not recorded",row.event_type,row.inbox_code,row.original_assignee_name||"Not recorded",row.current_owner_name||"Not recorded",row.first_assignment_flag===null?"Not recorded":row.first_assignment_flag?"TRUE":"FALSE",row.ticket_ref])],
+    ["dispatcher-ticket-queue.csv",["ticket_ref_hmac","inbox_code","tracker_status","brand","current_owner","received_date_uk","lifecycle_status","resolved_date_uk","resolved_by"],
+      (snapshot.tickets.ticket_rows||[]).map(row=>[row.ticket_ref,row.inbox_code,row.tracker_status,
+        brandAvailable?BRAND_LABELS[row.brand_code]:"Not recorded",
+        row.owner_name||"Unassigned",row.received_date_uk||"Not recorded",
+        lifecycle?(row.lifecycle_status||"Resolved"): "Not recorded",
+        lifecycle?(row.resolved_date_uk||"Not recorded"):"Not recorded",
+        lifecycle?(row.resolved_by_name||"Not recorded"):"Not recorded"])],
+    ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],
+      snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time])]
   ];
-  filesToDownload.forEach(([name,headers,rows],index)=>setTimeout(()=>downloadBlob(name,makeCSV(headers,rows),"text/csv;charset=utf-8"),index*180));
+  filesToDownload.forEach(([name,headers,rows],index)=>
+    setTimeout(()=>downloadBlob(name,makeCSV(headers,rows),"text/csv;charset=utf-8"),index*180)
+  );
 }
 function generateKey(){
   if(!crypto?.getRandomValues){alert("Secure random key generation is not available in this browser.");return;}
