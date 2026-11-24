@@ -194,7 +194,7 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
   const makeCsv=(headers,rows)=>[
     headers.map(quote).join(","),
     ...rows.map(row=>headers.map(header=>quote(row[header]??"")).join(","))
-  ].join("\\n");
+  ].join("\n");
 
   const assignments=makeCsv(assignmentsHeaders,[
     {"Email Key / ID":"SYN-101","Received At (UK)":"2026-11-22T09:12:00+00:00","Source Inbox":"Agency Detags","Email Subject":"SYNTHETIC SUBJECT - DO NOT EXPORT","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"handover","Status":"In progress","Handover Notes":"SYNTHETIC PRIVATE NOTE","LoginUserEmail (optional)":"agent-a@example.invalid","Outlook Entry ID":"SYNTHETIC-ENTRY-A","Outlook Store ID":"SYNTHETIC-STORE-A"},
