@@ -1197,7 +1197,7 @@ function renderOverview(){
     '<div class="overview-metric-strip">'+
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
       '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+resolutionRateValue+'</strong><small>'+(imported?(lifecycleAvailable?"Resolved ÷ snapshot records":"Resolution fields are not recorded"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
-      '<div class="overview-metric-tile"><span>'+(imported?(lifecycleAvailable?"CURRENTLY UNASSIGNED":"OWNERSHIP DATA"):"NOT INITIALLY ALLOCATED")+'</span><strong>'+(t.unassigned===null?"Not recorded":fmt(t.unassigned))+'</strong><small>'+(imported?(lifecycleAvailable?"Open records with no current owner":"Current Owner is recorded separately from lifecycle state"):"Received less first-assigned total")+'</small></div>'+
+      '<div class="overview-metric-tile"><span>'+(imported?(lifecycleAvailable?"UNASSIGNED OPEN":"NO CURRENT OWNER"):"NOT INITIALLY ALLOCATED")+'</span><strong>'+(imported&&!lifecycleAvailable?fmt(t.noOwner):(t.unassigned===null?"Not recorded":fmt(t.unassigned)))+'</strong><small>'+(imported?(lifecycleAvailable?"Open records with no current owner":"Rows where Current Owner is blank; not a lifecycle status"):"Received less first-assigned total")+'</small></div>'+
       '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
