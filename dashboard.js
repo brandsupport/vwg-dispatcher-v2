@@ -474,7 +474,7 @@ const VIEW_TITLES = {
   roster:"Roster & Coverage",
   rules:"Dispatch Configuration",
   reliability:"Reliability Centre",
-  audit:"Audit History",
+  audit:"Activity Log",
   reports:"Reports & Exports",
   admin:"Administration"
 };
@@ -2610,8 +2610,8 @@ function renderAudit(){
 function renderReports(){
   const imported=Boolean(state.importedSnapshot);
   pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
-    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The aggregate snapshot is held in browser memory only; it is not uploaded or saved. Refreshing the page clears it.":"The studio processes selected CSV files locally in your browser. It has no mailbox, Worker or D1 connection and does not upload raw files.")+'</span></div></div>'+
-    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, select approved CSV exports, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. Only the aggregate JSON is read by this dashboard.</div>'+
+    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The aggregate snapshot is held in browser memory only; it is not uploaded or saved. Refreshing the page clears it.":"The Studio accepts the complete five-tab Excel workbook in one upload (with separate CSV fallback), processes it in this browser and does not upload workbook contents. It has no mailbox, Worker or D1 connection.")+'</span></div></div>'+
+    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, upload the complete five-tab workbook once, select Assignments / Activity Log / Activity Log / Team & Shifts, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. Only the aggregate JSON is read by this dashboard.</div>'+
     '<div class="report-grid">'+
       reportCard("Daily operations report","Ticket records, first assignments, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
       reportCard("Weekly performance report","Team allocation, handovers, flags and validated event summaries. Shift comparison requires rota data.","Weekly","CSV export ready")+
@@ -2816,13 +2816,14 @@ function exportBrands(){
 function exportFolders(){
   const rows=allocationMatrix(),folders=scopeFolders();
   const imported=Boolean(state.importedSnapshot),available=!imported||importedSourceAvailable("Assignment history");
+  const lifecycle=!imported||state.importedSnapshot.tickets.lifecycle_available===true;
   csvDownload(imported?"dispatcher-local-snapshot-folder-share.csv":"dispatcher-sample-folder-share.csv",[
-    ["Member reference",...folders.flatMap(folder=>[folder.name+" first assigned",folder.name+" allocation share"]), "Total first assigned"],
-    ...rows.map(row=>[row.name,...folders.flatMap(folder=>{
+    ["Colleague","Agent reference",...folders.flatMap(folder=>[folder.name+" first assigned",folder.name+" allocation share"]),"Total first assigned","Current owner records","Current open workload"],
+    ...rows.map(row=>[row.name,row.agentRef||row.id,...folders.flatMap(folder=>{
       const index=FOLDERS.findIndex(item=>item.id===folder.id);
       const total=rows.reduce((sum,item)=>sum+(item.cells[index]||0),0);
       return available?[row.cells[index]||0,((row.cells[index]||0)/Math.max(1,total)*100).toFixed(1)+"%"]:["Not supplied","Not supplied"];
-    }),available?row.cells.reduce((sum,value)=>sum+value,0):"Not supplied"])
+    }),available?row.cells.reduce((sum,value)=>sum+value,0):"Not supplied",row.ownerRecords||0,lifecycle?(row.open||0):"Not recorded"])
   ]);
 }
 function exportTeam(){
@@ -2830,22 +2831,27 @@ function exportTeam(){
   const folders=scopeFolders();
   const imported=Boolean(state.importedSnapshot),assignmentsAvailable=!imported||importedSourceAvailable("Assignment history");
   const workflowAvailable=!imported||importedSourceAvailable("Workflow history");
+  const lifecycle=!imported||state.importedSnapshot.tickets.lifecycle_available===true;
   const events=workflowSummaryRows();
   const rows=[
-    [imported?"TEAM PERFORMANCE — SANITISED SNAPSHOT":"TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
-    ["Reporting period",PERIODS[state.period].label],
+    [imported?"TEAM PERFORMANCE — SANITISED LOCAL SNAPSHOT":"TEAM PERFORMANCE — DEMONSTRATION DATA ONLY"],
+    ["Reporting period",imported?"Point-in-time snapshot":PERIODS[state.period].label],
     ["Inbox",scopeName()],
-    [imported?"Agent references are pseudonymised; shift and rota details are not included.":"All records are synthetic; event counts are team-level aggregates and are not attributed to members."],
+    [imported?"Colleague display names are included from the approved roster. Raw Outlook categories and ticket keys are not exported.":"All records are synthetic; event counts are team-level aggregates and are not attributed to members."],
     [],
-    ["Member reference",...(imported?["Shift data"]:["Shift group (illustrative)"]),...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current open-work snapshot"],
+    ["Colleague","Agent reference","Shift group","Shift start · Egypt","Shift end · Egypt","Active this fortnight",...folders.map(folder=>folder.name+" first assigned"),"First assignments in scope","Current owner records","Current open workload"],
     ...profiles.map(agent=>[
-      agent.name,imported?"Not supplied":agent.shift,...folders.map(folder=>assignmentsAvailable?agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]:"Not supplied"),
-      assignmentsAvailable?agent.firstAssigned:"Not supplied",agent.open
+      agent.name,agent.agentRef||agent.id,agent.shift||"Not supplied",agent.start||"Not supplied",agent.end||"Not supplied",
+      imported?(agent.activeThisFortnight?"Yes":"No"):"Sample",
+      ...folders.map(folder=>assignmentsAvailable?agent.firstAssignedByFolder[FOLDERS.findIndex(item=>item.id===folder.id)]:"Not supplied"),
+      assignmentsAvailable?agent.firstAssigned:"Not supplied",
+      imported?(agent.ownerRecords||0):(agent.open||0),
+      lifecycle?(agent.open||0):"Not recorded"
     ]),
     [],
-    ["TEAM-LEVEL WORKFLOW EVENTS — NOT MEMBER-ATTRIBUTED OR TIME-SCOPED"],
+    ["TEAM-LEVEL WORKFLOW EVENTS — MEMBER DETAIL IS IN THE ACTIVITY LOG VIEW"],
     ["Event type","Events recorded","Distinct tickets affected","Rate / interpretation"],
-    ...events.map(event=>[event.label,workflowAvailable?event.events:"Not supplied",imported?"Not aggregated across inboxes":event.uniqueTickets,imported?"Not available":event.rate])
+    ...events.map(event=>[event.label,workflowAvailable?event.events:"Not supplied",imported?"See Activity Log page":event.uniqueTickets,imported?"Event volume only; not a resolution/productivity score":event.rate])
   ];
   csvDownload(imported?"dispatcher-local-snapshot-team-performance.csv":"dispatcher-sample-team-performance.csv",rows);
 }
@@ -2882,12 +2888,12 @@ function exportRoster(){
   const segments=coverageSegments(coverageAgents);
   const rows=imported?[
     ["ROSTER & COVERAGE — SANITISED LOCAL SNAPSHOT"],
-    ["Note","Agent identities are pseudonymised with the local workspace key. Colleague names and Outlook category values are not included."],
+    ["Note","Colleague display names are included from Team & Shifts for local manager use. Raw Outlook category values are excluded; the separate agent reference is HMAC-pseudonymised."],
     ["Note","Coverage includes active-fortnight roster entries only. It is scheduled headcount, not a live availability or capacity measure."],
     [],
-    ["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight","Current open workload","Initial assignments"],
+    ["Colleague","Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight","Current owner records","Current open workload","Initial assignments"],
     ...agents.map(agent=>[
-      agent.name,agent.shift,agent.start,agent.end,agent.activeThisFortnight?"Yes":"No",agent.open,agent.assigned
+      agent.name,agent.agentRef||agent.id,agent.shift,agent.start,agent.end,agent.activeThisFortnight?"Yes":"No",agent.ownerRecords||0,state.importedSnapshot.tickets.lifecycle_available?(agent.open||0):"Not recorded",agent.assigned
     ]),
     [],
     ["SCHEDULED COVERAGE SEGMENTS — ACTIVE ROSTER ONLY"],
