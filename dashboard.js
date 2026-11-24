@@ -1212,12 +1212,34 @@ function healthRow(label,value,type,note){
   return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
 }
 function liveBaseTickets(){
+  if(state.importedSnapshot&&Array.isArray(state.importedSnapshot.tickets.ticket_rows)){
+    const brandNames={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other / unclassified",unclassified:"Not recorded"};
+    const rows=state.importedSnapshot.tickets.ticket_rows.map(row=>({
+      ref:row.ticket_ref,
+      brand:state.importedSnapshot.tickets.brand_available?brandNames[row.brand_code]||"Other / unclassified":"Not recorded",
+      folder:FOLDERS.find(item=>item.id===row.inbox_code)?.name||row.inbox_code,
+      member:row.owner_name||row.owner_ref||"Unassigned",
+      subject:"Source message content removed",
+      age:"Not recorded",
+      ageMinutes:null,
+      received:row.received_date_uk||"Not recorded",
+      status:row.tracker_status,
+      last:"See Activity Log summary",
+      snapshot:true
+    }));
+    const folder=FOLDERS.find(item=>item.id===state.folder)?.name;
+    return rows.filter(ticket=>
+      (!folder||ticket.folder===folder)&&
+      activeSearch([ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.status,ticket.received].join(" "))
+    );
+  }
   return TICKETS.filter(ticket=>{
     const folder=FOLDERS.find(item=>item.id===state.folder)?.name;
     return (!folder||ticket.folder===folder) &&
       activeSearch([ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.status].join(" "));
   });
 }
+
 function liveAgeMinutes(ticket){
   if(Number.isFinite(ticket.ageMinutes))return ticket.ageMinutes;
   const age=String(ticket.age||"").toLowerCase();
@@ -1235,30 +1257,40 @@ function liveSlaTarget(ticket){
   return 240;
 }
 function liveSla(ticket){
+  if(ticket.snapshot)return {label:"Not supplied",tone:"neutral",remaining:null};
   if(["Resolved","Closed"].includes(ticket.status))return {label:"Complete",tone:"good",remaining:null};
   const remaining=liveSlaTarget(ticket)-liveAgeMinutes(ticket);
   if(remaining<=0)return {label:"Overdue",tone:"danger",remaining};
   if(remaining<=30)return {label:"Due in "+remaining+"m",tone:"warning",remaining};
   return {label:"On track",tone:"good",remaining};
 }
+
 function liveStatusMatches(ticket,filter){
   const status=ticket.status;
   if(filter==="all")return true;
   if(filter==="unassigned")return status==="Unassigned";
-  if(filter==="active")return ["Assigned","In progress","Reassigned"].includes(status);
-  if(filter==="waiting")return status==="Waiting";
-  if(filter==="attention")return ["Flagged","Overdue","Unassigned"].includes(status)||liveSla(ticket).tone==="warning";
+  if(filter==="active")return ["Assigning","Assigned","Recovered","In progress","Reassigned"].includes(status);
+  if(filter==="waiting")return ["Queued","Waiting","Handover Pending","Recovery Pending","Dry Run - Recovery Pending"].includes(status);
+  if(filter==="attention")return ["Needs Review","Recovery Failed","Other / review","Flagged","Overdue","Unassigned"].includes(status)||(!ticket.snapshot&&liveSla(ticket).tone==="warning");
   if(filter==="resolved")return ["Resolved","Closed"].includes(status);
   return true;
 }
+
 function liveFilteredTickets(){
   const q=state.liveSearch.trim().toLowerCase();
   return liveBaseTickets().filter(ticket=>
     liveStatusMatches(ticket,state.liveStatus) &&
     (state.liveOwner==="all"||ticket.member===state.liveOwner) &&
     (state.liveBrand==="all"||ticket.brand===state.liveBrand) &&
-    (!q||[ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.status].join(" ").toLowerCase().includes(q))
+    (!q||[ticket.ref,ticket.brand,ticket.folder,ticket.member,ticket.subject,ticket.status,ticket.received].join(" ").toLowerCase().includes(q))
   ).sort((a,b)=>{
+    if(a.snapshot||b.snapshot){
+      const left=a.received==="Not recorded"?"":a.received;
+      const right=b.received==="Not recorded"?"":b.received;
+      if(state.liveSort==="newest")return right.localeCompare(left);
+      if(state.liveSort==="oldest")return left.localeCompare(right);
+      return a.status.localeCompare(b.status)||left.localeCompare(right);
+    }
     if(state.liveSort==="newest")return liveAgeMinutes(a)-liveAgeMinutes(b);
     if(state.liveSort==="priority"){
       const rank=t=>t.status==="Flagged"||t.status==="Overdue"||t.status==="Unassigned"?0:1;
@@ -1267,8 +1299,19 @@ function liveFilteredTickets(){
     return liveAgeMinutes(b)-liveAgeMinutes(a);
   });
 }
+
 function liveQueueRows(){
   const rows=liveFilteredTickets().map(ticket=>{
+    if(ticket.snapshot){
+      return '<tr>'+
+        '<td><button class="link-button live-ticket-ref" type="button" data-ticket="'+esc(ticket.ref)+'">'+esc(ticket.ref)+'</button></td>'+
+        '<td><span class="live-brand-cell">'+esc(ticket.brand)+'</span></td>'+
+        '<td>'+esc(ticket.folder)+'</td>'+
+        '<td>'+memberCell(ticket.member,"Current owner")+'</td>'+
+        '<td>'+esc(ticket.received)+'</td>'+
+        '<td>'+statusPill(ticket.status)+'</td>'+
+      '</tr>';
+    }
     const sla=liveSla(ticket);
     const priority=["Flagged","Overdue","Unassigned"].includes(ticket.status)?"High":(ticket.status==="Waiting"?"Medium":"Normal");
     return '<tr>'+
@@ -1281,37 +1324,60 @@ function liveQueueRows(){
       '<td>'+statusPill(ticket.status)+'</td>'+
     '</tr>';
   });
-  return dataTable(["Ticket / subject","Brand","Inbox","Owner","Age / priority","SLA","Status"],rows,"No tickets match these filters. Try another inbox, status or search.");
+  const imported=state.importedSnapshot&&Array.isArray(state.importedSnapshot.tickets.ticket_rows);
+  return dataTable(imported
+    ?["Pseudonymised ticket reference","Brand","Inbox","Current owner","Received date · UK","Tracker status"]
+    :["Ticket / subject","Brand","Inbox","Owner","Age / priority","SLA","Status"],rows,"No ticket records match these filters. Try another inbox, status or search.");
 }
+
 function liveStatusTabs(base){
+  const imported=Boolean(state.importedSnapshot);
   const counts={
     all:base.length,
     unassigned:base.filter(t=>t.status==="Unassigned").length,
-    active:base.filter(t=>["Assigned","In progress","Reassigned"].includes(t.status)).length,
-    waiting:base.filter(t=>t.status==="Waiting").length,
-    attention:base.filter(t=>["Flagged","Overdue","Unassigned"].includes(t.status)||liveSla(t).tone==="warning").length,
+    active:base.filter(t=>["Assigning","Assigned","Recovered","In progress","Reassigned"].includes(t.status)).length,
+    waiting:base.filter(t=>["Queued","Waiting","Handover Pending","Recovery Pending","Dry Run - Recovery Pending"].includes(t.status)).length,
+    attention:base.filter(t=>["Needs Review","Recovery Failed","Other / review","Flagged","Overdue","Unassigned"].includes(t.status)||(!t.snapshot&&liveSla(t).tone==="warning")).length,
     resolved:base.filter(t=>["Resolved","Closed"].includes(t.status)).length
   };
-  const labels=[["all","All work"],["unassigned","Unassigned"],["active","Active"],["waiting","Waiting"],["attention","Needs attention"],["resolved","Resolved"]];
+  const labels=[["all",imported?"All records":"All work"],["unassigned","Unassigned"],["active",imported?"Assigned / recovered":"Active"],["waiting",imported?"Queued / pending":"Waiting"],["attention",imported?"Needs review":"Needs attention"],["resolved","Resolved"]];
   return '<div class="live-status-tabs" role="group" aria-label="Filter ticket status">'+labels.map(([key,label])=>
     '<button type="button" class="live-status-tab '+(state.liveStatus===key?"active":"")+'" data-live-status="'+key+'" aria-pressed="'+(state.liveStatus===key)+'">'+label+' <b>'+counts[key]+'</b></button>'
   ).join("")+'</div>';
 }
+
 function liveInboxCards(base){
+  const imported=Boolean(state.importedSnapshot);
+  const lifecycle=state.importedSnapshot?.tickets.lifecycle_available===true;
   return '<div class="live-inbox-grid">'+FOLDERS.map(folder=>{
     const tickets=base.filter(t=>t.folder===folder.name);
-    const open=tickets.filter(t=>!["Resolved","Closed"].includes(t.status));
     const unassigned=tickets.filter(t=>t.status==="Unassigned").length;
-    const attention=tickets.filter(t=>["Flagged","Overdue"].includes(t.status)||liveSla(t).tone==="warning").length;
+    const attention=tickets.filter(t=>["Needs Review","Recovery Failed","Other / review","Flagged","Overdue"].includes(t.status)).length;
+    const assigned=tickets.filter(t=>t.member!=="Unassigned").length;
     const active=state.folder===folder.id;
+    const primary=imported?tickets.length:tickets.filter(t=>!["Resolved","Closed"].includes(t.status)).length;
+    const primaryLabel=imported?"ticket records":"open sample tickets";
     return '<button type="button" class="live-inbox-card '+(active?"selected":"")+'" data-live-folder="'+folder.id+'" aria-pressed="'+active+'">'+
       '<span class="live-inbox-top"><span class="live-inbox-name">'+esc(folder.name)+'</span><i style="--inbox-accent:'+folder.color+'"></i></span>'+
-      '<strong class="live-inbox-open">'+open.length+'</strong><span class="live-inbox-caption">open sample tickets</span>'+
-      '<span class="live-inbox-foot"><span>'+unassigned+' unassigned</span><span>'+attention+' attention</span></span>'+
+      '<strong class="live-inbox-open">'+primary+'</strong><span class="live-inbox-caption">'+primaryLabel+'</span>'+
+      '<span class="live-inbox-foot"><span>'+assigned+' with owner</span><span>'+unassigned+' unassigned · '+attention+' review</span></span>'+
     '</button>';
   }).join("")+'</div>';
 }
+
 function liveCoveragePanel(){
+  if(state.importedSnapshot){
+    const agents=rosterProfiles();
+    if(!agents.length)return '<div class="empty-state">The Team & Shifts roster was not included in this snapshot.</div>';
+    const active=agents.filter(agent=>agent.activeThisFortnight);
+    const early=active.filter(agent=>agent.shift==="Early").length;
+    const late=active.filter(agent=>agent.shift==="Late").length;
+    const roster=active.slice(0,8).map(agent=>
+      '<div class="live-coverage-row">'+memberCell(agent.name,agent.shift+" shift")+'<span class="live-shift-time">'+agent.start+'–'+agent.end+'</span>'+statusPill(agent.availability)+'</div>'
+    ).join("");
+    return '<div class="live-coverage-summary"><div><strong>'+active.length+'</strong><span>Active</span></div><div><strong>'+early+'</strong><span>Early</span></div><div><strong>'+late+'</strong><span>Late</span></div></div>'+roster+
+      '<button type="button" class="panel-action live-panel-link" data-go="roster">Open roster & coverage ↗</button>';
+  }
   const available=AGENTS.filter(a=>a.availability==="Available").length;
   const onBreak=AGENTS.filter(a=>a.availability==="Break").length;
   const other=AGENTS.length-available-onBreak;
@@ -1319,29 +1385,82 @@ function liveCoveragePanel(){
     '<div class="live-coverage-row">'+memberCell(agent.name,agent.shift+" shift")+'<span class="live-shift-time">'+agent.start+'–'+agent.end+'</span>'+statusPill(agent.availability)+'</div>'
   ).join("");
   return '<div class="live-coverage-summary"><div><strong>'+available+'</strong><span>Available</span></div><div><strong>'+onBreak+'</strong><span>On break</span></div><div><strong>'+other+'</strong><span>Other</span></div></div>'+
-    '<div class="live-coverage-track"><span style="width:'+(available/Math.max(1,AGENTS.length)*100)+'%"></span></div>'+
-    roster+
+    '<div class="live-coverage-track"><span style="width:'+(available/Math.max(1,AGENTS.length)*100)+'%"></span></div>'+roster+
     '<button type="button" class="panel-action live-panel-link" data-go="roster">Open roster & coverage ↗</button>';
 }
+
 function liveAttentionPanel(base){
-  const attention=base.filter(ticket=>["Flagged","Overdue","Unassigned"].includes(ticket.status)||liveSla(ticket).tone==="warning")
-    .sort((a,b)=>liveAgeMinutes(b)-liveAgeMinutes(a)).slice(0,5);
-  if(!attention.length)return '<div class="empty-state">No sample tickets currently require attention.</div>';
+  const imported=Boolean(state.importedSnapshot);
+  const attention=base.filter(ticket=>imported
+    ?["Needs Review","Recovery Failed","Other / review"].includes(ticket.status)
+    :["Flagged","Overdue","Unassigned"].includes(ticket.status)||liveSla(ticket).tone==="warning"
+  ).slice(0,8);
+  if(!attention.length)return '<div class="empty-state">No tickets in a review-required tracker state in this inbox scope.</div>';
   return '<div class="live-attention-list">'+attention.map(ticket=>
-    '<button class="live-attention-item" type="button" data-ticket="'+esc(ticket.ref)+'"><span class="live-attention-mark '+(ticket.status==="Overdue"?"danger":"warning")+'"></span><span class="live-attention-copy"><strong>'+esc(ticket.ref)+' · '+esc(ticket.status)+'</strong><small>'+esc(ticket.subject)+'</small></span><span class="live-attention-age">'+esc(ticket.age)+'</span></button>'
+    '<button class="live-attention-item" type="button" data-ticket="'+esc(ticket.ref)+'"><span class="live-attention-mark warning"></span><span class="live-attention-copy"><strong>'+esc(ticket.ref)+' · '+esc(ticket.status)+'</strong><small>'+esc(ticket.member)+' · '+esc(ticket.folder)+'</small></span><span class="live-attention-age">'+esc(ticket.received)+'</span></button>'
   ).join("")+'</div>';
 }
+
 function renderLive(){
+  const imported=Boolean(state.importedSnapshot&&Array.isArray(state.importedSnapshot.tickets.ticket_rows));
   const base=liveBaseTickets();
+  const owners=[...new Set(base.map(t=>t.member).filter(name=>name!=="Unassigned"))].sort();
+  const brands=[...new Set(base.map(t=>t.brand))].sort();
+  if(imported){
+    const active=base.filter(t=>["Assigning","Assigned","Recovered"].includes(t.status)).length;
+    const queued=base.filter(t=>["Queued","Handover Pending","Recovery Pending","Dry Run - Recovery Pending"].includes(t.status)).length;
+    const unassigned=base.filter(t=>t.status==="Unassigned").length;
+    const review=base.filter(t=>["Needs Review","Recovery Failed","Other / review"].includes(t.status)).length;
+    const ownerCount=base.filter(t=>t.member!=="Unassigned").length;
+    const eventSummary=teamEventLedger();
+    pageContent.innerHTML=heading("LIVE OPERATIONS · SNAPSHOT QUEUE","Inspect the imported ticket records","A read-only, point-in-time view of the sanitised ticket snapshot. This is distinct from portfolio Overview and is not a live Outlook mailbox or dispatch console.",'<button class="btn btn-primary" data-action="export-live-queue">↓ Export visible queue</button>')+
+      '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> SANITISED SNAPSHOT · READ ONLY</span><span><b>Mailbox sync</b> Not connected</span><span><b>Snapshot rows</b> '+fmt(base.length)+'</span><span><b>Dispatch actions</b> Disabled</span></div>'+
+      '<div class="prototype-warning"><strong>Point-in-time snapshot.</strong> Ticket references are HMAC-pseudonymised. Subjects, notes, raw Email Key / ID and message bodies are removed. Tracker status reflects assignment/recovery workflow—not resolved/open lifecycle state.</div>'+
+      kpiGrid([
+        kpi("Ticket records",fmt(base.length),"In selected inbox scope","▤"),
+        kpi("Currently assigned",fmt(ownerCount),"Rows with a current owner","♧"),
+        kpi("Queued / unassigned",fmt(queued+unassigned),"Tracker assignment states","⌛"),
+        kpi("Needs review / failed",fmt(review),"Recovery or verification states","!",null,review?"warning":"positive")
+      ])+
+      '<div class="section-heading"><div><h2>Inbox queues</h2><p>Choose an inbox to filter the imported ticket records.</p></div><button class="panel-action" type="button" data-live-folder="all">Show all inboxes ↗</button></div>'+
+      liveInboxCards(base)+
+      '<div class="live-queue-layout">'+
+        '<section class="panel live-queue-panel">'+
+          '<div class="panel-heading"><div><h2 class="panel-title">Imported ticket queue</h2><p class="panel-subtitle">Pseudonymised reference, explicit source fields and tracker assignment status only.</p></div><span class="subtle-tag">READ ONLY</span></div>'+
+          liveStatusTabs(base)+
+          '<div class="live-filter-toolbar">'+
+            '<label class="live-queue-search"><span>⌕</span><input type="search" data-live-search value="'+esc(state.liveSearch)+'" placeholder="Search ticket reference, owner or tracker status…" autocomplete="off" aria-label="Search imported ticket queue"></label>'+
+            '<label><span class="live-filter-label">OWNER</span><select class="live-select" data-live-filter="liveOwner"><option value="all">All owners</option>'+owners.map(name=>'<option value="'+esc(name)+'" '+(state.liveOwner===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+            '<label><span class="live-filter-label">BRAND</span><select class="live-select" data-live-filter="liveBrand"><option value="all">All brands</option>'+brands.map(name=>'<option value="'+esc(name)+'" '+(state.liveBrand===name?"selected":"")+'>'+esc(name)+'</option>').join("")+'</select></label>'+
+            '<label><span class="live-filter-label">SORT</span><select class="live-select" data-live-filter="liveSort"><option value="oldest" '+(state.liveSort==="oldest"?"selected":"")+'>Received date · oldest</option><option value="newest" '+(state.liveSort==="newest"?"selected":"")+'>Received date · newest</option><option value="priority" '+(state.liveSort==="priority"?"selected":"")+'>Tracker status</option></select></label>'+
+          '</div>'+
+          '<div class="live-queue-meta"><span id="liveQueueCount">Showing '+liveFilteredTickets().length+' of '+base.length+' ticket records</span><button type="button" class="text-action" data-action="reset-live-filters">Reset filters</button></div>'+
+          '<div id="liveQueueRows">'+liveQueueRows()+'</div>'+
+          '<div class="live-export-footer"><span>Export contains only currently filtered, sanitised ticket rows.</span><button type="button" class="btn btn-primary" data-action="export-live-queue">Export visible queue ↓</button></div>'+
+        '</section>'+
+        '<div class="live-side-stack">'+
+          panel("Needs review","Items in tracker review or failed-recovery states",liveAttentionPanel(base),'<span class="subtle-tag">'+review+' REVIEW STATES</span>')+
+          panel("Team coverage","Scheduled active-fortnight roster · Egypt local",liveCoveragePanel(),'<button class="panel-action" data-go="roster">Open roster & coverage ↗</button>')+
+        '</div>'+
+      '</div>'+
+      '<div class="grid-two live-bottom-grid">'+
+        panel("Activity Log","Actual grouped dispatcher events from the imported Activity Log",eventSummary,'<button class="panel-action" data-go="audit">Open Activity Log ↗</button>')+
+        panel("Source and metric limits","The imported workbook is a point-in-time export",'<div class="live-connection-list">'+
+          healthRow("Outlook mailbox","Not connected","warning","The dashboard does not poll the shared mailbox")+
+          healthRow("Excel tracker","Snapshot only","neutral","Current workbook export; no write-back")+
+          healthRow("Ticket lifecycle","Not recorded","warning","No resolved timestamp or resolver in current tracker")+
+          healthRow("Brand","Not recorded","warning",state.importedSnapshot.tickets.brand_available?"Explicit field mapped":"No Brand column in source")+
+        '</div>','<span class="subtle-tag">READ ONLY</span>')+
+      '</div>';
+    return;
+  }
+
   const open=base.filter(t=>!["Resolved","Closed"].includes(t.status));
   const unassigned=base.filter(t=>t.status==="Unassigned").length;
   const atRisk=open.filter(t=>liveSla(t).tone!=="good").length;
   const available=AGENTS.filter(a=>a.availability==="Available").length;
-  const owners=[...new Set(TICKETS.map(t=>t.member).filter(name=>name!=="Unassigned"))].sort();
-  const brands=[...new Set(TICKETS.map(t=>t.brand))].sort();
-  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is a sample workbench, not a live mailbox connection.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
+  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual sample tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is a sample workbench, not a live mailbox connection.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
     '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> DEMONSTRATION DATA</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Preview only</span><span><b>Last sample refresh</b> Static dataset</span></div>'+
-    (state.importedSnapshot?'<div class="prototype-warning"><strong>Separate data source.</strong> Your sanitised aggregate snapshot is loaded in Overview and the aggregate analytics screens. It contains no ticket IDs or message details, so this individual queue and its sample ticket timelines remain demonstration-only.</div>':'')+
     kpiGrid([
       kpi("Open tickets",fmt(open.length),"In the current inbox scope","◷"),
       kpi("Unassigned",fmt(unassigned),"Awaiting an initial owner","＋",null,unassigned?"warning":"positive"),
@@ -1369,7 +1488,7 @@ function renderLive(){
       '</div>'+
     '</div>'+
     '<div class="grid-two live-bottom-grid">'+
-      panel("Recent operational events","Latest entries in the sample event stream",auditTable(AUDIT_EVENTS.slice(0,5)),'<button class="panel-action" data-go="audit">View audit history ↗</button>')+
+      panel("Recent operational events","Latest entries in the sample event stream",auditTable(AUDIT_EVENTS.slice(0,5)),'<button class="panel-action" data-go="audit">View Activity Log ↗</button>')+
       panel("Operational connection state","Integration indicators are informational only",'<div class="live-connection-list">'+
         healthRow("Outlook mailbox","Not connected","warning","No mailbox messages are being read")+
         healthRow("Excel tracker","Not connected","warning","No assignment records are being written")+
@@ -1378,6 +1497,7 @@ function renderLive(){
       '</div>','<button class="panel-action" data-go="reliability">Open reliability centre ↗</button>')
     '</div>';
 }
+
 function ticketQueueBase(){
   const folderName=FOLDERS.find(folder=>folder.id===state.folder)?.name;
   return TICKETS.filter(ticket=>
