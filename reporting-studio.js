@@ -285,10 +285,11 @@ async function sanitise(){
         const ref=selectedValue(row,"assignments","ticket_ref");const agent=selectedValue(row,"assignments","agent");const kind=selectedValue(row,"assignments","kind");
         const inboxRaw=selectedValue(row,"assignments","inbox");const inbox=inboxRaw?normaliseInbox(inboxRaw):"";
         if(!ref||!agent||isUnassigned(agent)||!kind){q.rows_skipped++;continue;}
-        if(!isInitialKind(kind)){q.rows_accepted++;continue;}
         const ticketKey=norm(ref);const ticket=ticketMap.get(ticketKey);
         if(!ticket){q.rows_skipped++;continue;}
         if(inboxRaw&&!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
+        if(inbox&&inbox!==ticket.inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
+        if(!isInitialKind(kind)){q.rows_accepted++;continue;}
         const resolvedInbox=inbox||ticket.inbox;
         if(!resolvedInbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         q.rows_accepted++;
