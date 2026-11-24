@@ -2610,16 +2610,16 @@ function renderAudit(){
 function renderReports(){
   const imported=Boolean(state.importedSnapshot);
   pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
-    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The aggregate snapshot is held in browser memory only; it is not uploaded or saved. Refreshing the page clears it.":"The Studio accepts the complete five-tab Excel workbook in one upload (with separate CSV fallback), processes it in this browser and does not upload workbook contents. It has no mailbox, Worker or D1 connection.")+'</span></div></div>'+
-    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, upload the complete five-tab workbook once, select Assignments / Activity Log / Activity Log / Team & Shifts, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. Only the aggregate JSON is read by this dashboard.</div>'+
+    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The sanitised snapshot includes pseudonymised ticket references and colleague names from Team & Shifts. It stays in browser memory only and is not uploaded or saved; refresh clears it. Keep the downloaded file in an approved private location.":"The Studio accepts the complete five-tab Excel workbook in one upload (with separate CSV fallback), processes it in this browser and does not upload workbook contents. It has no mailbox, Worker or D1 connection.")+'</span></div></div>'+
+    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, upload the complete five-tab workbook once, select Assignments / Activity Log / Activity Log / Team & Shifts, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. The sanitised JSON includes a read-only pseudonymised ticket queue and Activity Log summaries. It contains no raw Email Key / ID, subjects, message bodies or handover notes.</div>'+
     '<div class="report-grid">'+
-      reportCard("Daily operations report","Ticket records, first assignments, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
-      reportCard("Weekly performance report","Team allocation, handovers, flags and validated event summaries. Shift comparison requires rota data.","Weekly","CSV export ready")+
-      reportCard("Monthly management report","Brand volumes, folder share and current-state summaries.","Monthly","CSV export ready")+
-      reportCard("Individual performance report","Private per-agent workload and resolution summary with scheduled-hour context.","Individual","Permission required")+
-      reportCard("Brand volume report","Distinct ticket counts and brand share across all inboxes.","By brand","CSV export ready")+
+      reportCard("Daily operations report","Ticket records, validated first allocations and source availability. Resolution and open-backlog measures appear only when lifecycle fields exist.","Daily","CSV export ready")+
+      reportCard("Weekly performance report","Named roster, first-assignment methods and Activity Log event summaries. Member resolution rates require resolver and resolution timestamps.","Weekly","CSV export ready")+
+      reportCard("Monthly management report","Folder share and current-owner summaries. Brand volumes require an explicit Brand source field.","Monthly","Source fields required")+
+      reportCard("Individual performance report","Named first allocations and owner records are available. Resolution rate and solve time are not recorded in the current tracker.","Individual","Lifecycle fields required")+
+      reportCard("Brand volume report","Distinct ticket counts and brand share only after a controlled Brand field is populated in the tracker.","By brand","Brand field required")+
       reportCard("Reliability report","Assignment failures, recoveries, retries and service health.","System","Sample only")+
-      '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Map tracker CSV columns, remove direct identifiers, create stable pseudonymous agent references and export aggregate reporting files.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
+      '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Upload the complete five-tab workbook once, map the relevant sheets, keep names for local manager use, pseudonymise ticket references and export a safe local snapshot.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
     '</div>'+
     panel("Current report scope","The selected inbox filter applies to this snapshot; period selection is unavailable for point-in-time aggregates",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>'+(imported?"Sanitised local snapshot":"Demonstration only")+'</strong></div></div>',"");
 }
@@ -2987,12 +2987,6 @@ function openTicket(ref){
     const owner=row.owner_name||row.owner_ref||"Unassigned";
     const brandNames={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other / unclassified",unclassified:"Not recorded"};
     const brand=state.importedSnapshot.tickets.brand_available?brandNames[row.brand_code]||"Other / unclassified":"Not recorded";
-    const events=(state.importedSnapshot.activity_summary||[]).filter(event=>
-      (state.folder==="all"||event.inbox_code===state.folder)&&
-      // No raw email key or message content is retained; the grouped event panel
-      // is intentionally not joined to an individual ticket in this schema.
-      false
-    );
     modalRoot.innerHTML='<div class="modal-backdrop" data-modal-close><section class="modal-card live-ticket-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">'+
       '<div class="modal-head"><div><span class="eyebrow">IMPORTED TICKET RECORD · READ ONLY</span><h2 id="modalTitle">'+esc(row.ticket_ref)+'</h2></div><button class="icon-button" data-modal-close aria-label="Close">×</button></div>'+
       '<p class="modal-copy">Message subject, body, customer details and raw Outlook key are not included in this sanitised view.</p>'+
