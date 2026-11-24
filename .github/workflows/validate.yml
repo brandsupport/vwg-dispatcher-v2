@@ -98,10 +98,10 @@ jobs:
           const studioCss = fs.readFileSync('reporting-studio.css', 'utf8');
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
             if (!page.includes('class="vw-roundel"')) throw new Error(name + ' is missing the Volkswagen roundel.');
-            if (name === 'Offline Studio' && /class="brand-mark">V<\\/span>/.test(page)) throw new Error('Offline Studio reverted to a letter placeholder.');
+            if (name === 'Offline Studio' && page.includes('<span class="brand-mark">V</span>')) throw new Error('Offline Studio reverted to a letter placeholder.');
           }
           for (const [name, sheet] of [['Dispatcher', css], ['Offline Studio', studioCss]]) {
-            const sizes = [...sheet.matchAll(/font-size\\s*:\\s*([\\d.]+)px/g)].map(match => Number(match[1]));
+            const sizes = [...sheet.matchAll(/font-size\s*:\s*([\d.]+)px/g)].map(match => Number(match[1]));
             if (sizes.length && Math.min(...sizes) < 11) throw new Error(name + ' contains very small text (' + Math.min(...sizes) + 'px).');
           }
           const views = ['overview','live','tickets','brands','workflow','folders','team','my','roster','rules','reliability','audit','reports','admin'];
