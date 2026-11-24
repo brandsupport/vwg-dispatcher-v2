@@ -260,4 +260,4 @@ A GitHub Pages workflow is provided for a public, synthetic-data-only UI preview
 
 ## Original VW brand mark and readability
 
-The Dispatcher and standalone Offline Reporting Studio reuse the Knowledge Base home-page VW logo construction and the exact `src/vw-logo.png` artwork: a 46px translucent glass tile, 14px rounded corners, 30px masked glyph, dual drop-shadow glow and travelling conic edge. The Knowledge Base cyan-to-purple accent is translated into Dispatcher coral-to-copper. The Studio embeds its own copy so the page remains standalone. Both interfaces retain the enlarged responsive typography scale.
+The Dispatcher and standalone Offline Reporting Studio reuse the Knowledge Base home-page VW logo construction and exact `src/vw-logo.png` artwork: a 46px translucent glass tile, 14px rounded corners, 30px masked glyph, dual glow and travelling conic edge. Its original artwork is retained while the surrounding edge, glyph glow and wordmark accents use the Dispatcher Cherry Glass cherry-red and rose palette. The Studio embeds its own copy so it remains standalone. Both interfaces retain the enlarged responsive typography scale.
