@@ -76,6 +76,8 @@ test("normalises Outlook folder paths and allow-lists workflow labels",()=>{
   assert.equal(hooks.normaliseInbox("\\\\VWGUK R: Milton Keynes, AgencyDetags\\Inbox"),"agency");
   assert.equal(hooks.normaliseInbox("\\\\VWGUK R: Milton Keynes, Detags\\Inbox"),"detags");
   assert.equal(hooks.normaliseWorkflowEvent("Recovery requested"),"recovery_requested");
+  assert.equal(hooks.normaliseWorkflowEvent("AUTO_ASSIGNMENT_LOG_FAILED"),"exception");
+  assert.equal(hooks.normaliseWorkflowEvent("RECOVERED"),"recovery_restored");
   assert.equal(hooks.normaliseWorkflowEvent("free text with an email address example@example.invalid"),null);
 });
 
@@ -109,7 +111,7 @@ test("synthetic exports produce reconciled aggregate metrics without raw identif
   assert.equal(snapshot.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
   assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Workflow history").rows_skipped,1);
   const exported=JSON.stringify(snapshot);
-  for(const raw of ["SAMPLE-001","Sample Agent A","Sample Agent B","example@example.invalid","Free text with sample"]) {
+  for(const raw of ["SAMPLE-001","Sample Agent A","Sample Agent B","Sample Agent C","example@example.invalid","Free text with sample"]) {
     assert.equal(exported.includes(raw),false,"raw value leaked into snapshot: "+raw);
   }
   assert.ok(snapshot.allocations.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
