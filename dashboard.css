@@ -2538,3 +2538,12 @@ body { font-size:15.2px !important; line-height:1.52; }
   .roster-directory-panel .data-table{min-width:820px}
   .matrix-table{min-width:900px}
 }
+
+/* Four-field source-backed colleague review layout */
+.team-detail-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1120px){
+  .team-detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .team-detail-metrics{grid-template-columns:minmax(0,1fr)}
+}
