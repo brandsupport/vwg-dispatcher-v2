@@ -832,6 +832,14 @@ function clearLocalSnapshot(){
   showToast("Returned to the synthetic demo dataset.");
 }
 function fmt(value){return Math.round(value).toLocaleString("en-GB");}
+function formatDurationMinutes(value){
+  if(value===null||value===undefined||!Number.isFinite(value))return "Not tracked";
+  const minutes=Math.max(0,Math.round(value));
+  const days=Math.floor(minutes/1440),hours=Math.floor((minutes%1440)/60),mins=minutes%60;
+  if(days)return days+"d "+hours+"h "+mins+"m";
+  if(hours)return hours+"h "+mins+"m";
+  return mins+"m";
+}
 function scaled(value){return Math.max(0,Math.round(value*(state.importedSnapshot?1:PERIODS[state.period].factor)));}
 function esc(value){return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
 function scopeFolders(){return state.folder==="all"?FOLDERS:FOLDERS.filter(f=>f.id===state.folder);}
@@ -1145,6 +1153,8 @@ function renderOverview(){
   const allocationRate=assignmentsAvailable&&t.received?t.assigned/t.received*100:null;
   const resolutionRate=!imported||state.importedSnapshot.tickets.resolution_tracking==="source_status_present"
     ?(t.received?t.resolved/t.received*100:null):null;
+  const resolutionAverage=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.average_minutes:null;
+  const resolutionTimedCount=imported?state.importedSnapshot.tickets.resolution_metrics?.overall?.timed_tickets||0:0;
   const trend=overviewTrendData(t.received,t.resolved);
   const trendPanel=imported
     ? panel("Received-date coverage","Actual UTC received dates present in the imported ticket snapshot. Resolved-date history is not included.",overviewSnapshotTrendTable(),'<span class="subtle-tag">SOURCE DATES ONLY</span>')
@@ -1169,7 +1179,7 @@ function renderOverview(){
       '<div class="overview-metric-tile"><span>INITIAL ALLOCATION RATE</span><strong>'+allocationRateValue+'</strong><small>'+(imported?"First-assigned ÷ snapshot records":"First-assigned ÷ received")+'</small></div>'+
       '<div class="overview-metric-tile"><span>RESOLUTION RATIO</span><strong>'+(resolutionRate===null?"Not tracked":resolutionRate.toFixed(1)+"%")+'</strong><small>'+(imported?(resolutionRate===null?"No resolver / closure status or timestamp is captured in the source":"Resolved ÷ snapshot records; not a cohort closure rate"):"Resolved ÷ received · not a cohort closure rate")+'</small></div>'+
       '<div class="overview-metric-tile"><span>'+(imported?"CURRENTLY UNASSIGNED":"NOT INITIALLY ALLOCATED")+'</span><strong>'+fmt(t.unassigned)+'</strong><small>'+(imported?"Open records with no current owner":"Received less first-assigned total")+'</small></div>'+
-      '<div class="overview-metric-tile overview-metric-na"><span>REOPENED TICKETS</span><strong>Not available</strong><small>No validated reopened field or event feed</small></div>'+
+      '<div class="overview-metric-tile overview-metric-na"><span>AVERAGE ELAPSED RESOLUTION</span><strong>'+(imported?formatDurationMinutes(resolutionAverage):"Not available")+'</strong><small>'+(imported?(resolutionTimedCount?fmt(resolutionTimedCount)+" tickets with valid received and resolved timestamps":"No validated resolved timestamp captured"):"No validated resolution feed")+'</small></div>'+
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
       trendPanel+
@@ -1761,6 +1771,15 @@ function teamEventLedger(){
     '<p class="team-panel-note">These are team-level synthetic aggregates, not member-attributed event histories and not time-scoped. One ticket may generate multiple events; event counts must never be added to distinct ticket counts or initial allocations.</p>'+
   '</div>';
 }
+function agentResolutionMetrics(agentRef){
+  const row=(state.importedSnapshot?.tickets.resolution_by_agent||[]).find(item=>item.agent_ref===agentRef);
+  if(!row)return {resolvedTickets:0,timedTickets:0,averageMinutes:null};
+  return {
+    resolvedTickets:row.resolved_tickets,
+    timedTickets:row.timed_tickets,
+    averageMinutes:row.timed_tickets?row.total_resolution_minutes/row.timed_tickets:null
+  };
+}
 function agentActivityMetrics(agentRef){
   const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
     (state.folder==="all"||event.inbox_code===state.folder)&&
@@ -1780,8 +1799,12 @@ function agentPerformanceReviewPanel(profiles){
   const imported=Boolean(state.importedSnapshot);
   if(!imported)return panel("Agent performance review","Demonstration data only; no real agent performance is calculated.",'<div class="empty-state">Import a sanitised reporting snapshot to review actual allocation and current workload counts.</div>');
   const hasActivity=importedSourceAvailable("Workflow history")&&(state.importedSnapshot.activity_log||[]).length>0;
+  const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
+  const hasResolvedAt=state.importedSnapshot.tickets.resolution_metrics?.resolved_at_field_mapped===true;
   const rows=profiles.map(agent=>{
-    const metrics=agentActivityMetrics(agent.id.replace(/^snapshot-/,""));
+    const agentRef=agent.id.replace(/^snapshot-/,"");
+    const metrics=agentActivityMetrics(agentRef);
+    const resolution=agentResolutionMetrics(agentRef);
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
@@ -1790,11 +1813,13 @@ function agentPerformanceReviewPanel(profiles){
       '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.handovers):"Not supplied")+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.recovery):"Not supplied")+'</td>'+
+      '<td>'+(hasResolvedBy?fmt(resolution.resolvedTickets):"Not supplied")+'</td>'+
+      '<td>'+(hasResolvedAt?formatDurationMinutes(resolution.averageMinutes):"Not tracked")+'</td>'+
       '<td><span class="not-tracked-value">Not tracked</span></td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, automatic / manual method, current open workload and Activity Log involvement. This is an operational review, not a quality ranking.",dataTable(["Colleague","First assigned","Automatic","Manual","Open workload","Handover records","Recovery / review records","Resolution rate"],rows,"No agent rows match the current global search.")+
-    '<p class="team-panel-note">Event involvement is derived from the original-assignee / current-owner fields on each Activity Log event. The dispatcher does not record the authenticated person who performed the change, so these figures are not actor counts. Resolution rate is unavailable because the tracker currently records no verified resolved / closed timestamp or event.</p>');
+  return panel("Agent performance review","First assignments, current open work and event involvement. When the tracker provides an explicit resolver and timestamps, resolved counts and average elapsed solve time appear here. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual","Open workload","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
+    '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague's original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
 }
 function teamEvidencePanel(){
   const items=[
