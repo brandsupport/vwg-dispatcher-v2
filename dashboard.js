@@ -980,6 +980,9 @@ function snapshotQualityPanel(){
   rows.push('<tr><td>Ambiguous first assignments</td><td>—</td><td>—</td><td>'+fmt(state.importedSnapshot.data_quality.ambiguous_initial_assignment_tickets)+'</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>');
   return dataTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],rows);
 }
+function healthRow(label,value,type,note){
+  return '<div class="health-row"><span class="health-indicator '+type+'"></span><div class="health-copy"><strong>'+label+'</strong><small>'+note+'</small></div><div>'+statusPill(value)+'</div></div>';
+}
 function liveBaseTickets(){
   return TICKETS.filter(ticket=>{
     const folder=FOLDERS.find(item=>item.id===state.folder)?.name;
