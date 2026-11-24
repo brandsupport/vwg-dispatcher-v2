@@ -1717,11 +1717,15 @@ function teamEventLedger(){
 }
 function agentActivityMetrics(agentRef){
   const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
-    event.original_agent_ref===agentRef||event.current_agent_ref===agentRef
+    (state.folder==="all"||event.inbox_code===state.folder)&&
+    (event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)
   );
+  const distinctTickets=type=>new Set(events.filter(event=>
+    event.event_type===type&&(event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)
+  ).map(event=>event.ticket_ref)).size;
   return {
-    automatic:events.filter(event=>event.event_type==="assigned"&&(event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)).length,
-    manual:events.filter(event=>event.event_type==="manual_assignment"&&(event.original_agent_ref===agentRef||event.current_agent_ref===agentRef)).length,
+    automatic:distinctTickets("assigned"),
+    manual:distinctTickets("manual_assignment"),
     handovers:events.filter(event=>event.event_type==="handover").length,
     recovery:events.filter(event=>["flagged","recovery_requested","recovery_held","recovery_restored","exception"].includes(event.event_type)).length
   };
@@ -1732,7 +1736,6 @@ function agentPerformanceReviewPanel(profiles){
   const hasActivity=importedSourceAvailable("Workflow history")&&(state.importedSnapshot.activity_log||[]).length>0;
   const rows=profiles.map(agent=>{
     const metrics=agentActivityMetrics(agent.id.replace(/^snapshot-/,""));
-    const reviewRef=agent.id.replace(/^snapshot-/,"");
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
