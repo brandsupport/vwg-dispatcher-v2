@@ -84,7 +84,7 @@ test("synthetic exports produce reconciled aggregate metrics without raw identif
   const snapshot=await hooks.process(csvs);
   assert.equal(snapshot.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(snapshot.tickets.total,5);
-  assert.deepEqual(snapshot.tickets.overall,{ticket_records:5,initially_assigned:4,resolved:1,outstanding:4,unassigned:1});
+  assert.equal(JSON.stringify(snapshot.tickets.overall),JSON.stringify({ticket_records:5,initially_assigned:4,resolved:1,outstanding:4,unassigned:1}));
   assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="detags").initially_assigned,2);
   assert.equal(snapshot.tickets.daily_volume.reduce((sum,row)=>sum+row.ticket_records,0),5);
   assert.equal(snapshot.allocations.reduce((sum,row)=>sum+row.initial_assignments,0),4);
