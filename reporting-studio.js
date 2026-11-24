@@ -575,12 +575,24 @@ async function sanitise(){
     const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code));
     const overall={ticket_records:ticketMap.size,initially_assigned:validInitial.size,resolved:byInbox.reduce((sum,row)=>sum+row.resolved,0),outstanding:byInbox.reduce((sum,row)=>sum+row.outstanding,0),unassigned:byInbox.reduce((sum,row)=>sum+row.unassigned,0)};
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
+    const brandInboxMap=new Map();
+    for(const ticket of ticketMap.values()){
+      const keyName=ticket.brand+"|"+ticket.inbox;
+      brandInboxMap.set(keyName,(brandInboxMap.get(keyName)||0)+1);
+    }
+    const brandByInbox=[...brandInboxMap.entries()].map(([keyName,count])=>{
+      const [brand_code,inbox_code]=keyName.split("|");
+      return {brand_code,inbox_code,count};
+    }).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.brand_code.localeCompare(b.brand_code));
+    const resolutionDataAvailable=[...ticketMap.values()].some(ticket=>ticket.resolved)||activityEvents.some(event=>event.event_type==="resolved");
     const warnings=[];
     if(quality.tickets.duplicate_rows)warnings.push(quality.tickets.duplicate_rows+" duplicate ticket row(s) were skipped; only the first occurrence per ticket reference was retained.");
     if(quality.tickets.unknown_inbox)warnings.push(quality.tickets.unknown_inbox+" ticket row(s) had an unmapped inbox and were excluded.");
     if(quality.tickets.unknown_brand)warnings.push(quality.tickets.unknown_brand+" ticket row(s) had an unrecognised brand and were classified as Other / unclassified.");
     if(quality.tickets.unknown_status)warnings.push(quality.tickets.unknown_status+" ticket row(s) had an unmapped or blank status; those rows were conservatively treated as open.");
-    if(quality.tickets.ambiguous_time)warnings.push(quality.tickets.ambiguous_time+" ticket timestamp(s) were not ISO dates or timezone-explicit timestamps; no date grouping was inferred.");
+    if(quality.tickets.ambiguous_time)warnings.push(quality.tickets.ambiguous_time+" received timestamp(s) could not be converted using the UK source timezone; no date grouping was inferred.");
+    if(!mappings.tickets.brand)warnings.push("The Assignments worksheet has no mapped Brand field. All ticket records remain unclassified; no brand is inferred from subject or inbox.");
+    if(!resolutionDataAvailable)warnings.push("No resolved/closed status or RESOLVED Activity Log event was found. Resolution count, rate and elapsed-time metrics are not recorded by this source build.");
     if(ambiguousInitial)warnings.push(ambiguousInitial+" ticket(s) had multiple initial-assignment records; those allocation records were excluded as ambiguous.");
     if(quality.assignments?.unknown_inbox)warnings.push(quality.assignments.unknown_inbox+" assignment row(s) had an inbox mismatch or unknown inbox and were excluded.");
     if(quality.workflow?.unknown_inbox)warnings.push(quality.workflow.unknown_inbox+" workflow row(s) had an unknown inbox and were excluded.");
@@ -605,7 +617,7 @@ async function sanitise(){
       generated_at_utc:new Date().toISOString(),
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
-      tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,brand_field_available:Boolean(mappings.tickets.brand)},
+      tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,brand_by_inbox:brandByInbox,brand_field_available:Boolean(mappings.tickets.brand),resolution_data_available:resolutionDataAvailable,daily_volume:dailyVolume},
       allocations,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
       workflow,activity_events:activityEvents,
