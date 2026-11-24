@@ -2709,6 +2709,13 @@ function handleAction(action){
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
 document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
+document.getElementById("importAgentLookupButton").addEventListener("click",()=>document.getElementById("agentLookupFileInput").click());
+document.getElementById("agentLookupFileInput").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];if(!file)return;
+  try{await loadPrivateAgentLookup(file);}
+  catch(error){showToast("Could not import private names: "+error.message);}
+  finally{event.target.value="";}
+});
 document.getElementById("snapshotFileInput").addEventListener("change",async event=>{
   const file=event.target.files?.[0];
   if(!file)return;
@@ -2766,7 +2773,7 @@ document.addEventListener("input",event=>{
   const auditSearch=event.target.closest("[data-audit-search]");
   if(auditSearch){
     state.auditSearch=auditSearch.value;
-    refreshAuditPanels();
+    if(state.importedSnapshot)renderAudit();else refreshAuditPanels();
     return;
   }
   const reliabilitySearch=event.target.closest("[data-reliability-search]");
