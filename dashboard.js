@@ -616,7 +616,7 @@ function validateAndSanitiseSnapshot(raw){
 function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
-async async function loadLocalSnapshot(file){
+async function loadLocalSnapshot(file){
   if(!file)return;
   if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
   const parsed=JSON.parse(await file.text());
