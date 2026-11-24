@@ -564,7 +564,7 @@ function validateAndSanitiseSnapshot(raw){
   const teamRoster=(raw.team_roster||[]).map(row=>{
     if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||"")))fail("The roster contains an invalid pseudonymous agent reference.");
     if(!["Early","Late"].includes(row.shift_group))fail("The roster contains an unsupported shift group.");
-    const validClock=value=>typeof value==="string"&&/^(?:[01]\\d|2[0-3]):[0-5]\\d$/.test(value);
+    const validClock=value=>typeof value==="string"&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
     if(!validClock(row.shift_start_egypt)||!validClock(row.shift_end_egypt))fail("The roster contains an invalid Egypt-local shift time.");
     const toMinutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
     if(toMinutes(row.shift_end_egypt)<=toMinutes(row.shift_start_egypt))fail("A roster shift end must be later than its start.");
