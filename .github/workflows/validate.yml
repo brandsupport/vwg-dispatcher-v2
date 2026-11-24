@@ -100,7 +100,7 @@ jobs:
             if (!page.includes('class="brand-mark"') || !page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) {
               throw new Error(name + ' is missing the Knowledge Base-style VW mark structure.');
             }
-            if (page.includes('class="vw-roundel"') || page.includes("class=\\"brand-symbol")) {
+            if (page.includes('class="vw-roundel"') || page.includes('brand-symbol')) {
               throw new Error(name + ' is still using the previous logo treatment.');
             }
           }
