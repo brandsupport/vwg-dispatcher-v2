@@ -31,7 +31,7 @@
 
     <section class="workflow-grid">
       <article class="step-card">
-        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment and workflow history are optional.</p></div></div>
+        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment, workflow and Team & Shifts are optional.</p></div></div>
         <div class="file-picker">
           <label for="ticketsFile">Ticket / current-state export <em>Required</em></label>
           <input id="ticketsFile" type="file" accept=".csv,text/csv">
@@ -47,7 +47,12 @@
           <input id="workflowFile" type="file" accept=".csv,text/csv">
           <small id="workflowFileMeta">No file selected</small>
         </div>
-        <p class="field-note">Choose CSV exports only. Do not select the original Excel workbook, email files, attachments, or files containing message bodies. Test the workflow first with <a href="./examples/synthetic-ticket-snapshot.csv" download>synthetic tickets</a>, <a href="./examples/synthetic-assignment-history.csv" download>synthetic assignments</a> and <a href="./examples/synthetic-workflow-history.csv" download>synthetic workflow events</a>.</p>
+        <div class="file-picker">
+          <label for="rosterFile">Team & Shifts roster export <em>Optional</em></label>
+          <input id="rosterFile" type="file" accept=".csv,text/csv">
+          <small id="rosterFileMeta">No file selected</small>
+        </div>
+        <p class="field-note">Choose approved CSV exports only. Do not select the original Excel workbook, email files, attachments, or files containing message bodies. The Team & Shifts CSV is pseudonymised in this browser: colleague names and Outlook categories are not included in the JSON snapshot. Test first with the <a href="./examples/synthetic-ticket-snapshot.csv" download>synthetic tickets</a>, <a href="./examples/synthetic-assignment-history.csv" download>synthetic assignments</a>, <a href="./examples/synthetic-workflow-history.csv" download>synthetic workflow events</a> and <a href="./examples/synthetic-team-roster.csv" download>synthetic roster</a>.</p>
       </article>
 
       <article class="step-card">
@@ -80,11 +85,12 @@
         <section class="result-panel"><h3>Brand mix</h3><div id="brandResults"></div></section>
         <section class="result-panel"><h3>Daily ticket records</h3><div id="dailyResults"></div><p class="table-note">Only dates parsed as date-only UTC values or timezone-explicit timestamps are included.</p></section>
         <section class="result-panel"><h3>Initial allocation by agent</h3><div id="agentResults"></div><p class="table-note">Shares use first assignments only. Handovers, reassignments and recoveries do not increase allocation share.</p></section>
+        <section class="result-panel"><h3>Team & shifts roster</h3><div id="rosterResults"></div><p class="table-note">The snapshot contains only keyed agent references, shift groups, Egypt-local shift times and active-fortnight status. Names and Outlook category values are removed.</p></section>
         <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
       </div>
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
       <div class="download-bar">
-        <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories and keyed agent references are included.</span></div>
+        <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
         <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
       </div>
       <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>

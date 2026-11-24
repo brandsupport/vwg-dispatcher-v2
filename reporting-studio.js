@@ -52,10 +52,20 @@ const SOURCE_CONFIG={
       {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]}
     ]
+  },
+  roster:{
+    title:"Team & shifts roster",
+    fields:[
+      {id:"identity",label:"Exact Outlook category / colleague key",required:true,aliases:["outlook category exact","outlook category","colleague"]},
+      {id:"shift_group",label:"Shift group",required:true,aliases:["shift group"]},
+      {id:"shift_start",label:"Shift start (Egypt)",required:true,aliases:["shift start egypt","shift start"]},
+      {id:"shift_end",label:"Shift end (Egypt)",required:true,aliases:["shift end egypt","shift end"]},
+      {id:"active",label:"Active this fortnight",required:true,aliases:["active this fortnight","active"] }
+    ]
   }
 };
-const files={tickets:null,assignments:null,workflow:null};
-const mappings={tickets:{},assignments:{},workflow:{}};
+const files={tickets:null,assignments:null,workflow:null,roster:null};
+const mappings={tickets:{},assignments:{},workflow:{},roster:{}};
 let currentSnapshot=null;
 let savedWorkspaceKey="";
 const $=id=>document.getElementById(id);
@@ -117,7 +127,7 @@ function mappingMarkup(kind){
     }).join("")+'</section>';
 }
 function renderMappings(){
-  const panels=["tickets","assignments","workflow"].filter(kind=>files[kind]);
+  const panels=["tickets","assignments","workflow","roster"].filter(kind=>files[kind]);
   $("mappingPanels").innerHTML=panels.length?panels.map(mappingMarkup).join(""):'<div class="empty-mapping">Select a CSV above to inspect its column headings.</div>';
   updateReadyState();
 }
@@ -125,7 +135,7 @@ function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&"
 function selectedValue(record,kind,field){const header=mappings[kind][field];return header?String(record[header]??"").trim():"";}
 function mappingErrors(){
   const errors=[];
-  for(const kind of ["tickets","assignments","workflow"]){
+  for(const kind of ["tickets","assignments","workflow","roster"]){
     if(!files[kind]){if(kind==="tickets")errors.push("Select a ticket/current-state CSV.");continue;}
     for(const field of SOURCE_CONFIG[kind].fields.filter(item=>item.required)){
       if(!mappings[kind][field.id])errors.push(SOURCE_CONFIG[kind].title+": map "+field.label+".");
@@ -172,6 +182,19 @@ function isResolved(value){
   const key=norm(value);
   return ["resolved","closed","complete","completed"].includes(key);
 }
+function validShiftClock(value){
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value??"").trim());
+}
+function normaliseShiftGroup(value){
+  const key=norm(value);
+  return key==="early"?"Early":key==="late"?"Late":"";
+}
+function normaliseActiveFlag(value){
+  const key=norm(value);
+  if(["yes","y","true","1","active"].includes(key))return true;
+  if(["no","n","false","0","inactive"].includes(key))return false;
+  return null;
+}
 function isInitialKind(value){
   const key=norm(value);
   return key==="initial"||key==="first"||key==="first assignment"||key==="initial assignment"||key==="initial allocation"||key==="first allocation"||key==="auto assigned";
@@ -180,7 +203,6 @@ function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
     received:["received","ticket received","created"],
-    flagged:["flagged","flag","flag raised","flagged for review"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
@@ -248,6 +270,7 @@ function renderSnapshot(snapshot){
   $("brandResults").innerHTML=buildTable(["Brand","Tickets","Share"],snapshot.tickets.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.count,(snapshot.tickets.total?row.count/snapshot.tickets.total*100:0).toFixed(1)+"%"]));
   $("dailyResults").innerHTML=buildTable(["UTC date","Inbox","Ticket records"],snapshot.tickets.daily_volume.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.ticket_records]));
   $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
+  $("rosterResults").innerHTML=buildTable(["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
   const warnings=snapshot.data_quality.warnings;
@@ -262,7 +285,36 @@ async function sanitise(){
   const button=$("sanitiseButton");button.disabled=true;button.textContent="Processing locally…";
   try{
     const key=await makeHmacKey($("workspaceKey").value.trim());
-    const quality={tickets:newQuality("Ticket snapshot",files.tickets.rowCount),assignments:files.assignments?newQuality("Assignment history",files.assignments.rowCount):null,workflow:files.workflow?newQuality("Workflow history",files.workflow.rowCount):null};
+    const quality={
+      tickets:newQuality("Ticket snapshot",files.tickets.rowCount),
+      assignments:files.assignments?newQuality("Assignment history",files.assignments.rowCount):null,
+      workflow:files.workflow?newQuality("Workflow history",files.workflow.rowCount):null,
+      roster:files.roster?newQuality("Team & Shifts roster",files.roster.rowCount):null
+    };
+    const rosterMap=new Map();const teamRoster=[];
+    if(files.roster){
+      for(const row of files.roster.records){
+        const identity=selectedValue(row,"roster","identity");
+        const shiftGroup=normaliseShiftGroup(selectedValue(row,"roster","shift_group"));
+        const shiftStart=selectedValue(row,"roster","shift_start");
+        const shiftEnd=selectedValue(row,"roster","shift_end");
+        const active=normaliseActiveFlag(selectedValue(row,"roster","active"));
+        if(!identity||!shiftGroup||!validShiftClock(shiftStart)||!validShiftClock(shiftEnd)||active===null){
+          quality.roster.rows_skipped++;continue;
+        }
+        if(rosterMap.has(norm(identity))){
+          quality.roster.rows_skipped++;quality.roster.duplicate_rows++;continue;
+        }
+        const agentRef=await pseudonym(key,"agent",identity);
+        const entry={
+          agent_ref:agentRef,shift_group:shiftGroup,
+          shift_start_egypt:shiftStart,shift_end_egypt:shiftEnd,
+          active_this_fortnight:active
+        };
+        rosterMap.set(norm(identity),entry);teamRoster.push(entry);
+        quality.roster.rows_accepted++;
+      }
+    }
     const ticketMap=new Map();const dateSet=new Set();
     for(const row of files.tickets.records){
       const ref=selectedValue(row,"tickets","ticket_ref");const inboxRaw=selectedValue(row,"tickets","inbox");const inbox=normaliseInbox(inboxRaw);
@@ -359,6 +411,17 @@ async function sanitise(){
     if(ambiguousInitial)warnings.push(ambiguousInitial+" ticket(s) had multiple initial-assignment records; those allocation records were excluded as ambiguous.");
     if(quality.assignments?.unknown_inbox)warnings.push(quality.assignments.unknown_inbox+" assignment row(s) had an inbox mismatch or unknown inbox and were excluded.");
     if(quality.workflow?.unknown_inbox)warnings.push(quality.workflow.unknown_inbox+" workflow row(s) had an unknown inbox and were excluded.");
+    if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
+    if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
+    if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Imported agents will not have shift-group or active-fortnight metadata.");
+    if(files.roster){
+      const usedAgentRefs=new Set();
+      for(const ticket of ticketMap.values())if(ticket.ownerRef)usedAgentRefs.add(ticket.ownerRef);
+      for(const row of validInitial.values())usedAgentRefs.add(row.agentRef);
+      const rosterRefs=new Set(teamRoster.map(row=>row.agent_ref));
+      const unmatched=[...usedAgentRefs].filter(ref=>!rosterRefs.has(ref));
+      if(unmatched.length)warnings.push(unmatched.length+" pseudonymised agent reference(s) used in ticket or assignment data were not matched to the supplied roster.");
+    }
     if(!files.assignments)warnings.push("No assignment-history file was supplied. First-assignment totals and allocation shares are incomplete and shown as zero.");
     else if(validInitial.size===0)warnings.push("No validated first-assignment events were found. Allocation shares cannot be interpreted as complete.");
     if(!files.workflow)warnings.push("No workflow-history file was supplied. Workflow event metrics are unavailable.");
@@ -369,17 +432,20 @@ async function sanitise(){
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
       tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume},
       allocations,
+      team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
       workflow,
-      data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
+      data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
     };
     currentSnapshot=snapshot;
     renderSnapshot(snapshot);
-    files.tickets.records.length=0;if(files.assignments)files.assignments.records.length=0;if(files.workflow)files.workflow.records.length=0;
-    $("ticketsFile").value="";$("assignmentsFile").value="";$("workflowFile").value="";
+    files.tickets.records.length=0;if(files.assignments)files.assignments.records.length=0;if(files.workflow)files.workflow.records.length=0;if(files.roster)files.roster.records.length=0;
+    $("ticketsFile").value="";$("assignmentsFile").value="";$("workflowFile").value="";$("rosterFile").value="";
     $("ticketsFileMeta").textContent="Processed; raw rows cleared from this tab";
     $("assignmentsFileMeta").textContent=files.assignments?"Processed; raw rows cleared from this tab":"No file selected";
     $("workflowFileMeta").textContent=files.workflow?"Processed; raw rows cleared from this tab":"No file selected";
-    files.tickets=null;files.assignments=null;files.workflow=null;mappings.tickets={};mappings.assignments={};mappings.workflow={};renderMappings();
+    $("rosterFileMeta").textContent=files.roster?"Processed; raw rows cleared from this tab":"No file selected";
+    files.tickets=null;files.assignments=null;files.workflow=null;files.roster=null;
+    mappings.tickets={};mappings.assignments={};mappings.workflow={};mappings.roster={};renderMappings();
     button.textContent="Sanitise locally →";
   }catch(error){
     alert("The local sanitiser could not complete: "+error.message);
@@ -395,6 +461,7 @@ function downloadCSVs(){
     ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","initially_assigned","resolved","outstanding","unassigned"],s.tickets.by_inbox.map(r=>[r.inbox_code,INBOX_LABELS[r.inbox_code],r.ticket_records,r.initially_assigned,r.resolved,r.outstanding,r.unassigned])],
     ["dispatcher-brand-summary.csv",["brand_code","brand_name","ticket_count","share_pct"],s.tickets.by_brand.map(r=>[r.brand_code,BRAND_LABELS[r.brand_code],r.count,s.tickets.total?(r.count/s.tickets.total*100).toFixed(2):"0.00"])],
     ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
+    ["dispatcher-team-roster.csv",["agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],(s.team_roster||[]).map(r=>[r.agent_ref,r.shift_group,r.shift_start_egypt,r.shift_end_egypt,r.active_this_fortnight?"Yes":"No"])],
     ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],s.workflow.map(r=>[r.event_type,r.inbox_code,r.event_count,r.distinct_tickets])],
     ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],s.data_quality.sources.map(r=>[r.source,r.rows_read,r.rows_accepted,r.rows_skipped,r.duplicate_rows,r.unknown_inbox,r.unknown_brand,r.unknown_status,r.ambiguous_time])]
   ];
@@ -413,7 +480,7 @@ function bindFile(kind){
     try{await readSource(kind,file);}catch(error){files[kind]=null;alert("Could not read the selected CSV: "+error.message);event.target.value="";renderMappings();}
   });
 }
-bindFile("tickets");bindFile("assignments");bindFile("workflow");
+bindFile("tickets");bindFile("assignments");bindFile("workflow");bindFile("roster");
 $("mappingPanels").addEventListener("change",event=>{
   const select=event.target.closest("[data-map-kind]");if(!select)return;
   mappings[select.dataset.mapKind][select.dataset.mapField]=select.value;updateReadyState();

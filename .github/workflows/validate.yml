@@ -326,7 +326,7 @@ jobs:
           const rosterStart = js.indexOf('function renderRoster(){');
           const rosterEnd = js.indexOf('\nfunction renderRules(', rosterStart);
           const rosterView = rosterStart >= 0 && rosterEnd > rosterStart ? js.slice(rosterStart, rosterEnd) : '';
-          for (const text of ['ROSTER & COVERAGE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Shift overlap map','Roster data readiness','Roster directory & inbox eligibility','Inbox eligibility matrix','Minimum headcount by interval','NO FALSE GAP ALERTS']) {
+          for (const text of ['ROSTER & COVERAGE INTELLIGENCE','DEMONSTRATION DATA · READ ONLY','Shift overlap map','Roster data readiness','Roster directory','Inbox eligibility','Minimum headcount by interval','COVERAGE LIMITS']) {
             if (!rosterView.includes(text)) throw new Error('Roster & Coverage 2.0 section or disclosure missing: ' + text);
           }
           for (const text of ['.roster-demo-strip','.roster-coverage-track','.roster-filter-toolbar','.roster-directory-panel','.roster-agent-detail','.roster-guardrail-list','.roster-final-note']) {
@@ -355,7 +355,7 @@ jobs:
             throw new Error('Roster invalid or overnight shift boundaries were not handled safely.');
           }
           const gapCoverage = vm.runInNewContext(coverageCode + '; coverageSegments([{shift:"Early",start:"08:00",end:"10:00"},{shift:"Late",start:"11:00",end:"12:00"}])');
-          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No sample shift coverage") {
+          if (gapCoverage.length !== 3 || gapCoverage[1].headcount !== 0 || gapCoverage[1].label !== "No scheduled shift coverage") {
             throw new Error('Roster coverage calculation must preserve zero-headcount gap intervals.');
           }
           const eligibilityStart = js.indexOf('const AGENTS = AGENT_NAMES.map(');
