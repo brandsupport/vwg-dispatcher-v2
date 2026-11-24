@@ -2,9 +2,9 @@
 
 Use this worksheet only after the relevant data owner and security process have approved the export, fields, processing device and report handling. Do not paste real customer, vehicle, colleague or ticket data into this worksheet or commit completed copies to this public repository.
 
-The actual workbook headers have now been reviewed. The mapping below is specific to the **Assignments** and **Activity Log** sheets. The Activity Log CSV is selected twice in Reporting Studio: once for the optional assignment-history input and once for workflow history. The Boolean `Event Type` column is not used.
+The actual tracker is exported as one Excel workbook containing five worksheets. Upload that complete `.xlsx` or `.xls` file once in Reporting Studio; do not try to export or split the tabs. Select `Assignments` for ticket/current state, `Activity Log` twice (assignment history and workflow history), and `Team & Shifts` for the roster. The other two tabs remain in the workbook and are ignored. The Boolean `Event Type` column in Activity Log is not used.
 
-## 1. Ticket / current-state export — Assignments sheet (required)
+## 1. Ticket / current-state data — `Assignments` worksheet (required)
 
 | Studio field | Required? | Exact source header | Rule |
 |---|---|---|---|
@@ -17,9 +17,9 @@ The actual workbook headers have now been reviewed. The mapping below is specifi
 
 The source must contain one current-state row per unique ticket. Confirm that `Current Owner`, `Status` and `Source Inbox` are the latest authoritative values. A duplicate `Email Key / ID` is skipped after the first row, so the export must be sorted or filtered to ensure the current row is first.
 
-## 2. Assignment history — Activity Log sheet (optional)
+## 2. Assignment history — `Activity Log` worksheet (optional)
 
-Select the **same Activity Log CSV** again in the Reporting Studio's Assignment history input.
+Select the `Activity Log` worksheet in the workbook selector for the Assignment history input.
 
 | Studio field | Required? | Exact source header | Rule |
 |---|---|---|---|
@@ -31,9 +31,9 @@ Select the **same Activity Log CSV** again in the Reporting Studio's Assignment 
 
 **Important allocation limitation:** `manual assignment captured` is counted as a manual-assignment workflow event, not as a first allocation. The label alone cannot distinguish a first manual allocation from a later manual reassignment. This avoids inflating first-assignment shares. If manual first allocations need to count, the tracker must provide a reliable first-assignment indicator or a confirmed event-order rule. Do not count handovers, category changes, baseline registration or queued state as first assignments.
 
-## 3. Workflow history — Activity Log sheet (optional)
+## 3. Workflow history — `Activity Log` worksheet (optional)
 
-Select the **same Activity Log CSV** in the Workflow / activity input. Map:
+Select the same `Activity Log` worksheet again in the Workflow / activity input. This is a second mapping of the same tab, not a second file. Map:
 
 | Studio field | Required? | Exact source header |
 |---|---|---|
@@ -62,7 +62,7 @@ There is no distinct reassignment flag in the values supplied so far. Do not inf
 
 ## 4. Team & Shifts roster — optional
 
-Export the **Team & Shifts** sheet as a separate approved CSV and select it in the new optional roster input.
+Select the **Team & Shifts** worksheet from the same five-tab workbook in the roster input.
 
 | Studio field | Required? | Exact source header | Rule |
 |---|---|---|---|
@@ -95,6 +95,7 @@ Complete this section outside the public repository, in the organisation's appro
 | Review item | Confirmed by data owner / security reviewer |
 |---|---|
 | Export purpose and reporting scope approved | |
+| Complete five-tab workbook exported once; no manual worksheet splitting required | |
 | Source system and exact workbook sheet identified | |
 | Assignments export contains one current-state row per unique Email Key / ID | |
 | Current row is first where duplicate keys are present | |

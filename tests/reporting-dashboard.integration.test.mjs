@@ -58,6 +58,26 @@ async function createStudioSnapshot(csvInputs=null){
   });
 }
 
+
+function createWorkbookTestHooks(){
+  const nodes=new Map();
+  const document={
+    getElementById(id){if(!nodes.has(id))nodes.set(id,makeNode());return nodes.get(id);},
+    addEventListener(){},
+    createElement(){return makeNode();}
+  };
+  const context={
+    document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout,
+    XLSX:{utils:{sheet_to_json(worksheet){return worksheet;}}}
+  };
+  vm.createContext(context);
+  const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
+  vm.runInContext(source+`
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet};
+  `,context,{filename:"reporting-studio.js"});
+  return context.__workbookTestHooks;
+}
+
 function validateWithDashboard(snapshot){
   const source=fs.readFileSync(new URL("../dashboard.js",import.meta.url),"utf8");
   const start=source.indexOf("function validateAndSanitiseSnapshot(raw){");
@@ -173,6 +193,48 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Ticket snapshot").rows_accepted,5);
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Assignment history").rows_accepted,5);
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Workflow history").rows_accepted,5);
+});
+
+
+test("the full five-tab workbook selects the correct source sheets and reuses Activity Log twice",()=>{
+  const hooks=createWorkbookTestHooks();
+  const sheets={
+    "Assignments":[
+      ["Tracker workbook export"],
+      ["Email Key / ID","Received At (UK)","Source Inbox","Status","Current Owner"],
+      ["SYN-WB-01","2026-11-22T09:00:00+00:00","Agency Detags","In progress","Synthetic Agent A"]
+    ],
+    "Activity Log":[
+      ["Activity history export"],
+      ["Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner","Assignment Flag"],
+      ["2026-11-22T11:00:00+02:00","true","SYN-WB-01","Agency Detags","Synthetic Agent A","Synthetic Agent A","auto assigned"]
+    ],
+    "Team & Shifts":[
+      ["Colleague","Outlook Category (exact)","Shift Group","Shift Start (Egypt)","Shift End (Egypt)","Active This Fortnight"],
+      ["Synthetic Agent A","Synthetic Agent A","Early","09:00","17:00","Yes"]
+    ],
+    "Dashboard Summary":[["Report title"],["Synthetic summary"]],
+    "Archive":[["Archive note"],["Not used by reporting"]]
+  };
+  const names=Object.keys(sheets);
+
+  assert.equal(hooks.suggestWorkbookSheet("tickets",names,sheets),"Assignments");
+  assert.equal(hooks.suggestWorkbookSheet("assignments",names,sheets),"Activity Log");
+  assert.equal(hooks.suggestWorkbookSheet("workflow",names,sheets),"Activity Log");
+  assert.equal(hooks.suggestWorkbookSheet("roster",names,sheets),"Team & Shifts");
+
+  const assignmentHistory=hooks.worksheetToTable(sheets["Activity Log"],"assignments");
+  const workflowHistory=hooks.worksheetToTable(sheets["Activity Log"],"workflow");
+  const roster=hooks.worksheetToTable(sheets["Team & Shifts"],"roster");
+
+  assert.equal(assignmentHistory.headers[0],"Event Time (Egypt)");
+  assert.equal(assignmentHistory.records.length,1);
+  assert.equal(workflowHistory.records.length,1);
+  assert.equal(assignmentHistory.records[0]["Assignment Flag"],"auto assigned");
+  assert.equal(workflowHistory.records[0]["Assignment Flag"],"auto assigned");
+  assert.equal(roster.headers.includes("Outlook Category (exact)"),true);
+  assert.equal(roster.records[0]["Shift Group"],"Early");
+  assert.equal(names.length,5,"the workbook can retain all five tabs");
 });
 
 test("the committed synthetic inputs are the three documented sample files",()=>{

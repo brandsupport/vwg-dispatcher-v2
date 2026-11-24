@@ -1,6 +1,6 @@
-/* Local-only VWG Dispatcher reporting sanitiser.
- * No network requests, storage writes, analytics, or API calls.
- * Raw CSV rows remain in memory in this browser tab and are discarded after processing.
+/* Browser-local VWG Dispatcher reporting sanitiser.
+ * No application API calls, telemetry or storage writes. SheetJS parser code is loaded from its pinned static CDN URL.
+ * Raw workbook and CSV rows remain in this browser tab and are discarded after processing.
  */
 "use strict";
 
@@ -66,6 +66,9 @@ const SOURCE_CONFIG={
 };
 const files={tickets:null,assignments:null,workflow:null,roster:null};
 const mappings={tickets:{},assignments:{},workflow:{},roster:{}};
+const workbookSelections={tickets:"",assignments:"",workflow:"",roster:""};
+let workbookData=null;
+let sourceMode="";
 let currentSnapshot=null;
 let savedWorkspaceKey="";
 const $=id=>document.getElementById(id);
@@ -113,6 +116,51 @@ function autoMap(headers,aliases){
   for(const alias of aliases){const target=norm(alias);const partial=indexed.find(item=>item.key&&target&&(item.key.includes(target)||target.includes(item.key)));if(partial)return partial.header;}
   return "";
 }
+const WORKBOOK_SHEET_HINTS={
+  tickets:["assignments","ticket current state","current state","ticket snapshot"],
+  assignments:["activity log","assignment history","assignment log"],
+  workflow:["activity log","workflow history","workflow log","activity"],
+  roster:["team & shifts","team and shifts","team shifts","roster"]
+};
+function worksheetRows(worksheet){
+  if(typeof XLSX==="undefined"||!XLSX.utils||typeof XLSX.utils.sheet_to_json!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
+  return XLSX.utils.sheet_to_json(worksheet,{header:1,defval:"",raw:false,blankrows:false,dateNF:"yyyy-mm-dd hh:mm:ss"});
+}
+function headerMatchScore(row,kind){
+  const headers=(row||[]).map((value,index)=>cleanHeader(value)||("Column "+(index+1)));
+  return SOURCE_CONFIG[kind].fields.filter(field=>autoMap(headers,field.aliases)).length;
+}
+function worksheetToTable(worksheet,kind){
+  const rows=worksheetRows(worksheet);
+  let headerIndex=-1,bestScore=-1;
+  for(let index=0;index<Math.min(rows.length,30);index++){
+    const row=rows[index];
+    if(!Array.isArray(row)||!row.some(value=>String(value??"").trim()!==""))continue;
+    const score=headerMatchScore(row,kind);
+    if(score>bestScore){bestScore=score;headerIndex=index;}
+    if(score===SOURCE_CONFIG[kind].fields.length)break;
+  }
+  if(headerIndex<0)throw new Error("The selected worksheet is empty.");
+  const headers=rows[headerIndex].map((value,index)=>cleanHeader(value)||("Column "+(index+1)));
+  const records=rows.slice(headerIndex+1).filter(row=>Array.isArray(row)&&row.some(value=>String(value??"").trim()!=="")).map(values=>{
+    const record={};headers.forEach((header,index)=>record[header]=String(values[index]??"").trim());return record;
+  });
+  return {headers,records};
+}
+function suggestWorkbookSheet(kind,sheetNames,sheets){
+  const hints=(WORKBOOK_SHEET_HINTS[kind]||[]).map(norm);
+  for(const hint of hints){const exact=sheetNames.find(name=>norm(name)===hint);if(exact)return exact;}
+  let bestName="",bestScore=0;
+  for(const name of sheetNames){
+    try{
+      const rows=worksheetRows(sheets[name]);
+      let score=0;
+      for(const row of rows.slice(0,30))score=Math.max(score,headerMatchScore(row,kind));
+      if(score>bestScore){bestScore=score;bestName=name;}
+    }catch(error){/* An unrelated or unsupported worksheet is simply not a candidate. */}
+  }
+  return bestName;
+}
 function mappingMarkup(kind){
   const file=files[kind];if(!file)return "";
   const config=SOURCE_CONFIG[kind];
@@ -128,7 +176,7 @@ function mappingMarkup(kind){
 }
 function renderMappings(){
   const panels=["tickets","assignments","workflow","roster"].filter(kind=>files[kind]);
-  $("mappingPanels").innerHTML=panels.length?panels.map(mappingMarkup).join(""):'<div class="empty-mapping">Select a CSV above to inspect its column headings.</div>';
+  $("mappingPanels").innerHTML=panels.length?panels.map(mappingMarkup).join(""):'<div class="empty-mapping">Upload the complete tracker workbook above, or select CSVs in the alternative section, to inspect column headings.</div>';
   updateReadyState();
 }
 function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));}
@@ -136,7 +184,7 @@ function selectedValue(record,kind,field){const header=mappings[kind][field];ret
 function mappingErrors(){
   const errors=[];
   for(const kind of ["tickets","assignments","workflow","roster"]){
-    if(!files[kind]){if(kind==="tickets")errors.push("Select a ticket/current-state CSV.");continue;}
+    if(!files[kind]){if(kind==="tickets")errors.push("Select the ticket/current-state worksheet in the workbook, or choose a ticket/current-state CSV.");continue;}
     for(const field of SOURCE_CONFIG[kind].fields.filter(item=>item.required)){
       if(!mappings[kind][field.id])errors.push(SOURCE_CONFIG[kind].title+": map "+field.label+".");
     }
@@ -152,13 +200,61 @@ function updateReadyState(){
   $("sanitiseButton").disabled=errors.length>0;
   $("sanitiseButton").title=errors.join(" ");
 }
+function clearWorkbookForCsv(keepKind=""){
+  workbookData=null;
+  for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";if(kind!==keepKind)$(kind+"File").value="";$(kind+"FileMeta").textContent="No file selected";}
+  $("workbookFile").value="";$("workbookFileMeta").textContent="No workbook selected";
+  $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
+  sourceMode="csv";
+}
 async function readSource(kind,file){
+  if(sourceMode!=="csv")clearWorkbookForCsv(kind);
   const text=await file.text();
   const parsed=parseCSV(text);
   files[kind]={...parsed,rowCount:parsed.records.length};
   mappings[kind]={};
   $(kind+"FileMeta").textContent=parsed.records.length+" data rows · "+parsed.headers.length+" columns detected · file name not retained";
   renderMappings();
+}
+function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
+  workbookSelections[kind]=sheetName||"";
+  mappings[kind]={};
+  if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(rerender)renderMappings();return;}
+  try{
+    const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
+    files[kind]={...parsed,rowCount:parsed.records.length,sourceSheet:sheetName};
+    $(kind+"FileMeta").textContent=sheetName+" · "+parsed.records.length+" data rows · "+parsed.headers.length+" columns";
+  }catch(error){
+    files[kind]=null;
+    $(kind+"FileMeta").textContent=sheetName+" · could not read worksheet";
+    if(showError)alert("Could not read the "+SOURCE_CONFIG[kind].title+" worksheet: "+error.message);
+  }
+  if(rerender)renderMappings();
+}
+function renderWorkbookSelectors(){
+  const panel=$("workbookSheetSelectors");
+  if(!workbookData){panel.hidden=true;panel.innerHTML="";return;}
+  const labels={tickets:"Ticket / current-state data",assignments:"Assignment history",workflow:"Workflow / activity history",roster:"Team & Shifts roster"};
+  const descriptions={tickets:"Required · normally the Assignments tab",assignments:"Optional · normally the Activity Log tab",workflow:"Optional · use the same Activity Log tab again",roster:"Optional · normally the Team & Shifts tab"};
+  panel.hidden=false;
+  panel.innerHTML='<section class="mapping-group"><h3>Choose the worksheets inside your workbook</h3><p class="field-note">The same Activity Log worksheet is selected twice by design: once for assignment history and once for workflow events. Any other workbook tabs are ignored.</p>'+
+    Object.keys(labels).map(kind=>{
+      const suggested=suggestWorkbookSheet(kind,workbookData.sheetNames,workbookData.workbook.Sheets);
+      workbookSelections[kind]=suggested;
+      return '<div class="mapping-field"><label for="sheet-'+kind+'">'+labels[kind]+' <small>'+descriptions[kind]+'</small></label><select id="sheet-'+kind+'" data-sheet-kind="'+kind+'"><option value="">— Not selected —</option>'+workbookData.sheetNames.map(name=>'<option value="'+escapeHtml(name)+'" '+(suggested===name?'selected':'')+'>'+escapeHtml(name)+'</option>').join("")+'</select></div>';
+    }).join("")+'</section>';
+  for(const kind of Object.keys(labels))loadWorkbookSheet(kind,workbookSelections[kind],false,false);
+  renderMappings();
+}
+async function readWorkbook(file){
+  if(!/\.(?:xlsx|xls)$/i.test(file.name||""))throw new Error("Select the original Excel workbook (.xlsx or .xls).");
+  if(typeof XLSX==="undefined"||typeof XLSX.read!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
+  const workbook=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:false});
+  if(!Array.isArray(workbook.SheetNames)||!workbook.SheetNames.length)throw new Error("No worksheets were found in the selected workbook.");
+  sourceMode="workbook";
+  workbookData={workbook,sheetNames:workbook.SheetNames.slice()};
+  $("workbookFileMeta").textContent=workbookData.sheetNames.length+" worksheets found · workbook name not retained";
+  renderWorkbookSelectors();
 }
 function normaliseInbox(value){
   const key=norm(value);
@@ -439,13 +535,16 @@ async function sanitise(){
     currentSnapshot=snapshot;
     renderSnapshot(snapshot);
     files.tickets.records.length=0;if(files.assignments)files.assignments.records.length=0;if(files.workflow)files.workflow.records.length=0;if(files.roster)files.roster.records.length=0;
-    $("ticketsFile").value="";$("assignmentsFile").value="";$("workflowFile").value="";$("rosterFile").value="";
-    $("ticketsFileMeta").textContent="Processed; raw rows cleared from this tab";
-    $("assignmentsFileMeta").textContent=files.assignments?"Processed; raw rows cleared from this tab":"No file selected";
-    $("workflowFileMeta").textContent=files.workflow?"Processed; raw rows cleared from this tab":"No file selected";
-    $("rosterFileMeta").textContent=files.roster?"Processed; raw rows cleared from this tab":"No file selected";
+    for(const kind of Object.keys(files)){
+      $(kind+"File").value="";
+      $(kind+"FileMeta").textContent=files[kind]?"Processed; raw rows cleared from this tab":"No file selected";
+    }
+    $("workbookFile").value="";$("workbookFileMeta").textContent="Processed; raw workbook data cleared from this tab";
+    $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
     files.tickets=null;files.assignments=null;files.workflow=null;files.roster=null;
-    mappings.tickets={};mappings.assignments={};mappings.workflow={};mappings.roster={};renderMappings();
+    mappings.tickets={};mappings.assignments={};mappings.workflow={};mappings.roster={};
+    for(const kind of Object.keys(workbookSelections))workbookSelections[kind]="";
+    workbookData=null;sourceMode="";renderMappings();
     button.textContent="Sanitise locally →";
   }catch(error){
     alert("The local sanitiser could not complete: "+error.message);
@@ -480,7 +579,29 @@ function bindFile(kind){
     try{await readSource(kind,file);}catch(error){files[kind]=null;alert("Could not read the selected CSV: "+error.message);event.target.value="";renderMappings();}
   });
 }
+function bindWorkbook(){
+  $("workbookFile").addEventListener("change",async event=>{
+    const file=event.target.files?.[0];
+    if(!file){workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";}renderWorkbookSelectors();renderMappings();return;}
+    try{
+      for(const kind of Object.keys(files)){
+        files[kind]=null;mappings[kind]={};$(kind+"File").value="";$(kind+"FileMeta").textContent="No CSV selected";
+      }
+      await readWorkbook(file);
+    }catch(error){
+      workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};}
+      $("workbookFile").value="";$("workbookFileMeta").textContent="Could not read workbook";
+      $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
+      alert("Could not read the selected Excel workbook: "+error.message);renderMappings();
+    }
+  });
+}
+bindWorkbook();
 bindFile("tickets");bindFile("assignments");bindFile("workflow");bindFile("roster");
+$("workbookSheetSelectors").addEventListener("change",event=>{
+  const select=event.target.closest("[data-sheet-kind]");if(!select||!workbookData)return;
+  loadWorkbookSheet(select.dataset.sheetKind,select.value,true,true);
+});
 $("mappingPanels").addEventListener("change",event=>{
   const select=event.target.closest("[data-map-kind]");if(!select)return;
   mappings[select.dataset.mapKind][select.dataset.mapField]=select.value;updateReadyState();

@@ -2,11 +2,11 @@
 
 ## Purpose
 
-The Reporting Studio is a static, browser-local companion to Dispatcher 2.0. It turns approved CSV extracts into aggregate management reporting without connecting to Outlook, Excel, Cloudflare Workers or D1.
+The Reporting Studio is a browser-local companion to Dispatcher 2.0. Its normal input is the **complete five-worksheet Excel tracker workbook** (`.xlsx` or `.xls`), uploaded once. You do not need to export worksheets individually. The Studio can also accept separate CSV extracts as a fallback.
 
-The files in this workflow are not sent to a server. CSV parsing, field selection, pseudonymisation and aggregation happen in the browser tab. The page contains no network client, telemetry integration, browser storage write or API call. The GitHub Pages deployment serves the application code only; selected CSV contents remain local to the browser.
+Workbook and CSV contents are parsed, mapped, pseudonymised and aggregated in this browser tab. They are not uploaded to a server, Cloudflare Worker or API, and raw rows are not written to browser storage. The page loads the pinned SheetJS Community Edition parser script (version 0.20.3) from the official static CDN. This is a code-only download; the workbook is not sent to that CDN. The first load therefore requires internet access. This page is not fully disconnected/offline unless the approved parser script is separately hosted locally and the HTML script reference is changed.
 
-For strict offline use, download `reporting-studio.html`, `reporting-studio.css` and `reporting-studio.js` together and open the HTML file locally. Keep all three files in the same folder.
+The Studio does not connect to Outlook, Excel desktop, Cloudflare Workers or D1. The GitHub Pages deployment serves the application code only; selected workbook and CSV contents remain in browser memory.
 
 ## First test with synthetic files
 
@@ -17,11 +17,25 @@ The repository includes safe, fictional examples:
 - `examples/synthetic-workflow-history.csv`
 - `examples/synthetic-team-roster.csv`
 
-Select the three synthetic ticket/activity CSVs and the fictional Team & Shifts CSV, check the automatically suggested column mappings, generate a local workspace key, and press **Sanitise locally**. The ticket and activity fixtures produce five ticket records, four validated first assignments (one further handover is not counted as a first assignment), and five workflow events. The separate synthetic roster exercises shift groups, scheduled hours and active/inactive fortnight status. It uses fictional identities and deliberately fictional shift windows.
+These CSV files are regression fixtures for the alternative CSV route. Open **Alternative: use separate CSV files** in the Studio, select the ticket, assignment, workflow and roster examples, check the suggested mappings, generate a local workspace key, and press **Sanitise locally**. The ticket and activity fixtures produce five ticket records, four validated first assignments (one further handover is not counted as a first assignment), and five workflow events. The synthetic roster exercises shift groups, scheduled hours and active/inactive fortnight status with fictional identities and deliberately fictional shift windows.
 
 These examples contain no real customer, vehicle, mailbox or colleague information.
 
 ## Source file requirements
+
+### Normal route — upload the complete five-tab workbook once
+
+Choose the original tracker workbook in the main workbook input. The Studio suggests the following worksheet mapping:
+
+| Reporting input | Workbook tab | Use |
+|---|---|---|
+| Ticket / current state | `Assignments` | Required; current ticket state |
+| Assignment history | `Activity Log` | Optional; use this same tab for the assignment-history input |
+| Workflow / activity history | `Activity Log` | Optional; select the same tab a second time |
+| Team & Shifts roster | `Team & Shifts` | Optional; roster identity and shift metadata |
+| Other two tabs | Not selected | Retain them in the workbook; the Studio ignores them |
+
+The same `Activity Log` worksheet is deliberately selected in two different inputs because the assignment and workflow views use different column mappings. Check the worksheet selectors before mapping the columns below. You only select one workbook file.
 
 ### Ticket / current-state snapshot — required
 
@@ -46,13 +60,13 @@ Only explicit values equivalent to **Initial**, **First assignment**, **Initial 
 
 ### Workflow / activity history — optional
 
-For the VWG tracker, select the **Activity Log** export a second time as the workflow input. Map `Email Key / ID` to ticket reference, `Assignment Flag` to workflow event type, `Source Inbox` to inbox and `Event Time (Egypt)` to the optional event timestamp. Do **not** map `Event Type`: its `true` / `false` values are Boolean markers, not workflow categories. The sanitiser maps the supplied Assignment Flag labels (auto assigned, handover, manual assignment captured, category removal detected, category restored, pending item not found and MULTIPLE_CATEGORIES_PENDING) to fixed safe event types. Baseline registered and queued are state markers, not workflow events, and are excluded.
+For the VWG tracker, select the **Activity Log** worksheet a second time as the workflow input. It is the same tab in the same workbook, not a second file. Map `Email Key / ID` to ticket reference, `Assignment Flag` to workflow event type, `Source Inbox` to inbox and `Event Time (Egypt)` to the optional event timestamp. Do **not** map `Event Type`: its `true` / `false` values are Boolean markers, not workflow categories. The sanitiser maps the supplied Assignment Flag labels (auto assigned, handover, manual assignment captured, category removal detected, category restored, pending item not found and MULTIPLE_CATEGORIES_PENDING) to fixed safe event types. Baseline registered and queued are state markers, not workflow events, and are excluded.
 
 ### Team & Shifts roster — optional
 
-Export the **Team & Shifts** sheet as a separate approved CSV. Map `Outlook Category (exact)` as the join identity, then `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The `Colleague` label is not needed as a second key. The category value is used only in browser memory to join with the pseudonymised Current Owner / Original Assignee values; the snapshot contains only the keyed agent reference, Early/Late group, Egypt-local start/end times and active-fortnight Boolean. Names and Outlook category values are not exported.
+Select the **Team & Shifts** worksheet from the same workbook. Map `Outlook Category (exact)` as the join identity, then `Shift Group`, `Shift Start (Egypt)`, `Shift End (Egypt)` and `Active This Fortnight`. The `Colleague` label is not needed as a second key. The category value is used only in browser memory to join with the pseudonymised Current Owner / Original Assignee values; the snapshot contains only the keyed agent reference, Early/Late group, Egypt-local start/end times and active-fortnight Boolean. Names and Outlook category values are not exported.
 
-Use the **same private workspace key** for Assignments, Activity Log and Team & Shifts on each reporting run so that pseudonymous references match across files. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
+Use the **same private workspace key** for the Assignments, Activity Log and Team & Shifts worksheets on each reporting run so that pseudonymous references match across the workbook sources. The roster may include inactive colleagues; they remain in the directory but are excluded from active shift-coverage headcounts. The source does not provide inbox eligibility, break/absence timestamps or minimum staffing targets, so those measures remain unavailable.
 
 ## Import the aggregate snapshot into Dispatcher 2.0
 
