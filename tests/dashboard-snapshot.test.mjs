@@ -82,6 +82,34 @@ test("drops unrecognised properties before keeping the snapshot in memory", () =
   assert.equal("employee_name" in clean.allocations[0], false);
 });
 
+test("preserves safe Activity Log event details and automatic/manual method counts",()=>{
+  const input=snapshotFixture();
+  input.tickets.resolution_tracking="not_captured";
+  input.tickets.brand_field_mapped=false;
+  input.assignment_methods={automatic:1,manual:1,other:0};
+  input.activity_log=[{
+    event_time_egypt:"2026-11-24 12:00:00",
+    event_time_utc:"2026-11-24T10:00:00.000Z",
+    event_type:"handover",
+    inbox_code:"detags",
+    ticket_ref:"Ref-CCCCCCCCCC",
+    original_agent_ref:"Agent-AAAAAAAAAA",
+    current_agent_ref:"Agent-BBBBBBBBBB",
+    assignment_flag:true,
+    incident_count:1,
+    details:"This property must be discarded."
+  }];
+  const clean=JSON.parse(JSON.stringify(validate(input)));
+  assert.deepEqual(clean.assignment_methods,{automatic:1,manual:1,other:0});
+  assert.equal(clean.activity_log.length,1);
+  assert.equal(clean.activity_log[0].event_type,"handover");
+  assert.equal(clean.activity_log[0].ticket_ref,"Ref-CCCCCCCCCC");
+  assert.equal(clean.activity_log[0].assignment_flag,true);
+  assert.equal(clean.tickets.resolution_tracking,"not_captured");
+  assert.equal(clean.tickets.brand_field_mapped,false);
+  assert.equal("details" in clean.activity_log[0],false);
+});
+
 test("rejects an overall total that does not reconcile with inbox totals", () => {
   const input = snapshotFixture();
   input.tickets.overall.ticket_records = 99;
