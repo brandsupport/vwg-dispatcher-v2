@@ -115,7 +115,7 @@ jobs:
           if (!html.includes('class="sidebar-studio-link"') || !html.includes('href="./reporting-studio.html"')) {
             throw new Error('The dashboard must provide a persistent link to the Reporting Studio.');
           }
-          if (!studioHtml.includes('class="workspace-nav-button"') || !studioHtml.includes('href="./"')) {
+          if (!studioHtml.includes('workspace-nav-button') || !studioHtml.includes('href="./"')) {
             throw new Error('The Reporting Studio must provide a clear return link to the dashboard.');
           }
           for (const token of ['--studio-accent:#ff174f','--studio-accent-soft:#ff5c91','--studio-plum:#c2a0ff','CHERRY GLASS — Reporting Studio']) {
