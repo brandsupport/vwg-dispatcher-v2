@@ -33,12 +33,15 @@ async function createStudioSnapshot(csvInputs=null){
         const ticketData=parseCSV(csvs.tickets);
         const assignmentData=parseCSV(csvs.assignments);
         const workflowData=parseCSV(csvs.workflow);
+        const rosterData=csvs.roster?parseCSV(csvs.roster):null;
         files.tickets={...ticketData,rowCount:ticketData.records.length};
         files.assignments={...assignmentData,rowCount:assignmentData.records.length};
         files.workflow={...workflowData,rowCount:workflowData.records.length};
+        files.roster=rosterData?{...rosterData,rowCount:rosterData.records.length}:null;
         mappings.tickets=mapHeaders("tickets",ticketData.headers);
         mappings.assignments=mapHeaders("assignments",assignmentData.headers);
         mappings.workflow=mapHeaders("workflow",workflowData.headers);
+        mappings.roster=rosterData?mapHeaders("roster",rosterData.headers):{};
         const usedMappings=JSON.parse(JSON.stringify(mappings));
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
@@ -91,7 +94,7 @@ function calculateDashboardViews(snapshot,folder="all"){
     extractFunction("brandRows"),
     extractFunction("totals"),
     extractFunction("workflowSummaryRows"),
-    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===state.folder),agents:allocationMatrix(),brands:brandRows(),workflow:workflowSummaryRows()};"
+    "globalThis.result={totals:totals(),folders:folderAssignedRows().filter(row=>state.folder==='all'||row.id===folder),agents:allocationMatrix(),brands:brandRows(),workflow:workflowSummaryRows()};"
   ].join("\n");
   vm.runInContext(script,context);
   return JSON.parse(JSON.stringify(context.result));
@@ -258,4 +261,36 @@ test("real tracker sheet headers map safely and Assignment Flag drives activity 
     "SYNTHETIC-ENTRY-A","SYNTHETIC-STORE-A",
     "Synthetic Agent A","Synthetic Agent B","Synthetic Agent C","Synthetic Agent D"
   ]) assert.equal(serialised.includes(prohibited),false,"unmapped sensitive value leaked: "+prohibited);
+});
+
+
+test("the Team & Shifts roster is pseudonymised and drives actual imported shift groups",async()=>{
+  const read=path=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
+  const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
+    tickets:read("examples/synthetic-ticket-snapshot.csv"),
+    assignments:read("examples/synthetic-assignment-history.csv"),
+    workflow:read("examples/synthetic-workflow-history.csv"),
+    roster:read("examples/synthetic-team-roster.csv")
+  })));
+  const snapshot=run.snapshot;
+  assert.equal(snapshot.team_roster.length,14);
+  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Early"&&row.active_this_fortnight).length,5);
+  assert.equal(snapshot.team_roster.filter(row=>row.shift_group==="Late"&&row.active_this_fortnight).length,8);
+  assert.equal(snapshot.team_roster.filter(row=>!row.active_this_fortnight).length,1);
+  assert.ok(snapshot.team_roster.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
+  assert.ok(snapshot.team_roster.every(row=>row.shift_start_egypt==="10:00"||row.shift_start_egypt==="11:00"));
+  assert.ok(snapshot.team_roster.every(row=>row.shift_end_egypt==="19:00"||row.shift_end_egypt==="20:00"));
+
+  const imported=validateWithDashboard(snapshot);
+  assert.equal(imported.team_roster.length,14);
+  const views=calculateDashboardViews(imported);
+  assert.equal(views.agents.length,14);
+  assert.equal(views.agents.filter(row=>row.shift==="Early"&&row.activeThisFortnight===true).length,5);
+  assert.equal(views.agents.filter(row=>row.shift==="Late"&&row.activeThisFortnight===true).length,8);
+  assert.equal(views.agents.filter(row=>row.activeThisFortnight===false).length,1);
+
+  const serialised=JSON.stringify(imported);
+  for(const name of Array.from({length:14},(_,i)=>"Sample Agent "+String.fromCharCode(65+i))){
+    assert.equal(serialised.includes(name),false,"raw roster identity leaked: "+name);
+  }
 });
