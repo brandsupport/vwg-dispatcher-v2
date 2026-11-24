@@ -599,7 +599,7 @@ async function sanitise(){
       ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0
     }]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
-    const agentCounts=new Map(),workload=new Map(),dailyMap=new Map();
+    const agentCounts=new Map(),workload=new Map(),ownerRecordsByAgent=new Map(),dailyMap=new Map();
     const methodStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{automatic:0,manual:0}]));
     for(const [ticketKey,ticket] of ticketMap.entries()){
       const stats=inboxStats[ticket.inbox];stats.ticket_records++;
@@ -615,7 +615,8 @@ async function sanitise(){
       brandStats[ticket.brand]=(brandStats[ticket.brand]||0)+1;
       if(ticket.ownerRef){
         const workloadKey=ticket.ownerRef+"|"+ticket.inbox;
-        workload.set(workloadKey,(workload.get(workloadKey)||0)+1);
+        ownerRecordsByAgent.set(workloadKey,(ownerRecordsByAgent.get(workloadKey)||0)+1);
+        if(lifecycleAvailable&&!ticket.resolved)workload.set(workloadKey,(workload.get(workloadKey)||0)+1);
       }
       const initial=validInitial.get(ticketKey);
       if(initial){
@@ -626,7 +627,7 @@ async function sanitise(){
       }
     }
     const allocations=[];
-    const allocationGroups=new Set([...agentCounts.keys(),...workload.keys()]);
+    const allocationGroups=new Set([...agentCounts.keys(),...workload.keys(),...ownerRecordsByAgent.keys()]);
     for(const group of allocationGroups){
       const [agent_ref,inbox_code]=group.split("|");
       const count=agentCounts.get(group)||0;
@@ -637,7 +638,7 @@ async function sanitise(){
         initial_assignments:count,
         allocation_share_pct:total?count/total*100:0,
         current_open_workload:lifecycleAvailable?(workload.get(group)||0):0,
-        current_owner_records:workload.get(group)||0
+        current_owner_records:ownerRecordsByAgent.get(group)||0
       });
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
