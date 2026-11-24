@@ -2301,7 +2301,67 @@ function refreshAuditPanels(){
   if(detail)detail.innerHTML=auditDetailMarkup(selected);
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
+function importedActivityRows(){
+  if(!state.importedSnapshot)return [];
+  const term=String(state.auditSearch||"").trim().toLowerCase();
+  return (state.importedSnapshot.activity_log||[])
+    .filter(event=>state.folder==="all"||event.inbox_code===state.folder)
+    .filter(event=>!term||[
+      event.event_time_egypt,event.event_type,event.ticket_ref,event.inbox_code,
+      displayAgentName(event.original_agent_ref||""),displayAgentName(event.current_agent_ref||""),
+      event.assignment_flag,event.incident_count
+    ].join(" ").toLowerCase().includes(term))
+    .slice().sort((a,b)=>(b.event_time_utc||"").localeCompare(a.event_time_utc||""));
+}
+function exportImportedActivityLog(){
+  const rows=importedActivityRows();
+  csvDownload("dispatcher-sanitised-activity-log.csv",[
+    ["Event time (Egypt local)","Event type","Pseudonymous ticket reference","Inbox","Original assignee reference","Current owner reference","Assignment flag","Incident count"],
+    ...rows.map(event=>[
+      event.event_time_egypt||event.event_time_utc||"Not supplied",
+      event.event_type,event.ticket_ref,
+      FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code,
+      event.original_agent_ref||"",event.current_agent_ref||"",
+      event.assignment_flag?"TRUE":"FALSE",event.incident_count
+    ])
+  ]);
+}
+function renderImportedActivityAudit(){
+  const all=state.importedSnapshot.activity_log||[];
+  const visible=importedActivityRows();
+  const totalTickets=new Set(visible.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored"].includes(event.event_type)).length;
+  const sourceAvailable=importedSourceAvailable("Workflow history");
+  const rows=visible.map(event=>
+    '<tr>'+
+      '<td class="mono">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+esc(event.ticket_ref)+'</small></td>'+
+      '<td>'+esc(FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td>'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td>'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td>'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
+    '</tr>'
+  );
+  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen now uses the imported workbook Activity Log. It shows the event type from column B; the TRUE / FALSE Assignment Flag is displayed separately and is never treated as an event.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+    '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(all.length)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not recorded by source</b></span></div>'+
+    kpiGrid([
+      kpi("Activity events",fmt(visible.length),"Rows in the selected inbox / search","◷"),
+      kpi("Tickets affected",fmt(totalTickets),"Pseudonymous ticket references","▤"),
+      kpi("Automatic / manual",fmt(automatic)+" / "+fmt(manual),"Recorded first-allocation event categories","↗"),
+      kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
+    ])+
+    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner are shown as references; they are not claimed to be the person who performed the action.</p></div><span class="subtle-tag">'+(sourceAvailable?"WORKBOOK ACTIVITY LOG":"ACTIVITY SOURCE NOT SUPPLIED")+'</span></div>'+
+    '<div class="audit-filter-toolbar"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or agent…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label><span class="audit-result-count">Showing '+visible.length+' of '+all.length+' Activity Log rows</span></div>'+
+    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+(sourceAvailable?"No Activity Log entries match the current inbox and search.":"No Activity Log data was included in this snapshot. Re-select Activity Log for both history inputs in Reporting Studio.")+'</div>')+
+    '</section>'+
+    '<div class="prototype-warning"><strong>Source limitations.</strong> The workbook does not record the authenticated person who changed an Outlook category, the reason beyond free-text notes, or a verified completion / resolution event. Free-text Details / Notes are intentionally excluded from the shared snapshot because they can contain subjects or personal data. This page is an Activity Log viewer, not a tamper-evident security audit.</div>';
+}
 function renderAudit(){
+  if(state.importedSnapshot){renderImportedActivityAudit();return;}
   const base=auditBaseEvents();
   for(const [key,field] of [["auditCategory","category"],["auditOutcome","outcome"],["auditActor","actor"]]){
     if(state[key]!=="all"&&!base.some(event=>event[field]===state[key]))state[key]="all";
@@ -2693,7 +2753,7 @@ function handleAction(action){
   if(action==="export-folders"){exportFolders();return;}
   if(action==="export-team"){exportTeam();return;}
   if(action==="export-roster"){exportRoster();return;}
-  if(action==="export-audit"){exportAuditHistory();return;}
+  if(action==="export-audit"){if(state.importedSnapshot)exportImportedActivityLog();else exportAuditHistory();return;}
   if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.selectedAuditEvent=null;renderAudit();return;}
   if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}
   if(action==="reset-admin-review"){state.adminRequestSearch="";state.adminRequestStatus="all";state.adminRole="operations_manager";state.selectedAdminRequest="ACCESS-SAMPLE-004";renderAdmin();return;}
