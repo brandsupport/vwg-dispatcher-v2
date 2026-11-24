@@ -29,6 +29,8 @@ function loadStudio(){
       parseExplicitDate,
       parseExplicitTimestamp,
       autoMap,
+      renderSnapshot,
+      getNode:id=>document.getElementById(id),
       sourceConfig:SOURCE_CONFIG,
       async process(csvs) {
         const ticketData=parseCSV(csvs.tickets);
@@ -87,6 +89,41 @@ test("only explicit timezone dates are accepted for daily grouping",()=>{
   assert.equal(hooks.parseExplicitDate("2026-11-22T23:30:00-02:00"),"2026-11-23");
   assert.equal(hooks.parseExplicitDate("2026-11-22 23:30:00 UK"),null);
 });
+
+test("parses the actual Excel dd/Mon/yyyy timestamp display in UK and Egypt zones",()=>{
+  const hooks=loadStudio();
+  assert.equal(hooks.parseExplicitTimestamp("23/Nov/2026 10:50:00","Europe/London"),"2026-11-23T10:50:00.000Z");
+  assert.equal(hooks.parseExplicitTimestamp("23-Nov-2026 10:50:00","Africa/Cairo"),"2026-11-23T08:50:00.000Z");
+  assert.equal(hooks.parseExplicitDate("23/Nov/2026 10:50:00","Europe/London"),"2026-11-23");
+  assert.equal(hooks.parseExplicitTimestamp("29/Mar/2026 01:30:00","Europe/London"),null,
+    "non-existent UK daylight-saving wall times must not be guessed");
+  assert.equal(hooks.parseExplicitTimestamp("25/Oct/2026 01:30:00","Europe/London"),null,
+    "ambiguous repeated UK daylight-saving wall times must not be guessed");
+});
+
+test("the Studio preview labels missing brand and resolution tracking rather than showing false zeros",()=>{
+  const hooks=loadStudio();
+  const inboxes=["agency","detags","transfers","unadopts"].map(inbox_code=>({
+    inbox_code,ticket_records:1,initially_assigned:0,resolved:0,outstanding:1,unassigned:0
+  }));
+  const snapshot={
+    generated_at_utc:"2026-11-24T10:00:00.000Z",
+    tickets:{
+      total:4,
+      overall:{ticket_records:4,initially_assigned:0,resolved:0,outstanding:4,unassigned:0},
+      resolution_tracking:"not_captured",brand_field_mapped:false,
+      by_inbox:inboxes,by_brand:[{brand_code:"unclassified",count:4}],daily_volume:[]
+    },
+    allocations:[],team_roster:[],workflow:[],
+    data_quality:{sources:[],warnings:[]}
+  };
+  hooks.renderSnapshot(snapshot);
+  const kpis=hooks.getNode("kpiResults").innerHTML;
+  assert.equal((kpis.match(/Not tracked/g)||[]).length,3);
+  assert.match(hooks.getNode("brandResults").innerHTML,/Brand field not captured/);
+  assert.match(hooks.getNode("inboxResults").innerHTML,/Not tracked/);
+});
+
 
 test("synthetic exports produce reconciled aggregate metrics without raw identifiers",async()=>{
   const hooks=loadStudio();
