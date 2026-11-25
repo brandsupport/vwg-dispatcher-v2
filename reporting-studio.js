@@ -27,7 +27,7 @@ const SOURCE_CONFIG={
     title:"Ticket / current-state export",
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","item id","reference","ticketid"]},
-      {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","inbox","folder","mailbox folder","queue","folder name"]},
+      {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","first source inbox","folder path","source folder","inbox","folder","mailbox folder","queue","folder name"]},
       {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
       {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
       {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
@@ -43,7 +43,7 @@ const SOURCE_CONFIG={
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"agent",label:"New owner / assigned agent",required:true,aliases:["original assignee","new owner","assigned to","assignee","agent","colleague","owner","allocated to"]},
       {id:"kind",label:"Assignment event type",required:true,aliases:["event type","assignment event","assignment kind","assignment type","event","action","type","allocation type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","folder path","source folder","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Assignment timestamp",aliases:["event time egypt","occurred at","assigned at","timestamp","event time","created at","date"]}
     ]
   },
@@ -52,7 +52,7 @@ const SOURCE_CONFIG={
     fields:[
       {id:"ticket_ref",label:"Ticket reference",required:true,aliases:["email key / id","ticket id","ticket reference","ticket ref","case id","reference","ticketid"]},
       {id:"event_type",label:"Workflow event type",required:true,aliases:["event type","workflow event","event","activity","action","type"]},
-      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","inbox","folder","queue","folder name"]},
+      {id:"inbox",label:"Inbox / folder",aliases:["source inbox","folder path","source folder","inbox","folder","queue","folder name"]},
       {id:"occurred_at",label:"Event timestamp",aliases:["event time egypt","occurred at","timestamp","event time","created at","date"]},
       {id:"original_assignee",label:"Original assignee (optional)",aliases:["original assignee"]},
       {id:"current_owner",label:"Current owner (optional)",aliases:["current owner"]},
@@ -285,6 +285,7 @@ async function readWorkbook(file){
 }
 function normaliseInbox(value){
   const key=norm(value);
+  if(key==="system"||key.includes("four inbox")||key.includes("maintenance timer")||key==="timer"||key.includes("runqueueandrecoveryscan")||key.includes("dispatch system"))return "system";
   if(key.includes("agencydetags")||key.includes("agency detags"))return "agency";
   if(key.includes("unadopts"))return "unadopts";
   if(key.includes("transfers"))return "transfers";
@@ -332,17 +333,25 @@ function normaliseWorkflowEvent(value){
   const key=norm(value).replace(/\s+/g," ");
   const aliases={
     received:["received","ticket received","created","queued","backlog discovered"],
+    baseline_complete:["baseline complete","backlog discovery complete"],
     handover:["handover","handed over","handed off","shift handover"],
     assigned:["assigned","auto assigned","auto assignment","initial assignment","initial allocation","first assignment","first allocation"],
     manual_assignment:["manual assignment","manual assignment captured","manually assigned","manual allocation"],
     reassigned:["reassigned","reassignment","reassigned owner"],
-    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending","existing assignment needs review","new mail needs review","backlog needs review","ambiguous assignment","ambiguous categories review"],
-    recovery_requested:["recovery requested","recovery request","recovery review opened"],
+    flagged:["flagged","flag","flag raised","flagged for review","category removal detected","category removal pending","category removal verify pending","existing assignment needs review","new mail needs review","backlog needs review","ambiguous assignment","ambiguous categories review","multiple categories pending"],
+    recovery_requested:["recovery requested","recovery request","recovery review opened","dry run would restore"],
     recovery_held:["recovery held","held for recovery","recovery hold","recovery blocked","recovery requires review"],
-    recovery_restored:["recovery restored","restored","recovered","assignment restored","category restored","restoration marker removed","recovery state reconciled","assignment state reconciled"],
+    recovery_restored:["recovery restored","restored","recovered","assignment restored","category restored","restoration marker removed"],
+    reconciled:["recovery state reconciled","assignment state reconciled","pending change cancelled","dry run pending cleared"],
+    assignment_pending:["auto assignment pending verification"],
+    assignment_preview:["dry run would assign queued"],
+    email_metadata_captured:["email metadata captured"],
+    email_exit_pending:["email exit pending"],
+    email_completed:["email completed"],
     resolved:["resolved","closed","completed"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment pending verification","auto assignment log failed","assigned baseline scan failed","queued item not found","queued item not mail","pending item not found","pending change cancelled","multiple categories pending","multiple categories review","queue save failed","queue blocked time zone","new mail processing failed","item handler failed","maintenance failed","manual scan failed","start failed","time zone conversion failed","error"]
+    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment log failed","auto assignment pending verification","assigned baseline scan failed","queued item not found","queued item not mail","pending item not found","shift cutoff reservation cancelled","multiple categories review","queue save failed","queue blocked time zone","new mail processing failed","item handler failed","maintenance failed","manual scan failed","start failed","time zone conversion failed","queue staged to retry","baseline failed","baseline folder failed","backlog discovery failed","backlog failed","error"],
+    recovery_preview:["dry run would remove restoration marker"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
   return null;
@@ -548,7 +557,6 @@ async function sanitise(){
         const ticketKey=norm(ref);const ticket=ticketMap.get(ticketKey);
         if(!ticket){q.rows_skipped++;continue;}
         if(inboxRaw&&!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
-        if(inbox&&inbox!==ticket.inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         if(!isInitialKind(kind)){q.rows_accepted++;continue;}
         const resolvedInbox=inbox||ticket.inbox;
         if(!resolvedInbox){q.rows_skipped++;q.unknown_inbox++;continue;}
@@ -596,8 +604,7 @@ async function sanitise(){
         quality.assignments.rows_skipped+=superseded;
       }
       const ticket=ticketMap.get(ticketKey);
-      if(ticket&&chosen.inbox===ticket.inbox)validInitial.set(ticketKey,{agentRef:await rememberAgent(chosen.agent),inbox_code:chosen.inbox,method:chosen.method});
-      else if(ticket){quality.assignments.rows_accepted--;quality.assignments.rows_skipped++;quality.assignments.unknown_inbox++;}
+      if(ticket)validInitial.set(ticketKey,{agentRef:await rememberAgent(chosen.agent),inbox_code:chosen.inbox,method:chosen.method});
     }
     const inboxStats=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,{ticket_records:0,initially_assigned:0,resolved:0,outstanding:0,unassigned:0}]));
     const brandStats=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,0]));
@@ -612,7 +619,8 @@ async function sanitise(){
       if(ticket.ownerRef&&!ticket.resolved){const workloadKey=ticket.ownerRef+"|"+ticket.inbox;workload.set(workloadKey,(workload.get(workloadKey)||0)+1);}
       const initial=validInitial.get(ticketKey);
       if(initial){
-        stats.initially_assigned++;
+        const originalInboxStats=inboxStats[initial.inbox_code];
+        if(originalInboxStats)originalInboxStats.initially_assigned++;
         const group=initial.agentRef+"|"+initial.inbox_code;
         agentCounts.set(group,(agentCounts.get(group)||0)+1);
       }
@@ -624,20 +632,32 @@ async function sanitise(){
       allocations.push({agent_ref,inbox_code,initial_assignments:count,allocation_share_pct:total?count/total*100:0,current_open_workload:workload.get(group)||0});
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
+    const emailOriginInboxByKey=new Map();
+    if(files.emailDetails){
+      for(const row of files.emailDetails.records){
+        const emailKey=selectedValue(row,"emailDetails","email_key");
+        const firstInbox=normaliseInbox(selectedValue(row,"emailDetails","first_inbox"));
+        if(emailKey&&firstInbox)emailOriginInboxByKey.set(norm(emailKey),firstInbox);
+      }
+    }
     const workflowMap=new Map();const activityLog=[];
     if(files.workflow){
       const q=quality.workflow;
-      for(const row of files.workflow.records){
-        const ref=selectedValue(row,"workflow","ticket_ref");const eventRaw=selectedValue(row,"workflow","event_type");const inboxRaw=selectedValue(row,"workflow","inbox");
-        if(!ref||!eventRaw){q.rows_skipped++;continue;}
-        const ticket=ticketMap.get(norm(ref));if(!ticket){q.rows_skipped++;continue;}
-        const inbox=inboxRaw?normaliseInbox(inboxRaw):ticket.inbox;
-        if(!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
+      for(let rowIndex=0;rowIndex<files.workflow.records.length;rowIndex++){
+        const row=files.workflow.records[rowIndex];
+        const ref=selectedValue(row,"workflow","ticket_ref");
+        const eventRaw=selectedValue(row,"workflow","event_type");
+        const inboxRaw=selectedValue(row,"workflow","inbox");
+        if(!eventRaw){q.rows_skipped++;continue;}
         const event=normaliseWorkflowEvent(eventRaw);
         if(!event){q.rows_skipped++;continue;}
+        const refKey=norm(ref);
+        const ticket=ref?ticketMap.get(refKey):null;
+        const folderInbox=inboxRaw?normaliseInbox(inboxRaw):"";
+        const emailOriginInbox=ref?emailOriginInboxByKey.get(refKey)||"":"";
+        const inbox=folderInbox||emailOriginInbox||ticket?.inbox||"system";
+        if(inboxRaw&&!folderInbox&&norm(inboxRaw)!=="email details"&&!emailOriginInbox&&!ticket)q.unknown_inbox++;
         q.rows_accepted++;
-        const keyName=event+"|"+inbox;const record=workflowMap.get(keyName)||{event_type:event,inbox_code:inbox,event_count:0,tickets:new Set()};
-        record.event_count++;record.tickets.add(norm(ref));workflowMap.set(keyName,record);
         const timeRaw=selectedValue(row,"workflow","occurred_at");
         const eventTime=parseExplicitTimestamp(timeRaw,"Africa/Cairo");
         if(timeRaw&&!eventTime)q.ambiguous_time++;
@@ -645,9 +665,16 @@ async function sanitise(){
         const currentName=selectedValue(row,"workflow","current_owner");
         const flagRaw=norm(selectedValue(row,"workflow","assignment_flag"));
         const incidentRaw=selectedValue(row,"workflow","incident_count");
+        const ticketRef=ticket?.ticketRef||(ref?await pseudonym(key,"ticket",ref):await pseudonym(key,"ticket","system-event:"+rowIndex+"|"+eventRaw+"|"+timeRaw+"|"+inbox));
+        const systemEvent=!ref;
+        const keyName=event+"|"+inbox;
+        const record=workflowMap.get(keyName)||{event_type:event,inbox_code:inbox,event_count:0,tickets:new Set()};
+        record.event_count++;
+        if(ticket)record.tickets.add(refKey);
+        workflowMap.set(keyName,record);
         activityLog.push({
           event_time_egypt:timeRaw||"",event_time_utc:eventTime,
-          event_type:event,inbox_code:inbox,ticket_ref:ticket.ticketRef,
+          event_type:event,inbox_code:inbox,ticket_ref:ticketRef,system_event:systemEvent,
           original_agent_ref:originalName&&!isUnassigned(originalName)?await rememberAgent(originalName):null,
           current_agent_ref:currentName&&!isUnassigned(currentName)?await rememberAgent(currentName):null,
           assignment_flag:flagRaw==="true"||flagRaw==="yes"||flagRaw==="1",

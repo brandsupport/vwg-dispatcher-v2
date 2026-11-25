@@ -29,7 +29,7 @@ Select the `Activity Log` worksheet in the workbook selector for the Assignment 
 | Ticket reference | Yes | `Email Key / ID` | Must join to a ticket in Assignments |
 | New owner / assigned agent | Yes | `Original Assignee` | Used for keyed pseudonymisation; confirm this remains the original first-assigned colleague in every activity row |
 | Assignment event type | Yes | `Event Type` | `AUTO_ASSIGNMENT` and `MANUAL_ASSIGNMENT_CAPTURED` are explicit first allocations (automatic / manual respectively) |
-| Inbox / folder | No | `Source Inbox` | Must match the current-state inbox |
+| Inbox / folder | No | `Folder Path` (column D) | The original Activity Log folder at the time of the event; it can differ from the ticket’s current Inbox after a move |
 | Assignment timestamp | No | `Event Time (Egypt)` | Optional quality field; must include explicit UTC offset to pass timestamp checks |
 
 **Initial allocation rule:** `AUTO_ASSIGNMENT` is counted as an automatic first allocation and `MANUAL_ASSIGNMENT_CAPTURED` as a manual first allocation. Exact duplicate rows for the same ticket, original assignee, inbox and event are de-duplicated. Conflicting initial records remain excluded as ambiguous. Do not count `HANDOVER`, category removals, recovery, queue state or system failures as first allocations.
@@ -42,10 +42,10 @@ Select the same `Activity Log` worksheet again in the Workflow / activity input.
 |---|---|---|
 | Ticket reference | Yes | `Email Key / ID` |
 | Workflow event type | Yes | `Event Type` |
-| Inbox / folder | No | `Source Inbox` |
+| Inbox / folder | No | `Folder Path` (column D) |
 | Event timestamp | No | `Event Time (Egypt)` |
 
-Do **not** map `Assignment Flag` as the event type. It is a separate Boolean value (`TRUE` / `FALSE`). Map it only to the optional Assignment flag field.
+The tracker Activity Log schema is A:I: A `Event Time (Egypt)`, B `Event Type`, C `Email Key / ID`, D `Folder Path`, E `Original Assignee`, F `Current Owner`, G `Assignment Flag` (Boolean `TRUE` / `FALSE`), H `Incident Count`, I `Details`. Map B as the event type and D as the historical Inbox/folder. Do **not** map G as the event type. Never map I `Details` because it can contain subjects or personal data. Original assignment counts remain with the original folder even if the email later moves.
 
 Current event interpretation in the sanitiser (using the actual column B event codes):
 
