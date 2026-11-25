@@ -30,6 +30,7 @@ async function createStudioSnapshot(csvInputs=null,workbookProbe=null){
     );
     globalThis.__reportingTestHooks = {
       parseCSV,
+      isSupportedWorkbookFilename,
       mapHeaders,
       suggestEmailDetailsSheet(sheetNames,sheets){return suggestWorkbookSheet("emailDetails",sheetNames,sheets);},
       async process(csvs,workbookProbe) {
@@ -290,6 +291,16 @@ test("real Activity Log schema retains moved allocations, system events, email s
   for(const raw of ["agent-a","agent-b","Alice Adams","Bob Baker","PRIVATE TEST NOTE","PRIVATE HANDOVER NOTE","PRIVATE EMAIL NOTE","PRIVATE SYSTEM NOTE","ORDER-PRIVATE","VIN-PRIVATE","<sample-moved@example.invalid>"]){
     assert.equal(serialised.includes(raw),false,"Private source value leaked to aggregate snapshot: "+raw);
   }
+});
+
+test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{
+  const hooks=createWorkbookTestHooks();
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xlsx"),true);
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xls"),true);
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xlsm"),true);
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.XLSM"),true);
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xlsb"),false);
+  assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.csv"),false);
 });
 
 test("the full six-tab workbook selects Email Details and reuses Activity Log twice",()=>{
