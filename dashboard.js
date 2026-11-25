@@ -526,8 +526,8 @@ function validateAndSanitiseSnapshot(raw){
   });
   if(byInbox.length!==4||new Set(byInbox.map(row=>row.inbox_code)).size!==4)fail("The snapshot must contain exactly one summary for each of the four inboxes.");
   for(const row of byInbox){
-    if(row.resolved+row.outstanding!==row.ticket_records||row.unassigned>row.outstanding||row.initially_assigned>row.ticket_records){
-      fail("Inbox state counts do not reconcile for "+row.inbox_code+".");
+    if(row.resolved+row.outstanding!==row.ticket_records||row.unassigned>row.outstanding){
+      fail("Current Inbox state counts do not reconcile for "+row.inbox_code+".");
     }
   }
   byInbox.sort((a,b)=>inboxCodes.indexOf(a.inbox_code)-inboxCodes.indexOf(b.inbox_code));
