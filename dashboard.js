@@ -52,10 +52,14 @@ function workflowSummaryRows(){
   if(!state.importedSnapshot)return WORKFLOW_EVENT_SUMMARY;
   const definitions=[
     {id:"handover",label:"Handover",codes:["handover"],color:"#ff5c91"},
-    {id:"flag",label:"Flagged",codes:["flagged"],color:"#ffbd68"},
+    {id:"flag",label:"Flagged / review",codes:["flagged"],color:"#ffbd68"},
+    {id:"automatic",label:"Automatic assignment",codes:["assigned"],color:"#89d8bd"},
     {id:"manual",label:"Manual assignment",codes:["manual_assignment"],color:"#c2a0ff"},
-    {id:"recovery",label:"Recovery",codes:["recovery_requested","recovery_held","recovery_restored"],color:"#76e7ce"},
-    {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"}
+    {id:"recovery",label:"Recovery / restore",codes:["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"],color:"#76e7ce"},
+    {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"},
+    {id:"exceptions",label:"Exceptions / pending",codes:["exception","assignment_pending","assignment_preview"],color:"#ef8d75"},
+    {id:"email_lifecycle",label:"Email lifecycle",codes:["email_metadata_captured","email_exit_pending","email_completed"],color:"#8e9cff"},
+    {id:"baseline",label:"Baseline / discovery",codes:["received","baseline_complete"],color:"#8babc8"}
   ];
   return definitions.map(definition=>{
     const matches=state.importedSnapshot.workflow.filter(row=>
@@ -494,7 +498,7 @@ function validateAndSanitiseSnapshot(raw){
   };
   const inboxCodes=["agency","detags","transfers","unadopts"];
   const brandCodes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
-  const eventCodes=["received","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","resolved","reopened","exception"];
+  const eventCodes=["received","baseline_complete","flagged","handover","assigned","manual_assignment","reassigned","recovery_requested","recovery_held","recovery_restored","reconciled","assignment_pending","assignment_preview","email_metadata_captured","email_exit_pending","email_completed","recovery_preview","resolved","reopened","exception"];
   const validDate=value=>{
     if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
     const parsed=new Date(value+"T00:00:00Z");
@@ -660,7 +664,7 @@ function validateAndSanitiseSnapshot(raw){
     }
   }
   const workflow=raw.workflow.map(row=>{
-    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code))fail("The workflow contains an unsupported event or inbox code.");
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!(inboxCodes.includes(row.inbox_code)||row.inbox_code==="system"))fail("The workflow contains an unsupported event or inbox code.");
     const eventCount=count(row.event_count,"workflow event count");
     const distinctTickets=count(row.distinct_tickets,"workflow distinct-ticket count");
     if(distinctTickets>eventCount||distinctTickets>total)fail("Workflow distinct-ticket counts do not reconcile with event or ticket totals.");
@@ -784,8 +788,9 @@ function validateAndSanitiseSnapshot(raw){
   const activityLogRaw=raw.activity_log??[];
   if(!Array.isArray(activityLogRaw))fail("The Activity Log detail section is invalid.");
   const activityLog=activityLogRaw.map(row=>{
-    if(!isObject(row)||!eventCodes.includes(row.event_type)||!inboxCodes.includes(row.inbox_code)||
+    if(!isObject(row)||!eventCodes.includes(row.event_type)||!(inboxCodes.includes(row.inbox_code)||row.inbox_code==="system")||
        !/^Ref-[A-F0-9]{10}$/.test(String(row.ticket_ref||"")))fail("An Activity Log event contains an invalid reference or event type.");
+    if(row.system_event!==undefined&&typeof row.system_event!=="boolean")fail("An Activity Log system-event flag is invalid.");
     if(row.event_time_utc!==null&&row.event_time_utc!==""&&(typeof row.event_time_utc!=="string"||!row.event_time_utc.endsWith("Z")||!Number.isFinite(Date.parse(row.event_time_utc))))fail("An Activity Log event contains an invalid timestamp.");
     for(const key of ["original_agent_ref","current_agent_ref"]){
       if(row[key]!==null&&row[key]!==undefined&&!/^Agent-[A-F0-9]{10}$/.test(String(row[key])))fail("An Activity Log event contains an invalid agent reference.");
@@ -794,7 +799,7 @@ function validateAndSanitiseSnapshot(raw){
     return {
       event_time_egypt:typeof row.event_time_egypt==="string"?row.event_time_egypt:"",
       event_time_utc:row.event_time_utc||null,
-      event_type:row.event_type,inbox_code:row.inbox_code,ticket_ref:row.ticket_ref,
+      event_type:row.event_type,inbox_code:row.inbox_code,ticket_ref:row.ticket_ref,system_event:row.system_event===true,
       original_agent_ref:row.original_agent_ref||null,current_agent_ref:row.current_agent_ref||null,
       assignment_flag:row.assignment_flag,
       incident_count:count(row.incident_count??0,"Activity Log incident count")
@@ -972,6 +977,12 @@ function allocationMatrix(){
       return agents.get(agentRef);
     };
     for(const agentRef of rosterByRef.keys())ensureAgent(agentRef);
+    for(const event of state.importedSnapshot.activity_log||[]){
+      if(event.original_agent_ref)ensureAgent(event.original_agent_ref);
+      if(event.current_agent_ref)ensureAgent(event.current_agent_ref);
+    }
+    for(const owner of state.importedSnapshot.email_metrics?.by_original_owner||[])ensureAgent(owner.agent_ref);
+    for(const owner of state.importedSnapshot.email_metrics?.by_current_owner||[])ensureAgent(owner.agent_ref);
     state.importedSnapshot.allocations.forEach(item=>{
       const agent=ensureAgent(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
       if(index>=0){agent.cells[index]=item.initial_assignments;agent.openByFolder[index]=item.current_open_workload;}
@@ -1784,34 +1795,43 @@ function brandFolderTable(){
 function renderWorkflow(){
   const imported=Boolean(state.importedSnapshot);
   const manual=workflowEvent("manual"),handover=workflowEvent("handover"),recovery=workflowEvent("recovery");
-  const sourceAvailable=!imported||importedSourceAvailable("Workflow history");
+  const workflowQuality=imported?state.importedSnapshot.data_quality.sources.find(row=>row.source==="Workflow history"):null;
+  const workflowSupplied=!imported||Boolean(workflowQuality);
+  const acceptedRows=workflowQuality?.rows_accepted||0;
+  const readRows=workflowQuality?.rows_read||0;
+  const sourceAvailable=!imported||acceptedRows>0;
   const summaries=workflowSummaryRows();
+  const methods=state.importedSnapshot?.assignment_methods||{automatic:0,manual:0,other:0};
+  const initialTotal=state.importedSnapshot?.tickets.overall.initially_assigned||0;
   const actualRows=imported?state.importedSnapshot.workflow.filter(row=>state.folder==="all"||row.inbox_code===state.folder).map(row=>
-    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
+    '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(row.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
   ):null;
-  const importedNote=sourceAvailable?"Event totals are aggregated; distinct-ticket counts remain visible by inbox below.":"No workflow-history file supplied";
-  const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):"No workflow-history file supplied";
+  const importedNote=!workflowSupplied?"No Activity Log source was supplied.":acceptedRows===0
+    ?"The Activity Log tab was supplied, but no recognised event rows were accepted. Check Event Type (column B), Folder Path (column D) and Assignment Flag (column G)."
+    :acceptedRows.toLocaleString("en-GB")+" recognised Activity Log rows accepted from "+readRows.toLocaleString("en-GB")+" rows read.";
+  const eventDescription=event=>sourceAvailable?(imported?importedNote:fmt(event.uniqueTickets)+" unique tickets affected"):importedNote;
+  const assignmentRows=[
+    ["Automatic",methods.automatic,initialTotal?((methods.automatic/initialTotal)*100).toFixed(1)+"%":"—"],
+    ["Manual",methods.manual,initialTotal?((methods.manual/initialTotal)*100).toFixed(1)+"%":"—"],
+    ["Other / legacy",methods.other,initialTotal?((methods.other/initialTotal)*100).toFixed(1)+"%":"—"]
+  ].map(row=>'<tr><td>'+row[0]+'</td><td class="total-cell">'+fmt(row[1])+'</td><td>'+row[2]+'</td></tr>');
   const allocationMethodPanel=imported
-    ? panel("Initial assignment method","Counts of explicit AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED Activity Log events",dataTable(["Initial method","Tickets","Share"],[
-        ["Automatic",fmt(state.importedSnapshot.assignment_methods.automatic),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.automatic/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")],
-        ["Manual",fmt(state.importedSnapshot.assignment_methods.manual),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.manual/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")],
-        ["Other / legacy",fmt(state.importedSnapshot.assignment_methods.other),(state.importedSnapshot.tickets.overall.initially_assigned?((state.importedSnapshot.assignment_methods.other/state.importedSnapshot.tickets.overall.initially_assigned)*100).toFixed(1)+"%":"—")]
-      ]),'<span class="subtle-tag">ACTIVITY LOG EVENTS</span>')
+    ? panel("Initial assignment method","Distinct first allocations classified from AUTO_ASSIGNMENT and MANUAL_ASSIGNMENT_CAPTURED Activity Log events.",dataTable(["Initial method","Tickets","Share"],assignmentRows),'<span class="subtle-tag">FIRST ALLOCATIONS</span>')
     : panel("Assignment method mix","Share of distinct assigned tickets",donutChart([{label:"Automatic",value:89.5,color:"#ff5c91"},{label:"Manual",value:4.6,color:"#ffbd68"},{label:"Other / pending",value:5.9,color:"#a7a3a0"}]),'<span class="subtle-tag">INITIAL ASSIGNMENT</span>');
-  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported history. Cross-inbox distinct-ticket totals are not inferred.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
-    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Workflow events '+(sourceAvailable?"included":"not supplied")+'</span><span>Event times are not retained in aggregate output</span></div>':'')+
+  pageContent.innerHTML=heading("WORKFLOW ANALYTICS","Understand how work moves",imported?"Review the explicit workflow events found in the imported Activity Log. System-wide events are retained separately from ticket-linked events.":"Separate ticket-level ratios from event counts so handovers, flags, manual interventions, recoveries and reassignments are not double-counted.")+
+    (imported?'<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Activity Log '+(workflowSupplied?acceptedRows.toLocaleString("en-GB")+" accepted / "+readRows.toLocaleString("en-GB")+" read":"not supplied")+'</span><span>Free-text Details / Notes excluded</span></div>':'')+
     kpiGrid([
-      kpi("Automatic allocation",imported?"Not available":"1,064",imported?"The source does not classify automatic versus manual first assignments":"89.5% of assigned tickets","↗"),
-      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not supplied",eventDescription(manual),"✎"),
-      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not supplied",eventDescription(handover),"⇄"),
-      kpi("Recovery events",sourceAvailable?fmt(recovery.events):"Not supplied",eventDescription(recovery),"↺")
+      kpi("Automatic first assignments",imported?fmt(methods.automatic):"1,064",imported?"Explicit AUTO_ASSIGNMENT first-allocation events":"89.5% of assigned tickets","↗"),
+      kpi("Manual assignment events",sourceAvailable?fmt(manual.events):"Not available",eventDescription(manual),"✎"),
+      kpi("Handover events",sourceAvailable?fmt(handover.events):"Not available",eventDescription(handover),"⇄"),
+      kpi("Recovery / review events",sourceAvailable?fmt(recovery.events):"Not available",eventDescription(recovery),"↺")
     ])+
     '<div class="grid-two">'+
       allocationMethodPanel+
-      panel("Workflow events",imported?"Event counts and distinct tickets affected by event type and inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(sourceAvailable?"No mapped workflow events in this inbox scope.":"No workflow-history file was supplied.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
+      panel("Workflow events",imported?"Event counts and distinct ticket references affected by event type and original Inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(!workflowSupplied?"No Activity Log source was supplied.":acceptedRows===0?"No recognised events were accepted. Check the Studio mappings and data-quality panel.":"No mapped workflow events in this Inbox scope.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
     '</div>'+
-    panel("Metric definitions","Unique tickets affected and event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+(imported?"Not aggregated across inboxes":fmt(event.uniqueTickets))+'</td><td>'+(sourceAvailable?fmt(event.events):"Not supplied")+'</td><td>'+(imported?"Not available — distinct-ticket deduplication and denominators are not supplied":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
-    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in an inbox-level distinct-ticket measure and three times in the event count. The aggregate export does not include ticket IDs to deduplicate across inboxes, so cross-inbox unique-ticket totals are not calculated.</div>';
+    panel("Metric definitions","Unique ticket-linked events and total event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+(imported?"Not aggregated across Inboxes":fmt(event.uniqueTickets))+'</td><td>'+(sourceAvailable?fmt(event.events):"Not available")+'</td><td>'+(imported?"Distinct-ticket deduplication across Inboxes is not inferred":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
+    '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in an Inbox-level distinct-ticket measure and three times in the event count. System events without a ticket key are included in event volume but excluded from ticket counts. Free-text Details / Notes are not imported.</div>';
 }
 function donutChart(items){
   let offset=0;
@@ -2602,36 +2622,45 @@ function exportImportedActivityLog(){
 function renderImportedActivityAudit(){
   const all=state.importedSnapshot.activity_log||[];
   const visible=importedActivityRows();
-  const totalTickets=new Set(visible.map(event=>event.ticket_ref)).size;
+  const ticketEvents=visible.filter(event=>!event.system_event);
+  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
   const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
   const automatic=visible.filter(event=>event.event_type==="assigned").length;
   const handovers=visible.filter(event=>event.event_type==="handover").length;
-  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored"].includes(event.event_type)).length;
-  const sourceAvailable=importedSourceAvailable("Workflow history");
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const quality=state.importedSnapshot.data_quality.sources.find(row=>row.source==="Workflow history");
+  const sourceSupplied=Boolean(quality);
+  const rowsRead=quality?.rows_read||0,rowsAccepted=quality?.rows_accepted||0;
   const rows=visible.map(event=>
     '<tr>'+
       '<td class="mono">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
-      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+esc(event.ticket_ref)+'</small></td>'+
-      '<td>'+esc(FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
+      '<td>'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
       '<td>'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
       '<td>'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
       '<td>'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
       '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
     '</tr>'
   );
-  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen now uses the imported workbook Activity Log. It shows the event type from column B; the TRUE / FALSE Assignment Flag is displayed separately and is never treated as an event.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
-    '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(all.length)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not recorded by source</b></span></div>'+
+  const emptyMessage=!sourceSupplied
+    ?"No Activity Log data was included in this snapshot. In Studio, select Activity Log for both assignment history and workflow history."
+    :(rowsRead>0&&rowsAccepted===0
+      ?"The Activity Log sheet was read, but no rows were accepted. Map Event Type to column B, Folder Path to column D, Original Assignee to E, Current Owner to F, Assignment Flag to G and Incident Count to H. Column G is TRUE / FALSE, not the event name."
+      :"No Activity Log entries match the selected Inbox and search.");
+  const sourceStatus=!sourceSupplied?"ACTIVITY SOURCE NOT SUPPLIED":rowsAccepted>0?rowsAccepted+" VALID EVENTS":"CHECK ACTIVITY MAPPING";
+  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen uses the imported workbook Activity Log. Event Type comes from column B; Folder Path comes from D. Assignment Flag (column G) is a separate TRUE / FALSE marker, never an event name.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+    '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(rowsRead)+' · accepted '+fmt(rowsAccepted)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not authenticated by source</b></span></div>'+
     kpiGrid([
-      kpi("Activity events",fmt(visible.length),"Rows in the selected inbox / search","◷"),
-      kpi("Tickets affected",fmt(totalTickets),"Pseudonymous ticket references","▤"),
+      kpi("Activity events",fmt(visible.length),"Rows in the selected Inbox / search","◷"),
+      kpi("Tickets affected",fmt(totalTickets),"Ticket-linked references; system events excluded","▤"),
       kpi("Automatic / manual",fmt(automatic)+" / "+fmt(manual),"Recorded first-allocation event categories","↗"),
       kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
     ])+
-    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner are shown as references; they are not claimed to be the person who performed the action.</p></div><span class="subtle-tag">'+(sourceAvailable?"WORKBOOK ACTIVITY LOG":"ACTIVITY SOURCE NOT SUPPLIED")+'</span></div>'+
-    '<div class="audit-filter-toolbar"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or agent…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label><span class="audit-result-count">Showing '+visible.length+' of '+all.length+' Activity Log rows</span></div>'+
-    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+(sourceAvailable?"No Activity Log entries match the current inbox and search.":"No Activity Log data was included in this snapshot. Re-select Activity Log for both history inputs in Reporting Studio.")+'</div>')+
+    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
+    '<div class="audit-filter-toolbar"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or agent…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label><span class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</span></div>'+
+    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+emptyMessage+'</div>')+
     '</section>'+
-    '<div class="prototype-warning"><strong>Source limitations.</strong> The workbook does not record the authenticated person who changed an Outlook category, the reason beyond free-text notes, or a verified completion / resolution event. Free-text Details / Notes are intentionally excluded from the shared snapshot because they can contain subjects or personal data. This page is an Activity Log viewer, not a tamper-evident security audit.</div>';
+    '<div class="prototype-warning"><strong>Source limitations.</strong> Free-text Details / Notes are deliberately excluded because they can contain subjects or personal data. This view reports only events preserved in the workbook and does not claim authenticated actors or tamper-evident audit integrity.</div>';
 }
 function renderAudit(){
   if(state.importedSnapshot){renderImportedActivityAudit();return;}
