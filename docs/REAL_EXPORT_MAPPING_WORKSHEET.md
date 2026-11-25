@@ -42,7 +42,7 @@ Select the same `Activity Log` worksheet again in the Workflow / activity input.
 |---|---|---|
 | Ticket reference | Yes | `Email Key / ID` |
 | Workflow event type | Yes | `Event Type` |
-| Inbox / folder | No | `Source Inbox` |
+| Inbox / folder | No | `Folder Path` (column D) |
 | Event timestamp | No | `Event Time (Egypt)` |
 
 The tracker Activity Log schema is A:I: A `Event Time (Egypt)`, B `Event Type`, C `Email Key / ID`, D `Folder Path`, E `Original Assignee`, F `Current Owner`, G `Assignment Flag` (Boolean `TRUE` / `FALSE`), H `Incident Count`, I `Details`. Map B as the event type and D as the historical Inbox/folder. Do **not** map G as the event type. Never map I `Details` because it can contain subjects or personal data. Original assignment counts remain with the original folder even if the email later moves.
