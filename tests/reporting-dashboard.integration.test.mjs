@@ -19,7 +19,8 @@ async function createStudioSnapshot(csvInputs=null){
     addEventListener(){},
     createElement(){return makeNode();}
   };
-  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout};
+  const alerts=[];
+  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(message){alerts.push(String(message));},console,setTimeout,clearTimeout};
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   const expose=`
@@ -48,7 +49,7 @@ async function createStudioSnapshot(csvInputs=null){
         const usedMappings=JSON.parse(JSON.stringify(mappings));
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,mappings:usedMappings};
+        return {snapshot:currentSnapshot,mappings:usedMappings,alerts};
       }
     };
   `;
@@ -134,6 +135,7 @@ const read=path=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
 test("synthetic tracker exports and Email Details pass through Studio and Dashboard validation without raw identifiers",async()=>{
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot()));
   const studio=run.snapshot;
+  assert.ok(studio,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
 
   assert.equal(studio.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(studio.tickets.total,5);
