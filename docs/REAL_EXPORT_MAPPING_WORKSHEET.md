@@ -109,13 +109,13 @@ Only completed rows with a valid non-negative stored handling duration contribut
 
 ## 6. Columns that must remain unmapped
 
-Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, VINs, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. The reporting schema has no destination for them. Do not add them to the JSON export, dashboard or this public repository.
+Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. Email Key / ID, Internet Message ID, Order Number and VIN may be selected only for the narrowly defined local duplicate-removal / blank-count operations in the Email Details mapping; their values must never appear in the JSON, CSVs, dashboard or this public repository.
 
 Other fields such as Incident Count, Last Incident At, Last Verified At, Record Updated At, Allocated At (Egypt), Roster Period Start, Pending Since (Egypt), Last Category State and Handover Count are not part of the current report mapping. They should remain unmapped until a separate, approved metric is defined.
 
 ## 7. Timestamp and resolution handling
 
-The source headers explicitly identify local time: `Received At (UK)` and `Resolved At (UK)` are interpreted in Europe/London; `Event Time (Egypt)` is interpreted in Africa/Cairo. Date-dependent daylight-saving rules are applied, and ambiguous or nonexistent daylight-saving clock times are excluded rather than guessed. ISO timestamps with an explicit offset remain preferred.
+The source headers explicitly identify local time: `Received At (UK)`, `First Missing At (UK)`, `Completion Time (UK)` and `Resolved At (UK)` are interpreted in Europe/London; `Event Time (Egypt)` is interpreted in Africa/Cairo. Date-dependent daylight-saving rules are applied, and ambiguous or nonexistent daylight-saving clock times are excluded rather than guessed. ISO timestamps with an explicit offset remain preferred. Email Completion Time is the first-missing full-scan detection time saved by the dispatcher, not a timestamp for first response or business resolution.
 
 Elapsed solve time is calculated only when a ticket has an explicit resolved state (or a valid resolved timestamp when the state field is unavailable) and both received and resolved instants are valid. The snapshot reports average, median and p90 elapsed minutes for timed resolved tickets. This is elapsed clock time, not business-hours handling time. Per-agent resolved counts require an explicit Resolved By field. A formal agent resolution rate is not claimed until the business agrees a denominator and the tracker reliably records ownership over the ticket lifecycle.
 
@@ -126,7 +126,11 @@ Complete this section outside the public repository, in the organisation's appro
 | Review item | Confirmed by data owner / security reviewer |
 |---|---|
 | Export purpose and reporting scope approved | |
-| Complete five-tab workbook exported once; no manual worksheet splitting required | |
+| Complete six-tab workbook exported once; Email Details included when approved; no manual worksheet splitting required | |
+| Email Details source has the expected A:O headers and stable Email Key / ID values for local de-duplication | |
+| Email Key / ID, Internet Message ID, Order Number and VIN values are absent from the JSON output | |
+| Email completion status values and the two-scan / 120-second exit confirmation rule are understood | |
+| Email handling time is labelled receipt-to-first-missing detection, not first response or business resolution | |
 | Source system and exact workbook sheet identified | |
 | Assignments export contains one current-state row per unique Email Key / ID | |
 | Current row is first where duplicate keys are present | |
@@ -152,6 +156,6 @@ Complete this section outside the public repository, in the organisation's appro
 
 ## 9. First-run reconciliation
 
-Before accepting a report, compare the Studio's preview with the approved source totals. Confirm that ticket records equal the four inbox totals; when resolution tracking is enabled, resolved plus outstanding equals ticket records; first-assignment totals do not exceed ticket records; and current owner workload does not exceed outstanding work. Brand mix remains unclassified until an approved Brand field is added. Resolution metrics remain unavailable until a compatible tracker records Resolution Status, Resolved At (UK) and (for per-agent counts) Resolved By. Review every skipped, duplicate, unmapped and ambiguous row. Only then download the sanitised JSON and import it into Dispatcher 2.0.
+Before accepting a report, compare the Studio's preview with the approved source totals. Confirm that ticket records equal the four Inbox totals; when ticket-resolution tracking is enabled, resolved plus outstanding equals ticket records; first-assignment totals do not exceed ticket records; and current owner workload does not exceed outstanding work. If Email Details is supplied, confirm that its status counts reconcile to Email Details rows, each first-source-Inbox total reconciles, brand totals reconcile, and confirmed exits do not exceed completed rows. Check that raw keys, message IDs, order numbers and VIN values are absent from the JSON. Review every skipped, duplicate, unmapped and ambiguous row. Only then download the sanitised JSON and import it into Dispatcher 2.0.
 
 **Do not enter production data until approval is explicit.** This public repository and dashboard are not private data stores or access-controlled reporting systems.
