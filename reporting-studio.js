@@ -865,8 +865,8 @@ async function sanitise(){
     }
     $("workbookFile").value="";$("workbookFileMeta").textContent="Processed; raw workbook data cleared from this tab";
     $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
-    files.tickets=null;files.assignments=null;files.workflow=null;files.roster=null;
-    mappings.tickets={};mappings.assignments={};mappings.workflow={};mappings.roster={};
+    files.tickets=null;files.assignments=null;files.workflow=null;files.roster=null;files.emailDetails=null;
+    mappings.tickets={};mappings.assignments={};mappings.workflow={};mappings.roster={};mappings.emailDetails={};
     for(const kind of Object.keys(workbookSelections))workbookSelections[kind]="";
     workbookData=null;sourceMode="";renderMappings();
     button.textContent="Sanitise locally →";
@@ -933,7 +933,7 @@ function bindWorkbook(){
   });
 }
 bindWorkbook();
-bindFile("tickets");bindFile("assignments");bindFile("workflow");bindFile("roster");
+bindFile("tickets");bindFile("assignments");bindFile("workflow");bindFile("roster");bindFile("emailDetails");
 $("workbookSheetSelectors").addEventListener("change",event=>{
   const select=event.target.closest("[data-sheet-kind]");if(!select||!workbookData)return;
   loadWorkbookSheet(select.dataset.sheetKind,select.value,true,true);
