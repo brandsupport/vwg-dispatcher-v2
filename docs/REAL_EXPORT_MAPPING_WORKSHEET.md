@@ -82,19 +82,44 @@ Select the **Team & Shifts** worksheet from the same six-tab workbook in the ros
 
 The roster file must contain one unique row per Outlook category. Invalid shift groups, malformed times, duplicate categories or invalid Yes/No values are skipped and counted in data-quality checks. The source does not provide inbox eligibility, breaks, absence dates or minimum staffing targets; these must not be inferred from the shift schedule.
 
-## 5. Columns that must remain unmapped
+## 5. Email Details lifecycle metrics — optional
+
+Select the **Email Details** worksheet from the same tracker workbook, or a separate Email Details CSV, as the optional Email lifecycle metrics source.
+
+| Studio field | Exact Email Details header | Treatment |
+|---|---|---|
+| Email key | `Email Key / ID` (A) | Used only in browser memory to de-duplicate rows; never exported |
+| Brand | `Brand` (C) | Aggregated into email brand counts; blank/unknown values remain missing or unclassified |
+| Order number | `Order Number` (D) | Raw value never exported; used only to count rows where both Order Number and VIN are blank |
+| VIN | `VIN` (E) | Raw value never exported; used only to count rows where both Order Number and VIN are blank |
+| Received timestamp | `Received At (UK)` (F) | Parsed in Europe/London and grouped by UTC receipt date |
+| First source Inbox | `First Source Inbox` (G) | Used for the four-Inbox breakdown; remains the original Inbox when a message moves |
+| Original assignee | `Original Assignee` (I) | HMAC-pseudonymised using the same private workspace key |
+| Current owner | `Current Owner` (J) | HMAC-pseudonymised using the same private workspace key |
+| Completion status | `Completion Status` (K) | Only Open, Missing - Confirmation Pending and Completed are recognised |
+| First missing timestamp | `First Missing At (UK)` (L) | Fallback detection timestamp when Completion Time is blank |
+| Completion timestamp | `Completion Time (UK)` (M) | First-missing full-scan detection time; not business resolution or first response |
+| Handling duration | `Handling Time (Minutes)` (N) | Existing tracker measure; included in duration summaries for Completed rows only |
+
+The Studio does not map Internet Message ID (B), Last Monitored Inbox (H) or Metadata Captured At (O). It never exports Email Key / ID, Internet Message ID, Order Number, VIN, email subjects, message content, individual source rows or direct colleague names. The order and VIN columns are used only as blank/nonblank flags in memory.
+
+**Completion semantics:** the dispatcher first records `Missing - Confirmation Pending` when a successful full scan no longer sees the email in any of the four monitored Inboxes. A second successful full scan at least 120 seconds later must confirm the absence before the state becomes `Completed`. A move between monitored Inboxes should still be seen by the next full scan and should not be treated as completion. The saved Completion Time is the first-missing detection time. Handling Time is therefore receipt-to-first-missing detection for confirmed exits, not first-response time, active handling time or business solve time.
+
+Only completed rows with a valid non-negative stored handling duration contribute to average, median and p90 handling-time summaries. Email brand mix is a separate lifecycle measure; it must not be combined with distinct ticket brand totals from the Assignments/current-state source. Email `Completed` must not be treated as ticket `Resolved`.
+
+## 6. Columns that must remain unmapped
 
 Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, VINs, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. The reporting schema has no destination for them. Do not add them to the JSON export, dashboard or this public repository.
 
 Other fields such as Incident Count, Last Incident At, Last Verified At, Record Updated At, Allocated At (Egypt), Roster Period Start, Pending Since (Egypt), Last Category State and Handover Count are not part of the current report mapping. They should remain unmapped until a separate, approved metric is defined.
 
-## 6. Timestamp and resolution handling
+## 7. Timestamp and resolution handling
 
 The source headers explicitly identify local time: `Received At (UK)` and `Resolved At (UK)` are interpreted in Europe/London; `Event Time (Egypt)` is interpreted in Africa/Cairo. Date-dependent daylight-saving rules are applied, and ambiguous or nonexistent daylight-saving clock times are excluded rather than guessed. ISO timestamps with an explicit offset remain preferred.
 
 Elapsed solve time is calculated only when a ticket has an explicit resolved state (or a valid resolved timestamp when the state field is unavailable) and both received and resolved instants are valid. The snapshot reports average, median and p90 elapsed minutes for timed resolved tickets. This is elapsed clock time, not business-hours handling time. Per-agent resolved counts require an explicit Resolved By field. A formal agent resolution rate is not claimed until the business agrees a denominator and the tracker reliably records ownership over the ticket lifecycle.
 
-## 7. Approval and reconciliation sign-off
+## 8. Approval and reconciliation sign-off
 
 Complete this section outside the public repository, in the organisation's approved change/data-governance location.
 
@@ -125,7 +150,7 @@ Complete this section outside the public repository, in the organisation's appro
 | Approved processing device/location and report retention confirmed | |
 | Data owner / security approval reference recorded in approved location | |
 
-## 8. First-run reconciliation
+## 9. First-run reconciliation
 
 Before accepting a report, compare the Studio's preview with the approved source totals. Confirm that ticket records equal the four inbox totals; when resolution tracking is enabled, resolved plus outstanding equals ticket records; first-assignment totals do not exceed ticket records; and current owner workload does not exceed outstanding work. Brand mix remains unclassified until an approved Brand field is added. Resolution metrics remain unavailable until a compatible tracker records Resolution Status, Resolved At (UK) and (for per-agent counts) Resolved By. Review every skipped, duplicate, unmapped and ambiguous row. Only then download the sanitised JSON and import it into Dispatcher 2.0.
 
