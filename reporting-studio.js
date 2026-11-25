@@ -202,7 +202,7 @@ function mappingMarkup(kind){
     }).join("")+'</section>';
 }
 function renderMappings(){
-  const panels=["tickets","assignments","workflow","roster"].filter(kind=>files[kind]);
+  const panels=["tickets","assignments","workflow","roster","emailDetails"].filter(kind=>files[kind]);
   $("mappingPanels").innerHTML=panels.length?panels.map(mappingMarkup).join(""):'<div class="empty-mapping">Upload the complete tracker workbook above, or select CSVs in the alternative section, to inspect column headings.</div>';
   updateReadyState();
 }
