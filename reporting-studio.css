@@ -519,3 +519,5 @@ body { font-size:15.8px !important; line-height:1.55; }
   .download-actions { display:grid; grid-template-columns:minmax(0,1fr); }
   .download-actions .button { width:100%; }
 }
+
+.email-sheet-warning{margin:8px 0 12px;padding:10px 12px;border:1px solid #8a5a39;border-radius:8px;background:#2a1b17;color:#f2c49c;font-size:12px;line-height:1.55}.email-sheet-warning:empty{display:none}
