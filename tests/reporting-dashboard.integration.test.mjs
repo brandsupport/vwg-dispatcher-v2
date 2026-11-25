@@ -200,14 +200,18 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
   assert.ok(overall.agents.every(agent=>agent.shift==="Shift data not included"));
 
   const eventCounts=Object.fromEntries(overall.workflow.map(row=>[row.id,row.events]));
-  assert.deepEqual(eventCounts,{handover:1,flag:1,manual:0,recovery:1,reassignment:0});
+  assert.deepEqual(eventCounts,{
+    handover:1,flag:1,automatic:0,manual:0,recovery:1,
+    reassignment:0,exceptions:0,email_lifecycle:0,baseline:1
+  });
 
   const detags=calculateDashboardViews(imported,"detags");
   assert.deepEqual(detags.totals,{
     received:2,assigned:2,resolved:0,open:2,unassigned:0
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
-    ["handover",1],["flag",0],["manual",0],["recovery",1],["reassignment",0]
+    ["handover",1],["flag",0],["automatic",0],["manual",0],["recovery",1],
+    ["reassignment",0],["exceptions",0],["email_lifecycle",0],["baseline",0]
   ]);
 
   const rawValues=[
