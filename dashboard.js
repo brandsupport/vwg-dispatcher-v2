@@ -2848,7 +2848,7 @@ function renderEmail(){
       panel("Receipts by day","UK received timestamps grouped into UTC dates after timezone validation.",dataTable(["Received date (UTC)","First source Inbox","Emails"],receivedRows))+
     '</div>'+
     panel("Confirmed exits by detection day","Uses Completion Time (UK), which records the first-missing full-scan detection time.",dataTable(["First-missing date (UTC)","First source Inbox","Confirmed exits"],exitRows))+
-    '<div class="prototype-warning"><strong>Metric definition:</strong> Completed means absent from all four monitored Inboxes on two successful full scans at least 120 seconds apart. Handling time is Received At (UK) to the first-missing detection time. It is not first-response time, active handling time or business resolution time.</div>';
+    '<div class="prototype-warning"><strong>Metric definition:</strong> The source state <em>Missing - Confirmation Pending</em> is shown as Exit confirmation pending. Completed means absent from all four monitored Inboxes on two successful full scans at least 120 seconds apart. Handling time is Received At (UK) to the first-missing detection time. It is not first response time, active handling time or business resolution time.</div>';
 }
 function render(){
   document.getElementById("topbarPage").textContent=VIEW_TITLES[state.view]||"Overview";
