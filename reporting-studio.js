@@ -177,6 +177,21 @@ function worksheetToTable(worksheet,kind){
 function suggestWorkbookSheet(kind,sheetNames,sheets){
   const hints=(WORKBOOK_SHEET_HINTS[kind]||[]).map(norm);
   for(const hint of hints){const exact=sheetNames.find(name=>norm(name)===hint);if(exact)return exact;}
+
+  // Email Details is a dedicated schema. Never silently substitute Assignments,
+  // Activity Log or another worksheet merely because a few generic columns match.
+  if(kind==="emailDetails"){
+    const requiredHeaderCount=SOURCE_CONFIG.emailDetails.fields.length;
+    for(const name of sheetNames){
+      try{
+        const rows=worksheetRows(sheets[name]);
+        const bestScore=rows.slice(0,30).reduce((best,row)=>Math.max(best,headerMatchScore(row,"emailDetails")),0);
+        if(bestScore===requiredHeaderCount)return name;
+      }catch(error){/* An unrelated or unsupported worksheet is simply not a candidate. */}
+    }
+    return "";
+  }
+
   let bestName="",bestScore=0;
   for(const name of sheetNames){
     try{
@@ -191,7 +206,8 @@ function suggestWorkbookSheet(kind,sheetNames,sheets){
 function mappingMarkup(kind){
   const file=files[kind];if(!file)return "";
   const config=SOURCE_CONFIG[kind];
-  return '<section class="mapping-group"><h3>'+config.title+'</h3>'+
+  const sourceLabel=file.sourceSheet?"Source worksheet: "+file.sourceSheet:"Source: separate CSV file";
+  return '<section class="mapping-group"><h3>'+config.title+'</h3><p class="field-note">'+escapeHtml(sourceLabel)+'</p>'+
     config.fields.map(field=>{
       const selected=mappings[kind][field.id]??autoMap(file.headers,field.aliases);
       mappings[kind][field.id]=selected;
@@ -249,8 +265,16 @@ function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
   if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(rerender)renderMappings();return;}
   try{
     const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
+    if(kind==="emailDetails"){
+      const matched=SOURCE_CONFIG.emailDetails.fields.filter(field=>autoMap(parsed.headers,field.aliases)).length;
+      const required=SOURCE_CONFIG.emailDetails.fields.length;
+      if(matched!==required){
+        const missing=SOURCE_CONFIG.emailDetails.fields.filter(field=>!autoMap(parsed.headers,field.aliases)).map(field=>field.label);
+        throw new Error("This worksheet is not the Email Details schema ("+matched+"/"+required+" required headers found). Missing: "+missing.join(", ")+". Select the actual Email Details tab. Do not map the Assignments or Activity Log sheet as Email Details.");
+      }
+    }
     files[kind]={...parsed,rowCount:parsed.records.length,sourceSheet:sheetName};
-    $(kind+"FileMeta").textContent=sheetName+" · "+parsed.records.length+" data rows · "+parsed.headers.length+" columns";
+    $(kind+"FileMeta").textContent=sheetName+" · "+parsed.records.length+" data rows · "+parsed.headers.length+" columns detected";
   }catch(error){
     files[kind]=null;
     $(kind+"FileMeta").textContent=sheetName+" · could not read worksheet";
@@ -262,13 +286,16 @@ function renderWorkbookSelectors(){
   const panel=$("workbookSheetSelectors");
   if(!workbookData){panel.hidden=true;panel.innerHTML="";return;}
   const labels={tickets:"Ticket / current-state data",assignments:"Assignment history",workflow:"Workflow / activity history",roster:"Team & Shifts roster",emailDetails:"Email lifecycle metrics"};
-  const descriptions={tickets:"Required · normally the Assignments tab",assignments:"Optional · normally the Activity Log tab",workflow:"Optional · use the same Activity Log tab again",roster:"Optional · normally the Team & Shifts tab",emailDetails:"Optional · the Email Details tab; raw IDs, order numbers and VINs are never exported"};
+  const descriptions={tickets:"Required · normally the Assignments tab",assignments:"Optional · normally the Activity Log tab",workflow:"Optional · use the same Activity Log tab again",roster:"Optional · normally the Team & Shifts tab",emailDetails:"Optional · must be the dedicated Email Details tab with Brand, Order Number, VIN and lifecycle columns. The Studio will not substitute Assignments."};
   panel.hidden=false;
   panel.innerHTML='<section class="mapping-group"><h3>Choose the worksheets inside your workbook</h3><p class="field-note">The same Activity Log worksheet is selected twice by design: once for assignment history and once for workflow events. Any other workbook tabs are ignored.</p>'+
     Object.keys(labels).map(kind=>{
       const suggested=suggestWorkbookSheet(kind,workbookData.sheetNames,workbookData.workbook.Sheets);
       workbookSelections[kind]=suggested;
-      return '<div class="mapping-field"><label for="sheet-'+kind+'">'+labels[kind]+' <small>'+descriptions[kind]+'</small></label><select id="sheet-'+kind+'" data-sheet-kind="'+kind+'"><option value="">— Not selected —</option>'+workbookData.sheetNames.map(name=>'<option value="'+escapeHtml(name)+'" '+(suggested===name?'selected':'')+'>'+escapeHtml(name)+'</option>').join("")+'</select></div>';
+      const warning=kind==="emailDetails"&&!suggested
+        ?'<p class="field-note email-sheet-warning" role="status">No valid Email Details worksheet was detected. The workbook tabs found are listed above, but none has the complete Email Details headers. Add/upgrade the Email Details tab in the operational tracker, save the workbook, then upload it again. Do not select Assignments as a substitute.</p>'
+        :"";
+      return '<div class="mapping-field"><label for="sheet-'+kind+'">'+labels[kind]+' <small>'+descriptions[kind]+'</small></label><select id="sheet-'+kind+'" data-sheet-kind="'+kind+'"><option value="">— Not selected —</option>'+workbookData.sheetNames.map(name=>'<option value="'+escapeHtml(name)+'" '+(suggested===name?'selected':'')+'>'+escapeHtml(name)+'</option>').join("")+'</select></div>'+warning;
     }).join("")+'</section>';
   for(const kind of Object.keys(labels))loadWorkbookSheet(kind,workbookSelections[kind],false,false);
   renderMappings();
