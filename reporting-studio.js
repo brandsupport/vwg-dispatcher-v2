@@ -350,7 +350,7 @@ function normaliseWorkflowEvent(value){
     email_completed:["email completed"],
     resolved:["resolved","closed","completed"],
     reopened:["reopened","re-opened"],
-    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment log failed","assigned baseline scan failed","queued item not found","queued item not mail","pending item not found","shift cutoff reservation cancelled","multiple categories review","queue save failed","queue blocked time zone","new mail processing failed","item handler failed","maintenance failed","manual scan failed","start failed","time zone conversion failed","queue staged to retry","baseline failed","baseline folder failed","backlog discovery failed","backlog failed","error"],
+    exception:["exception","write failed","assignment failed","recovery failed","assignment confirmation failed","auto assignment log failed","auto assignment pending verification","assigned baseline scan failed","queued item not found","queued item not mail","pending item not found","shift cutoff reservation cancelled","multiple categories review","queue save failed","queue blocked time zone","new mail processing failed","item handler failed","maintenance failed","manual scan failed","start failed","time zone conversion failed","queue staged to retry","baseline failed","baseline folder failed","backlog discovery failed","backlog failed","error"],
     recovery_preview:["dry run would remove restoration marker"]
   };
   for(const [code,values] of Object.entries(aliases))if(values.includes(key))return code;
