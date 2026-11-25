@@ -2823,10 +2823,21 @@ function renderEmail(){
   const inboxRows=rows.map(row=>'<tr><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.email_records)+'</td><td>'+fmt(row.open)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.missing_brand)+'</td><td>'+fmt(row.missing_order_vin)+'</td><td>'+formatDurationMinutes(row.average_handling_minutes)+'</td></tr>');
   const brandLabels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other",unclassified:"Other / unclassified"};
   const brandRows=metrics.by_brand.map(row=>'<tr><td>'+esc(brandLabels[row.brand_code]||row.brand_code)+'</td><td class="total-cell">'+fmt(row.email_records)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.open)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td></tr>');
-  const ownerRows=metrics.by_current_owner.slice().sort((a,b)=>b.completed-a.completed||a.agent_ref.localeCompare(b.agent_ref))
-    .map(row=>'<tr><td>'+esc(displayAgentName(row.agent_ref))+'</td><td>'+fmt(row.email_records)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td><td>'+formatDurationMinutes(row.average_handling_minutes)+'</td></tr>');
-  const receivedRows=metrics.daily_received.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.email_records)+'</td></tr>');
-  const exitRows=metrics.daily_completed.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.completed)+'</td></tr>');
+  const brandBars=barRows(metrics.by_brand.map(row=>({label:brandLabels[row.brand_code]||row.brand_code,value:row.email_records})));
+  const sortedOwners=metrics.by_current_owner.slice().sort((a,b)=>b.completed-a.completed||a.agent_ref.localeCompare(b.agent_ref));
+  const ownerRows=sortedOwners.map(row=>'<tr><td>'+esc(displayAgentName(row.agent_ref))+'</td><td>'+fmt(row.email_records)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td><td>'+formatDurationMinutes(row.average_handling_minutes)+'</td></tr>');
+  const ownerBars=barRows(sortedOwners.map(row=>({label:displayAgentName(row.agent_ref),value:row.email_records})));
+  const scopedReceived=metrics.daily_received.filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const scopedExits=metrics.daily_completed.filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const receivedRows=scopedReceived.slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.email_records)+'</td></tr>');
+  const exitRows=scopedExits.slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.completed)+'</td></tr>');
+  const receivedByDate=new Map(),exitsByDate=new Map();
+  for(const row of scopedReceived)receivedByDate.set(row.date_utc,(receivedByDate.get(row.date_utc)||0)+row.email_records);
+  for(const row of scopedExits)exitsByDate.set(row.date_utc,(exitsByDate.get(row.date_utc)||0)+row.completed);
+  const timelineDates=[...new Set([...receivedByDate.keys(),...exitsByDate.keys()])].sort().slice(-14);
+  const timelineMarkup=timelineDates.length
+    ?chartPair(timelineDates.map(date=>receivedByDate.get(date)||0),timelineDates.map(date=>exitsByDate.get(date)||0),timelineDates.map(date=>date.slice(5)))+horizontalLegend([{color:"#ff5c91",label:"Emails received"},{color:"#8f7cf6",label:"Confirmed exits"}])
+    :'<div class="empty-state">No valid UK receipt or completion timestamps were available for a daily trend.</div>';
   pageContent.innerHTML=
     heading("EMAIL LIFECYCLE INTELLIGENCE","Know what leaves the queue — and how long it took to get there.","A sanitised Email Details snapshot. Confirmed exits are measured separately from ticket resolution and from first response.")+
     '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(metrics.total)+' email records</span><span>Generated '+esc(state.importedSnapshot.generated_at_utc)+'</span><span>Scope: '+esc(scopeName())+'</span></div>'+
@@ -2841,12 +2852,13 @@ function renderEmail(){
     ])+
     '<div class="grid-two">'+
       panel("Email lifecycle by first source Inbox","The first source Inbox is retained even if an email was later moved.",dataTable(["First source Inbox","Emails","Open","Exit pending","Completed","Missing brand","Missing Order + VIN","Avg handling"],inboxRows))+
-      panel("Email volume by brand","Explicit Brand field only; unknown or blank values remain unclassified.",dataTable(["Brand","Emails","Completed","Open","Exit pending"],brandRows))+
+      panel("Email volume by brand · all Inboxes","Explicit Brand field only; unknown or blank values remain unclassified.",brandBars+dataTable(["Brand","Emails","Completed","Open","Exit pending"],brandRows))+
     '</div>'+
     '<div class="grid-two">'+
-      panel("Current owner view","Owner names are resolved only from the separate private lookup loaded in this browser tab.",dataTable(["Current owner","Emails","Completed","Exit pending","Avg handling"],ownerRows))+
+      panel("Current owner · all Inboxes","Owner names are resolved only from the separate private lookup loaded in this browser tab.",ownerBars+dataTable(["Current owner","Emails","Completed","Exit pending","Avg handling"],ownerRows))+
       panel("Receipts by day","UK received timestamps grouped into UTC dates after timezone validation.",dataTable(["Received date (UTC)","First source Inbox","Emails"],receivedRows))+
     '</div>'+
+    panel("Email receipts vs confirmed exits · recent 14 dates","Trend is grouped by UK-local receipt / first-missing dates and filtered by the selected Inbox.",timelineMarkup)+
     panel("Confirmed exits by detection day","Uses Completion Time (UK), which records the first-missing full-scan detection time.",dataTable(["First-missing date (UTC)","First source Inbox","Confirmed exits"],exitRows))+
     '<div class="prototype-warning"><strong>Metric definition:</strong> The source state <em>Missing - Confirmation Pending</em> is shown as Exit confirmation pending. Completed means absent from all four monitored Inboxes on two successful full scans at least 120 seconds apart. Handling time is Received At (UK) to the first-missing detection time. It is not first response time, active handling time or business resolution time.</div>';
 }
