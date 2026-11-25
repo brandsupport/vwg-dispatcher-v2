@@ -1951,7 +1951,10 @@ function agentActivityMetrics(agentRef){
 function agentPerformanceReviewPanel(profiles){
   const imported=Boolean(state.importedSnapshot);
   if(!imported)return panel("Agent performance review","Demonstration data only; no real agent performance is calculated.",'<div class="empty-state">Import a sanitised reporting snapshot to review actual allocation and current workload counts.</div>');
-  const hasActivity=importedSourceAvailable("Workflow history")&&(state.importedSnapshot.activity_log||[]).length>0;
+  const workflowQuality=state.importedSnapshot.data_quality.sources.find(row=>row.source==="Workflow history");
+  const hasActivity=(state.importedSnapshot.activity_log||[]).length>0;
+  const activityNeedsMapping=Boolean(workflowQuality&&workflowQuality.rows_read>0&&!hasActivity);
+  const activityNotSupplied=!workflowQuality;
   const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
   const hasResolvedAt=state.importedSnapshot.tickets.resolution_metrics?.resolved_at_field_mapped===true;
   const rows=profiles.map(agent=>{
@@ -1961,17 +1964,17 @@ function agentPerformanceReviewPanel(profiles){
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
-      '<td>'+(hasActivity?fmt(metrics.automatic):"Not supplied")+'</td>'+
-      '<td>'+(hasActivity?fmt(metrics.manual):"Not supplied")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.automatic):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.manual):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
-      '<td>'+(hasActivity?fmt(metrics.handovers):"Not supplied")+'</td>'+
-      '<td>'+(hasActivity?fmt(metrics.recovery):"Not supplied")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.handovers):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
+      '<td>'+(hasActivity?fmt(metrics.recovery):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasResolvedBy?fmt(resolution.resolvedTickets):"Not supplied")+'</td>'+
       '<td>'+(hasResolvedAt?formatDurationMinutes(resolution.averageMinutes):"Not tracked")+'</td>'+
       '<td><span class="not-tracked-value">Not tracked</span></td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, automatic/manual method, owner records and workflow involvement. Resolution counts and solve time appear only when the tracker supplies explicit resolver and timestamp fields. This is not an employee ranking.",dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
+  return panel("Agent performance review","First assignments, automatic/manual method, owner records and workflow involvement. Resolution counts and solve time appear only when the tracker supplies explicit resolver and timestamp fields. This is not an employee ranking."+(activityNeedsMapping?" The Activity Log was imported but no recognised rows were mapped; check Event Type B, Folder Path D, Original Assignee E, Current Owner F, Assignment Flag G and Incident Count H.":""),dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
     '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague&#39;s original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
 }
 function teamEvidencePanel(){
