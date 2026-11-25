@@ -70,11 +70,28 @@ const SOURCE_CONFIG={
       {id:"shift_end",label:"Shift end (Egypt)",required:true,aliases:["shift end egypt","shift end"]},
       {id:"active",label:"Active this fortnight",required:true,aliases:["active this fortnight","active"] }
     ]
+  },
+  emailDetails:{
+    title:"Email Details lifecycle metrics",
+    fields:[
+      {id:"email_key",label:"Email key (used only for local duplicate removal)",aliases:["email key / id"]},
+      {id:"brand",label:"Brand",aliases:["brand","brand name"]},
+      {id:"order_number",label:"Order number (counts blank values only)",aliases:["order number"]},
+      {id:"vin",label:"VIN (counts blank values only)",aliases:["vin"]},
+      {id:"received_at",label:"Received timestamp (UK)",aliases:["received at uk","received at"]},
+      {id:"first_inbox",label:"First source Inbox",aliases:["first source inbox"]},
+      {id:"original_assignee",label:"Original assignee (pseudonymised)",aliases:["original assignee"]},
+      {id:"current_owner",label:"Current owner (pseudonymised)",aliases:["current owner"]},
+      {id:"completion_status",label:"Completion status",aliases:["completion status"]},
+      {id:"first_missing_at",label:"First missing timestamp (UK)",aliases:["first missing at uk","first missing at"]},
+      {id:"completion_at",label:"Completion / first-missing timestamp (UK)",aliases:["completion time uk","completion time"]},
+      {id:"handling_minutes",label:"Handling time (minutes)",aliases:["handling time minutes","handling time"]}
+    ]
   }
 };
-const files={tickets:null,assignments:null,workflow:null,roster:null};
-const mappings={tickets:{},assignments:{},workflow:{},roster:{}};
-const workbookSelections={tickets:"",assignments:"",workflow:"",roster:""};
+const files={tickets:null,assignments:null,workflow:null,roster:null,emailDetails:null};
+const mappings={tickets:{},assignments:{},workflow:{},roster:{},emailDetails:{}};
+const workbookSelections={tickets:"",assignments:"",workflow:"",roster:"",emailDetails:""};
 let workbookData=null;
 let sourceMode="";
 let currentSnapshot=null;
@@ -129,7 +146,8 @@ const WORKBOOK_SHEET_HINTS={
   tickets:["assignments","ticket current state","current state","ticket snapshot"],
   assignments:["activity log","assignment history","assignment log"],
   workflow:["activity log","workflow history","workflow log","activity"],
-  roster:["team & shifts","team and shifts","team shifts","roster"]
+  roster:["team & shifts","team and shifts","team shifts","roster"],
+  emailDetails:["email details","email metrics","email lifecycle"]
 };
 function worksheetRows(worksheet){
   if(typeof XLSX==="undefined"||!XLSX.utils||typeof XLSX.utils.sheet_to_json!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
@@ -192,7 +210,7 @@ function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,ch=>({"&"
 function selectedValue(record,kind,field){const header=mappings[kind][field];return header?String(record[header]??"").trim():"";}
 function mappingErrors(){
   const errors=[];
-  for(const kind of ["tickets","assignments","workflow","roster"]){
+  for(const kind of ["tickets","assignments","workflow","roster","emailDetails"]){
     if(!files[kind]){if(kind==="tickets")errors.push("Select the ticket/current-state worksheet in the workbook, or choose a ticket/current-state CSV.");continue;}
     for(const field of SOURCE_CONFIG[kind].fields.filter(item=>item.required)){
       if(!mappings[kind][field.id])errors.push(SOURCE_CONFIG[kind].title+": map "+field.label+".");
@@ -243,8 +261,8 @@ function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
 function renderWorkbookSelectors(){
   const panel=$("workbookSheetSelectors");
   if(!workbookData){panel.hidden=true;panel.innerHTML="";return;}
-  const labels={tickets:"Ticket / current-state data",assignments:"Assignment history",workflow:"Workflow / activity history",roster:"Team & Shifts roster"};
-  const descriptions={tickets:"Required · normally the Assignments tab",assignments:"Optional · normally the Activity Log tab",workflow:"Optional · use the same Activity Log tab again",roster:"Optional · normally the Team & Shifts tab"};
+  const labels={tickets:"Ticket / current-state data",assignments:"Assignment history",workflow:"Workflow / activity history",roster:"Team & Shifts roster",emailDetails:"Email lifecycle metrics"};
+  const descriptions={tickets:"Required · normally the Assignments tab",assignments:"Optional · normally the Activity Log tab",workflow:"Optional · use the same Activity Log tab again",roster:"Optional · normally the Team & Shifts tab",emailDetails:"Optional · the Email Details tab; raw IDs, order numbers and VINs are never exported"};
   panel.hidden=false;
   panel.innerHTML='<section class="mapping-group"><h3>Choose the worksheets inside your workbook</h3><p class="field-note">The same Activity Log worksheet is selected twice by design: once for assignment history and once for workflow events. Any other workbook tabs are ignored.</p>'+
     Object.keys(labels).map(kind=>{
@@ -423,6 +441,24 @@ function renderSnapshot(snapshot){
   $("agentResults").innerHTML=buildTable(["Agent reference","Inbox","First assignments","Share","Open workload"],snapshot.allocations.map(row=>[row.agent_ref,INBOX_LABELS[row.inbox_code],row.initial_assignments,row.allocation_share_pct.toFixed(1)+"%",row.current_open_workload]));
   $("rosterResults").innerHTML=buildTable(["Agent reference","Shift group","Shift start (Egypt)","Shift end (Egypt)","Active this fortnight"],(snapshot.team_roster||[]).map(row=>[row.agent_ref,row.shift_group,row.shift_start_egypt,row.shift_end_egypt,row.active_this_fortnight?"Yes":"No"]));
   $("workflowResults").innerHTML=buildTable(["Event type","Inbox","Events","Tickets affected"],snapshot.workflow.map(row=>[row.event_type,INBOX_LABELS[row.inbox_code],row.event_count,row.distinct_tickets]));
+  const email=snapshot.email_metrics;
+  $("emailMetricPanel").hidden=!email;
+  if(email){
+    $("emailKpis").innerHTML=[
+      ["Email records",email.overall.email_records],
+      ["Confirmed exits",email.overall.completed],
+      ["Confirmation pending",email.overall.missing_confirmation_pending],
+      ["Still open",email.overall.open],
+      ["Average handling (min)",email.overall.average_handling_minutes??"Not available"],
+      ["Missing brand",email.overall.missing_brand],
+      ["Missing Order + VIN",email.overall.missing_order_vin]
+    ].map(([label,value])=>'<div class="result-kpi"><span>'+label+'</span><strong>'+((typeof value==="number")?Number(value).toLocaleString("en-GB"):escapeHtml(value))+'</strong></div>').join("");
+    $("emailInboxResults").innerHTML=buildTable(["First source Inbox","Emails","Open","Exit pending","Completed","Avg handling (min)"],email.by_inbox.map(row=>[INBOX_LABELS[row.inbox_code],row.email_records,row.open,row.missing_confirmation_pending,row.completed,row.average_handling_minutes??"Not available"]));
+    $("emailBrandResults").innerHTML=buildTable(["Brand","Emails","Completed"],email.by_brand.map(row=>[BRAND_LABELS[row.brand_code],row.email_records,row.completed]));
+    $("emailOwnerResults").innerHTML=buildTable(["Pseudonymous current owner","Emails","Completed","Avg handling (min)"],email.by_current_owner.map(row=>[row.agent_ref,row.email_records,row.completed,row.average_handling_minutes??"Not available"]));
+    $("emailDailyResults").innerHTML=buildTable(["Received date (UTC)","First source Inbox","Emails"],email.daily_received.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.email_records]));
+    $("emailExitDailyResults").innerHTML=buildTable(["First-missing date (UTC)","First source Inbox","Confirmed exits"],email.daily_completed.map(row=>[row.date_utc,INBOX_LABELS[row.inbox_code],row.completed]));
+  }
   $("qualityResults").innerHTML=buildTable(["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],snapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time]));
   const warnings=snapshot.data_quality.warnings;
   $("qualityWarnings").hidden=!warnings.length;
@@ -440,7 +476,8 @@ async function sanitise(){
       tickets:newQuality("Ticket snapshot",files.tickets.rowCount),
       assignments:files.assignments?newQuality("Assignment history",files.assignments.rowCount):null,
       workflow:files.workflow?newQuality("Workflow history",files.workflow.rowCount):null,
-      roster:files.roster?newQuality("Team & Shifts roster",files.roster.rowCount):null
+      roster:files.roster?newQuality("Team & Shifts roster",files.roster.rowCount):null,
+      emailDetails:files.emailDetails?newQuality("Email Details",files.emailDetails.rowCount):null
     };
     const rosterMap=new Map();const teamRoster=[];const privateNames=new Map();
     const rememberAgent=async(rawName,preferredName="")=>{
@@ -660,6 +697,123 @@ async function sanitise(){
     };
     const resolutionByAgent=[...resolutionAgentMap.values()].sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
+
+    // Email Details is a separate lifecycle dataset. "Completed" means the
+    // email was absent from all four monitored Inboxes on two successful scans.
+    // Completion Time is the first-missing detection time, not first response
+    // or business resolution. Only aggregate fields leave this browser tab.
+    let emailMetrics=null;
+    if(files.emailDetails){
+      const q=quality.emailDetails;
+      const makeEmailBucket=()=>({
+        email_records:0,open:0,missing_confirmation_pending:0,completed:0,unknown_status:0,
+        missing_brand:0,missing_order_vin:0,timed_completed:0,handling_values:[]
+      });
+      const byInboxEmail=Object.fromEntries(Object.keys(INBOXES).map(code=>[code,makeEmailBucket()]));
+      const byBrandEmail=Object.fromEntries(Object.keys(BRAND_LABELS).map(code=>[code,makeEmailBucket()]));
+      const byOriginalOwner=new Map(),byCurrentOwner=new Map();
+      const receivedDaily=new Map(),completedDaily=new Map(),seenEmailKeys=new Set();
+      const addOwnerMetric=(map,agentRef,status,handling)=>{
+        if(!agentRef)return;
+        const row=map.get(agentRef)||{agent_ref:agentRef,...makeEmailBucket()};
+        row.email_records++;
+        row[status==="unknown"?"unknown_status":status]++;
+        if(status==="completed"&&handling!==null)row.handling_values.push(handling);
+        map.set(agentRef,row);
+      };
+      const summariseValues=values=>{
+        const sorted=values.slice().sort((a,b)=>a-b);
+        const percentile=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.ceil(p*sorted.length)-1)]:null;
+        return {
+          timed_completed:sorted.length,
+          average_handling_minutes:sorted.length?Math.round(sorted.reduce((sum,value)=>sum+value,0)/sorted.length*10)/10:null,
+          median_handling_minutes:sorted.length?Math.round((sorted[Math.floor((sorted.length-1)/2)]+sorted[Math.ceil((sorted.length-1)/2)])/2*10)/10:null,
+          p90_handling_minutes:percentile(.9)===null?null:Math.round(percentile(.9)*10)/10
+        };
+      };
+      for(let rowIndex=0;rowIndex<files.emailDetails.records.length;rowIndex++){
+        const row=files.emailDetails.records[rowIndex];
+        const emailKey=selectedValue(row,"emailDetails","email_key");
+        const localKey=emailKey?norm(emailKey):"row-"+String(rowIndex);
+        if(seenEmailKeys.has(localKey)){q.rows_skipped++;q.duplicate_rows++;continue;}
+        seenEmailKeys.add(localKey);
+        const inbox=normaliseInbox(selectedValue(row,"emailDetails","first_inbox"));
+        if(!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
+        const brandRaw=selectedValue(row,"emailDetails","brand");
+        const brand=normaliseBrand(brandRaw);
+        if(norm(brandRaw)&&brand==="unclassified"&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))q.unknown_brand++;
+        const statusNorm=norm(selectedValue(row,"emailDetails","completion_status"));
+        let status="unknown";
+        if(statusNorm==="open")status="open";
+        else if(statusNorm==="missing confirmation pending")status="missing_confirmation_pending";
+        else if(statusNorm==="completed")status="completed";
+        if(status==="unknown")q.unknown_status++;
+        const receivedRaw=selectedValue(row,"emailDetails","received_at");
+        const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
+        if(receivedRaw&&!receivedDate)q.ambiguous_time++;
+        const completionRaw=selectedValue(row,"emailDetails","completion_at")||selectedValue(row,"emailDetails","first_missing_at");
+        const completionDate=parseExplicitDate(completionRaw,"Europe/London");
+        if(completionRaw&&!completionDate)q.ambiguous_time++;
+        const missingBrand=!norm(brandRaw);
+        const missingOrderVin=!norm(selectedValue(row,"emailDetails","order_number"))&&!norm(selectedValue(row,"emailDetails","vin"));
+        const handlingRaw=selectedValue(row,"emailDetails","handling_minutes");
+        const handlingNumber=handlingRaw.trim()===""?NaN:Number(handlingRaw);
+        const handling=status==="completed"&&Number.isFinite(handlingNumber)&&handlingNumber>=0?Math.round(handlingNumber*10)/10:null;
+        const originalRaw=selectedValue(row,"emailDetails","original_assignee");
+        const currentRaw=selectedValue(row,"emailDetails","current_owner");
+        const originalRef=originalRaw&&!isUnassigned(originalRaw)?await rememberAgent(originalRaw):null;
+        const currentRef=currentRaw&&!isUnassigned(currentRaw)?await rememberAgent(currentRaw):null;
+        for(const bucket of [byInboxEmail[inbox],byBrandEmail[brand]||byBrandEmail.unclassified]){
+          bucket.email_records++;
+          bucket[status==="unknown"?"unknown_status":status]++;
+          if(missingBrand)bucket.missing_brand++;
+          if(missingOrderVin)bucket.missing_order_vin++;
+          if(handling!==null)bucket.handling_values.push(handling);
+        }
+        addOwnerMetric(byOriginalOwner,originalRef,status,handling);
+        addOwnerMetric(byCurrentOwner,currentRef,status,handling);
+        if(receivedDate){
+          const dailyKey=receivedDate+"|"+inbox;
+          const daily=receivedDaily.get(dailyKey)||{date_utc:receivedDate,inbox_code:inbox,email_records:0};
+          daily.email_records++;receivedDaily.set(dailyKey,daily);
+        }
+        if(status==="completed"&&completionDate){
+          const dailyKey=completionDate+"|"+inbox;
+          const daily=completedDaily.get(dailyKey)||{date_utc:completionDate,inbox_code:inbox,completed:0};
+          daily.completed++;completedDaily.set(dailyKey,daily);
+        }
+        q.rows_accepted++;
+      }
+      const finishBucket=bucket=>({
+        email_records:bucket.email_records,open:bucket.open,
+        missing_confirmation_pending:bucket.missing_confirmation_pending,
+        completed:bucket.completed,unknown_status:bucket.unknown_status,
+        missing_brand:bucket.missing_brand,missing_order_vin:bucket.missing_order_vin,
+        ...summariseValues(bucket.handling_values)
+      });
+      const finishOwnerMap=map=>[...map.values()].map(row=>({
+        agent_ref:row.agent_ref,...finishBucket(row)
+      })).sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
+      const overallEmail=finishBucket([...byInboxEmail.values()].reduce((sum,row)=>({
+        email_records:sum.email_records+row.email_records,
+        open:sum.open+row.open,
+        missing_confirmation_pending:sum.missing_confirmation_pending+row.missing_confirmation_pending,
+        completed:sum.completed+row.completed,
+        unknown_status:sum.unknown_status+row.unknown_status,
+        missing_brand:sum.missing_brand+row.missing_brand,
+        missing_order_vin:sum.missing_order_vin+row.missing_order_vin,
+        handling_values:sum.handling_values.concat(row.handling_values)
+      }),makeEmailBucket()));
+      emailMetrics={
+        total:overallEmail.email_records,overall:overallEmail,
+        by_inbox:Object.keys(INBOXES).map(inbox_code=>({inbox_code,...finishBucket(byInboxEmail[inbox_code])})),
+        by_brand:Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,...finishBucket(byBrandEmail[brand_code])})).filter(row=>row.email_records||row.brand_code==="unclassified"),
+        by_original_owner:finishOwnerMap(byOriginalOwner),
+        by_current_owner:finishOwnerMap(byCurrentOwner),
+        daily_received:[...receivedDaily.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code)),
+        daily_completed:[...completedDaily.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code))
+      };
+    }
     const warnings=[];
     if(quality.tickets.duplicate_rows)warnings.push(quality.tickets.duplicate_rows+" duplicate ticket row(s) were skipped; only the first occurrence per ticket reference was retained.");
     if(quality.tickets.unknown_inbox)warnings.push(quality.tickets.unknown_inbox+" ticket row(s) had an unmapped inbox and were excluded.");
@@ -699,11 +853,12 @@ async function sanitise(){
       allocations,assignment_methods:assignmentMethods,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
       workflow,activity_log:activityLog.sort((a,b)=>(a.event_time_utc||"").localeCompare(b.event_time_utc||"")),
-      data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
+      ...(emailMetrics?{email_metrics:emailMetrics}:{}),
+      data_quality:{sources:[quality.tickets,quality.assignments,quality.workflow,quality.roster,quality.emailDetails].filter(Boolean),ambiguous_initial_assignment_tickets:ambiguousInitial,warnings}
     };
     currentSnapshot=snapshot;
     renderSnapshot(snapshot);
-    files.tickets.records.length=0;if(files.assignments)files.assignments.records.length=0;if(files.workflow)files.workflow.records.length=0;if(files.roster)files.roster.records.length=0;
+    for(const kind of Object.keys(files))if(files[kind]?.records)files[kind].records.length=0;
     for(const kind of Object.keys(files)){
       $(kind+"File").value="";
       $(kind+"FileMeta").textContent=files[kind]?"Processed; raw rows cleared from this tab":"No file selected";
@@ -736,6 +891,13 @@ function downloadCSVs(){
     ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
     ["dispatcher-team-roster.csv",["agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],(s.team_roster||[]).map(r=>[r.agent_ref,r.shift_group,r.shift_start_egypt,r.shift_end_egypt,r.active_this_fortnight?"Yes":"No"])],
     ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],s.workflow.map(r=>[r.event_type,r.inbox_code,r.event_count,r.distinct_tickets])],
+    ...(s.email_metrics?[
+      ["dispatcher-email-inbox-summary.csv",["inbox_code","email_records","open","missing_confirmation_pending","completed","missing_brand","missing_order_vin","timed_completed","average_handling_minutes"],s.email_metrics.by_inbox.map(r=>[r.inbox_code,r.email_records,r.open,r.missing_confirmation_pending,r.completed,r.missing_brand,r.missing_order_vin,r.timed_completed,r.average_handling_minutes])],
+      ["dispatcher-email-brand-summary.csv",["brand_code","email_records","completed"],s.email_metrics.by_brand.map(r=>[r.brand_code,r.email_records,r.completed])],
+      ["dispatcher-email-owner-summary.csv",["agent_ref","email_records","open","missing_confirmation_pending","completed","timed_completed","average_handling_minutes"],s.email_metrics.by_current_owner.map(r=>[r.agent_ref,r.email_records,r.open,r.missing_confirmation_pending,r.completed,r.timed_completed,r.average_handling_minutes])],
+      ["dispatcher-email-daily-received.csv",["date_utc","inbox_code","email_records"],s.email_metrics.daily_received.map(r=>[r.date_utc,r.inbox_code,r.email_records])],
+      ["dispatcher-email-daily-exits.csv",["date_utc","inbox_code","completed"],s.email_metrics.daily_completed.map(r=>[r.date_utc,r.inbox_code,r.completed])]
+    ]:[]),
     ["dispatcher-data-quality.csv",["source","rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"],s.data_quality.sources.map(r=>[r.source,r.rows_read,r.rows_accepted,r.rows_skipped,r.duplicate_rows,r.unknown_inbox,r.unknown_brand,r.unknown_status,r.ambiguous_time])]
   ];
   filesToDownload.forEach(([name,headers,rows],index)=>setTimeout(()=>downloadBlob(name,makeCSV(headers,rows),"text/csv;charset=utf-8"),index*180));
