@@ -2,7 +2,7 @@
 
 Use this worksheet only after the relevant data owner and security process have approved the export, fields, processing device and report handling. Do not paste real customer, vehicle, colleague or ticket data into this worksheet or commit completed copies to this public repository.
 
-The current tracker is exported as one Excel workbook containing six worksheets. Upload that complete `.xlsx` or `.xls` file once in Reporting Studio; do not split the tabs. Select `Assignments` for ticket/current state, `Activity Log` twice (assignment history and workflow history), and `Team & Shifts` for the roster. The other two tabs remain in the workbook and are ignored. **In Activity Log, column B (`Event Type`) holds the event name; column G (`Assignment Flag`) is only TRUE/FALSE.**
+The current tracker is exported as one Excel workbook containing six worksheets. Upload that complete `.xlsx` or `.xls` file once in Reporting Studio; do not split the tabs. Select `Assignments` for ticket/current state, `Activity Log` twice (assignment history and workflow history), `Team & Shifts` for the roster and the optional `Email Details` tab for email lifecycle metrics. `Dashboard` and `Settings` remain in the workbook and are ignored. **In Activity Log, column B (`Event Type`) holds the event name; column G (`Assignment Flag`) is only TRUE/FALSE.**
 
 ## 1. Ticket / current-state data — `Assignments` worksheet (required)
 
@@ -65,7 +65,7 @@ There is no distinct reassignment flag in the values supplied so far. Do not inf
 
 ## 4. Team & Shifts roster — optional
 
-Select the **Team & Shifts** worksheet from the same five-tab workbook in the roster input.
+Select the **Team & Shifts** worksheet from the same six-tab workbook in the roster input.
 
 | Studio field | Required? | Exact source header | Rule |
 |---|---|---|---|
