@@ -62,7 +62,7 @@ async function createStudioSnapshot(csvInputs=null,workbookProbe=null){
     assignments:read("examples/synthetic-assignment-history.csv"),
     workflow:read("examples/synthetic-workflow-history.csv"),
     emailDetails:read("examples/synthetic-email-details.csv")
-  });
+  },workbookProbe);
 }
 
 
