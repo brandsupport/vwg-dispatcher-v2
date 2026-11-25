@@ -63,6 +63,11 @@
             <input id="rosterFile" type="file" accept=".csv,text/csv">
             <small id="rosterFileMeta">No file selected</small>
           </div>
+          <div class="file-picker">
+            <label for="emailDetailsFile">Email Details lifecycle CSV <em>Optional</em></label>
+            <input id="emailDetailsFile" type="file" accept=".csv,text/csv">
+            <small id="emailDetailsFileMeta">No file selected</small>
+          </div>
           <p class="field-note">CSV examples for the fallback route: <a href="./examples/synthetic-ticket-snapshot.csv" download>synthetic tickets</a>, <a href="./examples/synthetic-assignment-history.csv" download>synthetic assignments</a>, <a href="./examples/synthetic-workflow-history.csv" download>synthetic workflow events</a> and <a href="./examples/synthetic-team-roster.csv" download>synthetic roster</a>.</p>
         </details>
       </article>
@@ -100,6 +105,18 @@
         <section class="result-panel"><h3>Team & shifts roster</h3><div id="rosterResults"></div><p class="table-note">The snapshot contains only keyed agent references, shift groups, Egypt-local shift times and active-fortnight status. Names and Outlook category values are removed.</p></section>
         <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
       </div>
+      <section id="emailMetricPanel" class="result-panel quality-panel" hidden>
+        <h3>Email lifecycle & handling</h3>
+        <p class="table-note">Email Details is aggregated separately from ticket resolution. A confirmed exit means the email was absent from all four monitored Inboxes on two successful full scans at least 120 seconds apart. Completion Time is the first-missing detection time; handling time is not first-response time or business resolution time.</p>
+        <div id="emailKpis" class="result-kpis"></div>
+        <div class="result-grid">
+          <section class="result-panel"><h3>Email status by first source Inbox</h3><div id="emailInboxResults"></div></section>
+          <section class="result-panel"><h3>Email volume by brand</h3><div id="emailBrandResults"></div></section>
+          <section class="result-panel"><h3>Confirmed exits by current owner</h3><div id="emailOwnerResults"></div><p class="table-note">Owner references are pseudonymous. Names are available only through the separate private lookup file.</p></section>
+          <section class="result-panel"><h3>Email receipts by day</h3><div id="emailDailyResults"></div></section>
+          <section class="result-panel"><h3>Confirmed exits by detection day</h3><div id="emailExitDailyResults"></div></section>
+        </div>
+      </section>
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
       <div class="download-bar">
         <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
