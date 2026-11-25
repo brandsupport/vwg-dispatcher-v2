@@ -136,6 +136,7 @@ function parseCSV(text){
   });
   return {headers,records};
 }
+function isSupportedWorkbookFilename(fileName){return /\.(?:xlsx|xls|xlsm)$/i.test(String(fileName||"").trim());}
 function autoMap(headers,aliases){
   const indexed=headers.map(header=>({header,key:norm(header)}));
   for(const alias of aliases){const target=norm(alias);const exact=indexed.find(item=>item.key===target);if(exact)return exact.header;}
@@ -303,13 +304,13 @@ function renderWorkbookSelectors(){
   renderMappings();
 }
 async function readWorkbook(file){
-  if(!/\.(?:xlsx|xls)$/i.test(file.name||""))throw new Error("Select the original Excel workbook (.xlsx or .xls).");
+  if(!isSupportedWorkbookFilename(file?.name))throw new Error("Select the original Excel workbook (.xlsx, .xls or .xlsm).");
   if(typeof XLSX==="undefined"||typeof XLSX.read!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
   const workbook=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:false});
   if(!Array.isArray(workbook.SheetNames)||!workbook.SheetNames.length)throw new Error("No worksheets were found in the selected workbook.");
   sourceMode="workbook";
   workbookData={workbook,sheetNames:workbook.SheetNames.slice()};
-  $("workbookFileMeta").textContent=workbookData.sheetNames.length+" worksheets found · workbook name not retained";
+  $("workbookFileMeta").textContent=(file.name||"Selected workbook")+" · "+workbookData.sheetNames.length+" worksheets found · read locally in this browser tab";
   renderWorkbookSelectors();
 }
 function normaliseInbox(value){
@@ -974,7 +975,8 @@ function bindFile(kind){
 function bindWorkbook(){
   $("workbookFile").addEventListener("change",async event=>{
     const file=event.target.files?.[0];
-    if(!file){workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";}renderWorkbookSelectors();renderMappings();return;}
+    if(!file){workbookData=null;sourceMode="";$("workbookFileMeta").textContent="No workbook selected";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";}renderWorkbookSelectors();renderMappings();return;}
+    $("workbookFileMeta").textContent="Reading "+(file.name||"selected workbook")+"…";
     try{
       for(const kind of Object.keys(files)){
         files[kind]=null;mappings[kind]={};$(kind+"File").value="";$(kind+"FileMeta").textContent="No CSV selected";
@@ -982,7 +984,7 @@ function bindWorkbook(){
       await readWorkbook(file);
     }catch(error){
       workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};}
-      $("workbookFile").value="";$("workbookFileMeta").textContent="Could not read workbook";
+      $("workbookFile").value="";$("workbookFileMeta").textContent="Could not read "+(file.name||"selected workbook")+" — "+error.message;
       $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
       alert("Could not read the selected Excel workbook: "+error.message);renderMappings();
     }
