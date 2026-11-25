@@ -34,9 +34,9 @@
       <article class="step-card">
         <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment history, workflow, Team & Shifts and Email Details are optional.</p></div></div>
         <div class="file-picker">
-          <label for="workbookFile">Complete tracker workbook (.xlsx or .xls) <em>Required</em></label>
-          <input id="workbookFile" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
-          <small id="workbookFileMeta">No workbook selected</small>
+          <label for="workbookFile">Complete tracker workbook (.xlsx, .xls or .xlsm) <em>Required</em></label>
+          <input id="workbookFile" type="file" accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12">
+          <small id="workbookFileMeta" role="status" aria-live="polite">No workbook selected</small>
         </div>
         <div id="workbookSheetSelectors" class="mapping-panels" hidden></div>
         <p class="field-note">Upload the complete operational workbook (.xlsx or .xls), not an Assignments-only export. The worksheet selectors appear after upload. Email lifecycle metrics must use the dedicated <strong>Email Details</strong> tab; the Studio will not substitute the Assignments tab. Dashboard and Settings are ignored.</p>
