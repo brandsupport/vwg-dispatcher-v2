@@ -467,6 +467,7 @@ const VIEW_TITLES = {
   overview:"Overview",
   live:"Live Operations",
   tickets:"Ticket Analytics",
+  email:"Email Performance",
   brands:"Brand Insights",
   workflow:"Workflow Analytics",
   folders:"Folder Share",
@@ -671,7 +672,7 @@ function validateAndSanitiseSnapshot(raw){
     if(workflowKeys.has(key))fail("Duplicate workflow event and inbox rows were found.");
     workflowKeys.add(key);
   }
-  const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster"];
+  const sourceNames=["Ticket snapshot","Assignment history","Workflow history","Team & Shifts roster","Email Details"];
   const qualityCounters=["rows_read","rows_accepted","rows_skipped","duplicate_rows","unknown_inbox","unknown_brand","unknown_status","ambiguous_time"];
   const sources=raw.data_quality.sources.map(row=>{
     if(!isObject(row)||!sourceNames.includes(row.source))fail("The data-quality section contains an unsupported source label.");
@@ -683,6 +684,94 @@ function validateAndSanitiseSnapshot(raw){
   if(!sources.some(row=>row.source==="Ticket snapshot"))fail("The data-quality section does not identify the ticket snapshot source.");
   const sourceSet=new Set(sources.map(row=>row.source));
   if(sourceSet.size!==sources.length)fail("Duplicate data-quality source rows were found.");
+  let emailMetrics=null;
+  if(raw.email_metrics!==undefined&&raw.email_metrics!==null){
+    const source=raw.email_metrics;
+    if(!isObject(source)||!isObject(source.overall)||!Array.isArray(source.by_inbox)||!Array.isArray(source.by_brand)){
+      fail("The Email Details aggregate section is invalid.");
+    }
+    const emailCounters=["email_records","open","missing_confirmation_pending","completed","unknown_status","missing_brand","missing_order_vin","timed_completed"];
+    const cleanEmailSummary=(row,label)=>{
+      if(!isObject(row))fail("The "+label+" email summary is invalid.");
+      const clean={};
+      for(const key of emailCounters)clean[key]=count(row[key]??0,label+" "+key);
+      if(clean.open+clean.missing_confirmation_pending+clean.completed+clean.unknown_status!==clean.email_records){
+        fail("Email lifecycle statuses do not reconcile for "+label+".");
+      }
+      if(clean.missing_brand>clean.email_records||clean.missing_order_vin>clean.email_records||clean.timed_completed>clean.completed){
+        fail("Email quality or handling-time counts do not reconcile for "+label+".");
+      }
+      const duration=(value,key)=>{
+        if(value===null||value===undefined)return null;
+        if(typeof value!=="number"||!Number.isFinite(value)||value<0)fail("Invalid "+label+" "+key+".");
+        return value;
+      };
+      clean.average_handling_minutes=duration(row.average_handling_minutes,"average handling time");
+      clean.median_handling_minutes=duration(row.median_handling_minutes,"median handling time");
+      clean.p90_handling_minutes=duration(row.p90_handling_minutes,"p90 handling time");
+      return clean;
+    };
+    const emailOverall=cleanEmailSummary(source.overall,"overall");
+    const emailTotal=count(source.total,"Email Details total");
+    if(emailTotal!==emailOverall.email_records)fail("Email Details total does not reconcile with its overall summary.");
+    const emailByInbox=source.by_inbox.map(row=>{
+      if(!isObject(row)||!inboxCodes.includes(row.inbox_code))fail("Email Details contains an unsupported Inbox.");
+      return {inbox_code:row.inbox_code,...cleanEmailSummary(row,"Inbox")};
+    });
+    if(emailByInbox.length!==4||new Set(emailByInbox.map(row=>row.inbox_code)).size!==4){
+      fail("Email Details must contain one summary for each of the four Inboxes.");
+    }
+    const sumEmail=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
+    for(const key of emailCounters){
+      if(sumEmail(emailByInbox,key)!==emailOverall[key])fail("Email Details Inbox totals do not reconcile for "+key+".");
+    }
+    const emailByBrand=source.by_brand.map(row=>{
+      if(!isObject(row)||!brandCodes.includes(row.brand_code))fail("Email Details contains an unsupported brand code.");
+      return {brand_code:row.brand_code,...cleanEmailSummary(row,"brand")};
+    });
+    if(new Set(emailByBrand.map(row=>row.brand_code)).size!==emailByBrand.length||sumEmail(emailByBrand,"email_records")!==emailTotal){
+      fail("Email Details brand totals are duplicated or do not reconcile.");
+    }
+    for(const key of emailCounters){
+      if(sumEmail(emailByBrand,key)!==emailOverall[key])fail("Email Details brand totals do not reconcile for "+key+".");
+    }
+    const cleanOwnerRows=(rows,label)=>{
+      if(!Array.isArray(rows))fail("Email Details "+label+" owner rows are invalid.");
+      const clean=rows.map(row=>{
+        if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||""))){
+          fail("Email Details "+label+" owner row has an invalid pseudonymous reference.");
+        }
+        return {agent_ref:row.agent_ref,...cleanEmailSummary(row,label+" owner")};
+      });
+      if(new Set(clean.map(row=>row.agent_ref)).size!==clean.length)fail("Email Details "+label+" owner rows contain duplicates.");
+      return clean;
+    };
+    const cleanDaily=(rows,countKey,label)=>{
+      if(!Array.isArray(rows))fail("Email Details "+label+" date rows are invalid.");
+      const clean=rows.map(row=>{
+        if(!isObject(row)||!inboxCodes.includes(row.inbox_code)||!validDate(row.date_utc))fail("Email Details "+label+" contains an invalid date or Inbox.");
+        return {date_utc:row.date_utc,inbox_code:row.inbox_code,[countKey]:count(row[countKey],label+" count")};
+      });
+      const keys=new Set();
+      for(const row of clean){
+        const key=row.date_utc+"|"+row.inbox_code;
+        if(keys.has(key))fail("Email Details "+label+" contains duplicate date / Inbox rows.");
+        keys.add(key);
+      }
+      return clean;
+    };
+    const emailDailyReceived=cleanDaily(source.daily_received||[],"email_records","received");
+    const emailDailyCompleted=cleanDaily(source.daily_completed||[],"completed","confirmed exit");
+    if(sumEmail(emailDailyReceived,"email_records")>emailTotal||sumEmail(emailDailyCompleted,"completed")>emailOverall.completed){
+      fail("Email Details daily totals exceed the source totals.");
+    }
+    emailMetrics={
+      total:emailTotal,overall:emailOverall,by_inbox:emailByInbox,by_brand:emailByBrand,
+      by_original_owner:cleanOwnerRows(source.by_original_owner||[],"original"),
+      by_current_owner:cleanOwnerRows(source.by_current_owner||[],"current"),
+      daily_received:emailDailyReceived,daily_completed:emailDailyCompleted
+    };
+  }
   const methodsRaw=raw.assignment_methods||{automatic:cleanOverall.initially_assigned,manual:0,other:0};
   const assignmentMethods={
     automatic:count(methodsRaw.automatic??0,"automatic first-assignment count"),
@@ -720,6 +809,7 @@ function validateAndSanitiseSnapshot(raw){
       resolution_tracking:resolutionTracking,resolution_metrics:resolutionMetrics,resolution_by_agent:resolutionByAgent,
       brand_field_mapped:brandFieldMapped},
     allocations,assignment_methods:assignmentMethods,team_roster:teamRoster,workflow,activity_log:activityLog,
+    ...(emailMetrics?{email_metrics:emailMetrics}:{}),
     data_quality:{
       sources,
       ambiguous_initial_assignment_tickets:count(raw.data_quality.ambiguous_initial_assignment_tickets,"ambiguous assignment count")
@@ -765,7 +855,9 @@ async function loadPrivateAgentLookup(file){
   const known=new Set([
     ...(state.importedSnapshot.team_roster||[]).map(row=>row.agent_ref),
     ...state.importedSnapshot.allocations.map(row=>row.agent_ref),
-    ...state.importedSnapshot.activity_log.flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean))
+    ...state.importedSnapshot.activity_log.flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean)),
+    ...(state.importedSnapshot.email_metrics?.by_original_owner||[]).map(row=>row.agent_ref),
+    ...(state.importedSnapshot.email_metrics?.by_current_owner||[]).map(row=>row.agent_ref)
   ]);
   const next=new Map();
   for(const row of rows.slice(1)){
@@ -2710,6 +2802,54 @@ function renderAdmin(){
     ].map((item,index)=>'<div><b>'+item[0]+'</b><strong>'+item[1]+'</strong><span>'+item[2]+'</span></div>'+(index<4?'<i>→</i>':'')).join("")+'</div>')+
     '<div class="admin-final-note"><strong>Production boundary:</strong> this static public page does not authenticate users, enforce roles, create accounts, approve requests, issue sessions, store secrets, connect Outlook or Excel, or define legally approved retention periods. Hiding controls in browser code is not security. Production access must be enforced by a trusted server with identity verification, least-privilege authorisation, protected storage and auditable outcomes.</div>';
 }
+function renderEmail(){
+  const imported=Boolean(state.importedSnapshot);
+  const metrics=state.importedSnapshot?.email_metrics;
+  if(!imported||!metrics){
+    pageContent.innerHTML=heading("EMAIL LIFECYCLE INTELLIGENCE","Email performance needs an Email Details snapshot.","This workspace reports inbox-exit lifecycle metrics from the optional Email Details worksheet. It does not connect to Outlook or the live tracker.")+
+      '<div class="prototype-warning"><strong>'+(imported?"Email Details was not included in this snapshot.":"No operational snapshot is loaded.")+'</strong> Open the Reporting Studio, upload the complete tracker workbook, select the optional Email Details worksheet and import the sanitised JSON snapshot here. The Dashboard does not receive raw message, order, VIN or email identifiers.</div>'+
+      panel("What this view measures","Email lifecycle data, kept separate from business resolution",'<div class="empty-state">Upload a sanitised snapshot containing Email Details to see email counts, confirmed exits and handling time.</div>');
+    return;
+  }
+  const rows=metrics.by_inbox.filter(row=>state.folder==="all"||row.inbox_code===state.folder);
+  const sum=key=>rows.reduce((total,row)=>total+row[key],0);
+  const scope=state.folder==="all"?metrics.overall:{
+    email_records:sum("email_records"),open:sum("open"),
+    missing_confirmation_pending:sum("missing_confirmation_pending"),completed:sum("completed"),
+    unknown_status:sum("unknown_status"),missing_brand:sum("missing_brand"),
+    missing_order_vin:sum("missing_order_vin"),timed_completed:sum("timed_completed"),
+    average_handling_minutes:rows.length===1?rows[0].average_handling_minutes:null
+  };
+  const inboxRows=rows.map(row=>'<tr><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.email_records)+'</td><td>'+fmt(row.open)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.missing_brand)+'</td><td>'+fmt(row.missing_order_vin)+'</td><td>'+formatDurationMinutes(row.average_handling_minutes)+'</td></tr>');
+  const brandLabels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"Volkswagen Commercial Vehicles",other:"Other",unclassified:"Other / unclassified"};
+  const brandRows=metrics.by_brand.map(row=>'<tr><td>'+esc(brandLabels[row.brand_code]||row.brand_code)+'</td><td class="total-cell">'+fmt(row.email_records)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.open)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td></tr>');
+  const ownerRows=metrics.by_current_owner.slice().sort((a,b)=>b.completed-a.completed||a.agent_ref.localeCompare(b.agent_ref))
+    .map(row=>'<tr><td>'+esc(displayAgentName(row.agent_ref))+'</td><td>'+fmt(row.email_records)+'</td><td>'+fmt(row.completed)+'</td><td>'+fmt(row.missing_confirmation_pending)+'</td><td>'+formatDurationMinutes(row.average_handling_minutes)+'</td></tr>');
+  const receivedRows=metrics.daily_received.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.email_records)+'</td></tr>');
+  const exitRows=metrics.daily_completed.filter(row=>state.folder==="all"||row.inbox_code===state.folder).slice().sort((a,b)=>b.date_utc.localeCompare(a.date_utc)).map(row=>'<tr><td>'+esc(row.date_utc)+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td>'+fmt(row.completed)+'</td></tr>');
+  pageContent.innerHTML=
+    heading("EMAIL LIFECYCLE INTELLIGENCE","Know what leaves the queue — and how long it took to get there.","A sanitised Email Details snapshot. Confirmed exits are measured separately from ticket resolution and from first response.")+
+    '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>'+fmt(metrics.total)+' email records</span><span>Generated '+esc(state.importedSnapshot.generated_at_utc)+'</span><span>Scope: '+esc(scopeName())+'</span></div>'+
+    kpiGrid([
+      kpi("Emails tracked",fmt(scope.email_records),"Distinct Email Details rows","✉"),
+      kpi("Confirmed exits",fmt(scope.completed),"Confirmed absent from all four monitored Inboxes","✓"),
+      kpi("Exit confirmation pending",fmt(scope.missing_confirmation_pending),"First full scan found the email missing","◷"),
+      kpi("Still open",fmt(scope.open),"Currently recorded as Open","▤"),
+      kpi("Average handling time",formatDurationMinutes(scope.average_handling_minutes),"Completed emails with a recorded duration only","⌛"),
+      kpi("Missing brand",fmt(scope.missing_brand),"Brand field blank","◈"),
+      kpi("Missing Order + VIN",fmt(scope.missing_order_vin),"Both values blank; values are never imported to the report","◇")
+    ])+
+    '<div class="grid-two">'+
+      panel("Email lifecycle by first source Inbox","The first source Inbox is retained even if an email was later moved.",dataTable(["First source Inbox","Emails","Open","Exit pending","Completed","Missing brand","Missing Order + VIN","Avg handling"],inboxRows))+
+      panel("Email volume by brand","Explicit Brand field only; unknown or blank values remain unclassified.",dataTable(["Brand","Emails","Completed","Open","Exit pending"],brandRows))+
+    '</div>'+
+    '<div class="grid-two">'+
+      panel("Current owner view","Owner names are resolved only from the separate private lookup loaded in this browser tab.",dataTable(["Current owner","Emails","Completed","Exit pending","Avg handling"],ownerRows))+
+      panel("Receipts by day","UK received timestamps grouped into UTC dates after timezone validation.",dataTable(["Received date (UTC)","First source Inbox","Emails"],receivedRows))+
+    '</div>'+
+    panel("Confirmed exits by detection day","Uses Completion Time (UK), which records the first-missing full-scan detection time.",dataTable(["First-missing date (UTC)","First source Inbox","Confirmed exits"],exitRows))+
+    '<div class="prototype-warning"><strong>Metric definition:</strong> Completed means absent from all four monitored Inboxes on two successful full scans at least 120 seconds apart. Handling time is Received At (UK) to the first-missing detection time. It is not first-response time, active handling time or business resolution time.</div>';
+}
 function render(){
   document.getElementById("topbarPage").textContent=VIEW_TITLES[state.view]||"Overview";
   pageContent.dataset.view=state.view;
@@ -2717,6 +2857,7 @@ function render(){
   if(state.view==="overview")renderOverview();
   else if(state.view==="live")renderLive();
   else if(state.view==="tickets")renderTickets();
+  else if(state.view==="email")renderEmail();
   else if(state.view==="brands")renderBrands();
   else if(state.view==="workflow")renderWorkflow();
   else if(state.view==="folders")renderFolders();
