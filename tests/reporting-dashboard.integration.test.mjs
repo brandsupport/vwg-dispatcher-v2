@@ -236,26 +236,26 @@ test("real Activity Log schema retains moved allocations, system events, email s
     tickets:[
       "ticket_ref,inbox,status,resolution_status,brand,received_at,current_owner",
       "SAMPLE-MOVED-01,Transfers,Assigned,Open,Audi,2026-11-22T09:00:00Z,agent-a"
-    ].join("\\n"),
+    ].join("\n"),
     assignments:[
       "Event Time (Egypt),Event Type,Email Key / ID,Folder Path,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details",
       "2026-11-22T11:00:00+02:00,AUTO_ASSIGNMENT,SAMPLE-MOVED-01,VWGUK R: Milton Keynes\\\\AgencyDetags\\\\Inbox,agent-a,agent-a,TRUE,0,PRIVATE TEST NOTE"
-    ].join("\\n"),
+    ].join("\n"),
     workflow:[
       "Event Time (Egypt),Event Type,Email Key / ID,Folder Path,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details",
       "2026-11-22T11:00:00+02:00,HANDOVER,SAMPLE-MOVED-01,VWGUK R: Milton Keynes\\\\AgencyDetags\\\\Inbox,agent-a,agent-b,FALSE,0,PRIVATE HANDOVER NOTE",
       "2026-11-22T12:00:00+02:00,EMAIL_COMPLETED,SAMPLE-MOVED-01,Email Details,agent-a,agent-b,FALSE,0,PRIVATE EMAIL NOTE",
       "2026-11-22T12:30:00+02:00,BASELINE_COMPLETE,,Four Inboxes,,,FALSE,0,PRIVATE SYSTEM NOTE"
-    ].join("\\n"),
+    ].join("\n"),
     roster:[
       "Colleague,Outlook Category (exact),Shift Group,Shift Start (Egypt),Shift End (Egypt),Active This Fortnight",
       "Alice Adams,agent-a,Early,10:00,18:45,Yes",
       "Bob Baker,agent-b,Late,11:00,19:45,Yes"
-    ].join("\\n"),
+    ].join("\n"),
     emailDetails:[
       "Email Key / ID,Internet Message ID,Brand,Order Number,VIN,Received At (UK),First Source Inbox,Last Monitored Inbox,Original Assignee,Current Owner,Completion Status,First Missing At (UK),Completion Time (UK),Handling Time (Minutes),Metadata Captured At (UK)",
       "SAMPLE-MOVED-01,<sample-moved@example.invalid>,Audi,ORDER-PRIVATE,VIN-PRIVATE,2026-11-22T09:00:00+00:00,Agency Detags,Transfers,agent-a,agent-b,Completed,2026-11-22T10:00:00+00:00,2026-11-22T10:00:00+00:00,60,2026-11-22T09:00:01+00:00"
-    ].join("\\n")
+    ].join("\n")
   })));
   const snapshot=run.snapshot;
   assert.ok(snapshot,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
