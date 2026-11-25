@@ -37,7 +37,7 @@ Choose the original tracker workbook in the main workbook input. The current wor
 | Email lifecycle metrics | `Email Details` | Optional; brand, Inbox exit status, recorded handling time and pseudonymised owner aggregates |
 | Dashboard and Settings | Not selected | Retain them in the workbook; the Studio ignores them |
 
-The same `Activity Log` worksheet is deliberately selected in two different inputs because the assignment and workflow views use different column mappings. Check the worksheet selectors before mapping the columns below. You only select one workbook file.
+The same `Activity Log` worksheet is deliberately selected in two different inputs because the assignment and workflow views use different column mappings. Check the worksheet selectors before mapping the columns below. You only select one workbook file. The Email Details selector will only auto-select a worksheet whose name is `Email Details` / an approved alias, or whose complete 12-field Email Details header schema matches. It will never guess `Assignments` based on a few shared columns. If no valid tab is detected, the selector remains blank and the Studio explains that the operational workbook needs the dedicated Email Details tab added/upgraded before lifecycle metrics can be produced.
 
 ### Ticket / current-state snapshot — required
 
