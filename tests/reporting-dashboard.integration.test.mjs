@@ -19,7 +19,9 @@ async function createStudioSnapshot(csvInputs=null){
     addEventListener(){},
     createElement(){return makeNode();}
   };
-  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout};
+  const alerts=[];
+  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(message){alerts.push(String(message));},console,setTimeout,clearTimeout};
+  context.alerts=alerts;
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   const expose=`
@@ -34,18 +36,21 @@ async function createStudioSnapshot(csvInputs=null){
         const assignmentData=parseCSV(csvs.assignments);
         const workflowData=parseCSV(csvs.workflow);
         const rosterData=csvs.roster?parseCSV(csvs.roster):null;
+        const emailDetailsData=csvs.emailDetails?parseCSV(csvs.emailDetails):null;
         files.tickets={...ticketData,rowCount:ticketData.records.length};
         files.assignments={...assignmentData,rowCount:assignmentData.records.length};
         files.workflow={...workflowData,rowCount:workflowData.records.length};
         files.roster=rosterData?{...rosterData,rowCount:rosterData.records.length}:null;
+        files.emailDetails=emailDetailsData?{...emailDetailsData,rowCount:emailDetailsData.records.length}:null;
         mappings.tickets=mapHeaders("tickets",ticketData.headers);
         mappings.assignments=mapHeaders("assignments",assignmentData.headers);
         mappings.workflow=mapHeaders("workflow",workflowData.headers);
         mappings.roster=rosterData?mapHeaders("roster",rosterData.headers):{};
+        mappings.emailDetails=emailDetailsData?mapHeaders("emailDetails",emailDetailsData.headers):{};
         const usedMappings=JSON.parse(JSON.stringify(mappings));
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,mappings:usedMappings};
+        return {snapshot:currentSnapshot,mappings:usedMappings,alerts};
       }
     };
   `;
@@ -54,7 +59,8 @@ async function createStudioSnapshot(csvInputs=null){
   return context.__reportingTestHooks.process(csvInputs||{
     tickets:read("examples/synthetic-ticket-snapshot.csv"),
     assignments:read("examples/synthetic-assignment-history.csv"),
-    workflow:read("examples/synthetic-workflow-history.csv")
+    workflow:read("examples/synthetic-workflow-history.csv"),
+    emailDetails:read("examples/synthetic-email-details.csv")
   });
 }
 
@@ -127,9 +133,10 @@ function calculateDashboardViews(snapshot,folder="all"){
 
 const read=path=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
 
-test("the three synthetic exports pass through Studio, Dashboard validation and every aggregate adapter",async()=>{
+test("synthetic tracker exports and Email Details pass through Studio and Dashboard validation without raw identifiers",async()=>{
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot()));
   const studio=run.snapshot;
+  assert.ok(studio,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
 
   assert.equal(studio.schema_version,"dispatcher-reporting-snapshot-1");
   assert.equal(studio.tickets.total,5);
@@ -145,8 +152,26 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
     ["unadopts",1,0,0,1,1]
   ]);
   assert.equal(studio.workflow.reduce((sum,row)=>sum+row.event_count,0),5);
+  assert.deepEqual(studio.email_metrics.overall,{
+    email_records:6,open:2,missing_confirmation_pending:1,completed:3,unknown_status:0,
+    missing_brand:1,missing_order_vin:1,timed_completed:3,
+    average_handling_minutes:155,median_handling_minutes:120,p90_handling_minutes:300
+  });
+  assert.deepEqual(studio.email_metrics.by_inbox.map(row=>[
+    row.inbox_code,row.email_records,row.open,row.missing_confirmation_pending,row.completed
+  ]),[
+    ["agency",1,0,0,1],
+    ["detags",2,0,0,2],
+    ["transfers",1,0,1,0],
+    ["unadopts",2,2,0,0]
+  ]);
+  assert.equal(studio.email_metrics.by_brand.reduce((sum,row)=>sum+row.email_records,0),6);
+  assert.equal(studio.email_metrics.daily_received.reduce((sum,row)=>sum+row.email_records,0),6);
+  assert.equal(studio.email_metrics.daily_completed.reduce((sum,row)=>sum+row.completed,0),3);
+  assert.ok(studio.email_metrics.by_current_owner.every(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)));
 
   const imported=validateWithDashboard(studio);
+  assert.deepEqual(imported.email_metrics,studio.email_metrics);
   assert.deepEqual(imported.tickets.overall,studio.tickets.overall);
   assert.deepEqual(imported.tickets.by_inbox,studio.tickets.by_inbox);
   assert.deepEqual(imported.tickets.by_brand,studio.tickets.by_brand);
@@ -187,17 +212,26 @@ test("the three synthetic exports pass through Studio, Dashboard validation and 
 
   const rawValues=[
     "SAMPLE-001","SAMPLE-002","SAMPLE-003","SAMPLE-004","SAMPLE-005",
-    "Sample Agent A","Sample Agent B","Sample Agent C","Sample Agent D"
+    "Sample Agent A","Sample Agent B","Sample Agent C","Sample Agent D",
+    "DEMO-EMAIL-001","DEMO-EMAIL-002","DEMO-EMAIL-003","DEMO-EMAIL-004","DEMO-EMAIL-005","DEMO-EMAIL-006",
+    "<demo-message-001@example.invalid>","DEMO-ORDER-001","DEMO-ORDER-002","SYNTH-VIN-001","SYNTH-VIN-002",
+    "Synthetic Agent A","Synthetic Agent B","Synthetic Agent C","Synthetic Agent D","Synthetic Agent E","Synthetic Agent F"
   ];
   const serialised=JSON.stringify(imported);
   for(const value of rawValues)assert.equal(serialised.includes(value),false,"raw value leaked into Dashboard import: "+value);
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Ticket snapshot").rows_accepted,5);
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Assignment history").rows_accepted,5);
   assert.equal(studio.data_quality.sources.find(row=>row.source==="Workflow history").rows_accepted,5);
+  const emailQuality=studio.data_quality.sources.find(row=>row.source==="Email Details");
+  assert.equal(emailQuality.rows_read,7);
+  assert.equal(emailQuality.rows_accepted,6);
+  assert.equal(emailQuality.rows_skipped,1);
+  assert.equal(emailQuality.duplicate_rows,1);
+  assert.equal(emailQuality.unknown_brand,1);
 });
 
 
-test("the full five-tab workbook selects the correct source sheets and reuses Activity Log twice",()=>{
+test("the full six-tab workbook selects Email Details and reuses Activity Log twice",()=>{
   const hooks=createWorkbookTestHooks();
   const sheets={
     "Assignments":[
@@ -214,6 +248,10 @@ test("the full five-tab workbook selects the correct source sheets and reuses Ac
       ["Colleague","Outlook Category (exact)","Shift Group","Shift Start (Egypt)","Shift End (Egypt)","Active This Fortnight"],
       ["Synthetic Agent A","Synthetic Agent A","Early","09:00","17:00","Yes"]
     ],
+    "Email Details":[
+      ["Email Key / ID","Internet Message ID","Brand","Order Number","VIN","Received At (UK)","First Source Inbox","Last Monitored Inbox","Original Assignee","Current Owner","Completion Status","First Missing At (UK)","Completion Time (UK)","Handling Time (Minutes)","Metadata Captured At (UK)"],
+      ["DEMO-WB-01","<demo-workbook@example.invalid>","Audi","DEMO-ORDER-WB","SYNTH-VIN-WB","2026-11-22T10:00:00+00:00","Agency Detags","Agency Detags","Synthetic Agent A","Synthetic Agent A","Completed","2026-11-22T11:00:00+00:00","2026-11-22T11:00:00+00:00","60","2026-11-22T10:00:01+00:00"]
+    ],
     "Dashboard Summary":[["Report title"],["Synthetic summary"]],
     "Archive":[["Archive note"],["Not used by reporting"]]
   };
@@ -223,8 +261,10 @@ test("the full five-tab workbook selects the correct source sheets and reuses Ac
   assert.equal(hooks.suggestWorkbookSheet("assignments",names,sheets),"Activity Log");
   assert.equal(hooks.suggestWorkbookSheet("workflow",names,sheets),"Activity Log");
   assert.equal(hooks.suggestWorkbookSheet("roster",names,sheets),"Team & Shifts");
+  assert.equal(hooks.suggestWorkbookSheet("emailDetails",names,sheets),"Email Details");
 
   const assignmentHistory=hooks.worksheetToTable(sheets["Activity Log"],"assignments");
+  const emailDetails=hooks.worksheetToTable(sheets["Email Details"],"emailDetails");
   const workflowHistory=hooks.worksheetToTable(sheets["Activity Log"],"workflow");
   const roster=hooks.worksheetToTable(sheets["Team & Shifts"],"roster");
 
@@ -235,7 +275,8 @@ test("the full five-tab workbook selects the correct source sheets and reuses Ac
   assert.equal(workflowHistory.records[0]["Assignment Flag"],"auto assigned");
   assert.equal(roster.headers.includes("Outlook Category (exact)"),true);
   assert.equal(roster.records[0]["Shift Group"],"Early");
-  assert.equal(names.length,5,"the workbook can retain all five tabs");
+  assert.equal(emailDetails.records.length,1);
+  assert.equal(names.length,6,"Dashboard and Settings may remain as unused tabs alongside Email Details");
 });
 
 test("the committed synthetic inputs are the three documented sample files",()=>{
@@ -243,7 +284,8 @@ test("the committed synthetic inputs are the three documented sample files",()=>
     "examples/synthetic-ticket-snapshot.csv",
     "examples/synthetic-assignment-history.csv",
     "examples/synthetic-workflow-history.csv",
-    "examples/synthetic-team-roster.csv"
+    "examples/synthetic-team-roster.csv",
+    "examples/synthetic-email-details.csv"
   ]){
     assert.ok(read(path).trim().length>0,"Missing synthetic input: "+path);
   }
