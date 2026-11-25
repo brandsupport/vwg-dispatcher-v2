@@ -358,8 +358,8 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
     "Pending Since (Egypt)","Last Category State","Handover Count"
   ];
   const activityHeaders=[
-    "Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner",
-    "Assignment Flag","Incident Count","Details / Notes"
+    "Event Time (Egypt)","Event Type","Email Key / ID","Folder Path","Original Assignee","Current Owner",
+    "Assignment Flag","Incident Count","Details"
   ];
   const quote=value=>'"'+String(value??"").replace(/"/g,'""')+'"';
   const makeCsv=(headers,rows)=>[
@@ -374,16 +374,16 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
     {"Email Key / ID":"SYN-104","Received At (UK)":"2026-11-22T10:20:00+00:00","Source Inbox":"Unadopts","Assignment Flag":"queued","Status":"Received"}
   ]);
   const activity=makeCsv(activityHeaders,[
-    {"Event Time (Egypt)":"2026-11-22T11:14:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"TRUE"},
-    {"Event Time (Egypt)":"2026-11-22T11:30:00+02:00","Event Type":"HANDOVER","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
-    {"Event Time (Egypt)":"2026-11-22T11:40:00+02:00","Event Type":"CATEGORY_REMOVAL_DETECTED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"TRUE"},
-    {"Event Time (Egypt)":"2026-11-22T11:45:00+02:00","Event Type":"CATEGORY_RESTORED","Email Key / ID":"SYN-101","Source Inbox":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
-    {"Event Time (Egypt)":"2026-11-22T12:00:00+02:00","Event Type":"MANUAL_ASSIGNMENT_CAPTURED","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"TRUE"},
-    {"Event Time (Egypt)":"2026-11-22T12:05:00+02:00","Event Type":"PENDING_ITEM_NOT_FOUND","Email Key / ID":"SYN-102","Source Inbox":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"FALSE"},
-    {"Event Time (Egypt)":"2026-11-22T12:20:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"TRUE"},
-    {"Event Time (Egypt)":"2026-11-22T12:25:00+02:00","Event Type":"MULTIPLE_CATEGORIES_PENDING","Email Key / ID":"SYN-103","Source Inbox":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"FALSE"},
-    {"Event Time (Egypt)":"2026-11-22T12:30:00+02:00","Event Type":"BASELINE_REGISTERED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"},
-    {"Event Time (Egypt)":"2026-11-22T12:35:00+02:00","Event Type":"QUEUED","Email Key / ID":"SYN-104","Source Inbox":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"}
+    {"Event Time (Egypt)":"2026-11-22T11:14:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-101","Folder Path":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent A","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T11:30:00+02:00","Event Type":"HANDOVER","Email Key / ID":"SYN-101","Folder Path":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T11:40:00+02:00","Event Type":"CATEGORY_REMOVAL_DETECTED","Email Key / ID":"SYN-101","Folder Path":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T11:45:00+02:00","Event Type":"CATEGORY_RESTORED","Email Key / ID":"SYN-101","Folder Path":"Agency Detags","Original Assignee":"Synthetic Agent A","Current Owner":"Synthetic Agent B","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:00:00+02:00","Event Type":"MANUAL_ASSIGNMENT_CAPTURED","Email Key / ID":"SYN-102","Folder Path":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T12:05:00+02:00","Event Type":"PENDING_ITEM_NOT_FOUND","Email Key / ID":"SYN-102","Folder Path":"Detags","Original Assignee":"Synthetic Agent C","Current Owner":"Synthetic Agent C","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:20:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"SYN-103","Folder Path":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"TRUE"},
+    {"Event Time (Egypt)":"2026-11-22T12:25:00+02:00","Event Type":"MULTIPLE_CATEGORIES_PENDING","Email Key / ID":"SYN-103","Folder Path":"Transfers","Original Assignee":"Synthetic Agent D","Current Owner":"Synthetic Agent D","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:30:00+02:00","Event Type":"BASELINE_REGISTERED","Email Key / ID":"SYN-104","Folder Path":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"},
+    {"Event Time (Egypt)":"2026-11-22T12:35:00+02:00","Event Type":"QUEUED","Email Key / ID":"SYN-104","Folder Path":"Unadopts","Original Assignee":"","Current Owner":"","Assignment Flag":"FALSE"}
   ]);
 
   const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
@@ -398,11 +398,11 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   });
   assert.deepEqual(run.mappings.assignments,{
     ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"
+    inbox:"Folder Path",occurred_at:"Event Time (Egypt)"
   });
   assert.deepEqual(run.mappings.workflow,{
     ticket_ref:"Email Key / ID",event_type:"Event Type",
-    inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",
+    inbox:"Folder Path",occurred_at:"Event Time (Egypt)",
     original_assignee:"Original Assignee",current_owner:"Current Owner",
     assignment_flag:"Assignment Flag",incident_count:"Incident Count"
   });
@@ -415,8 +415,8 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   assert.equal(snapshot.tickets.brand_field_mapped,false);
   const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,(snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0))]));
   assert.deepEqual(events,{
-    assigned:2,handover:1,flagged:1,recovery_restored:1,
-    manual_assignment:1,exception:2,received:1
+    assigned:2,handover:1,flagged:2,recovery_restored:1,
+    manual_assignment:1,exception:1,received:1
   });
   assert.equal(snapshot.activity_log.length,9);
   assert.ok(snapshot.activity_log.every(row=>row.assignment_flag===true||row.assignment_flag===false));
@@ -425,7 +425,10 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   const imported=validateWithDashboard(snapshot);
   const views=calculateDashboardViews(imported);
   const visibleEvents=Object.fromEntries(views.workflow.map(row=>[row.id,row.events]));
-  assert.deepEqual(visibleEvents,{handover:1,flag:1,manual:1,recovery:1,reassignment:0});
+  assert.deepEqual(visibleEvents,{
+    handover:1,flag:2,automatic:2,manual:1,recovery:1,
+    reassignment:0,exceptions:1,email_lifecycle:0,baseline:1
+  });
 
   const serialised=JSON.stringify(imported);
   assert.ok(snapshot.activity_log.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
