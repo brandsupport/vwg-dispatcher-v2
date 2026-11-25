@@ -21,6 +21,7 @@ async function createStudioSnapshot(csvInputs=null){
   };
   const alerts=[];
   const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(message){alerts.push(String(message));},console,setTimeout,clearTimeout};
+  context.alerts=alerts;
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   const expose=`
