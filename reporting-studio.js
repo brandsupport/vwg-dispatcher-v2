@@ -794,7 +794,7 @@ async function sanitise(){
       const finishOwnerMap=map=>[...map.values()].map(row=>({
         agent_ref:row.agent_ref,...finishBucket(row)
       })).sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
-      const overallEmail=finishBucket([...byInboxEmail.values()].reduce((sum,row)=>({
+      const overallEmail=finishBucket(Object.values(byInboxEmail).reduce((sum,row)=>({
         email_records:sum.email_records+row.email_records,
         open:sum.open+row.open,
         missing_confirmation_pending:sum.missing_confirmation_pending+row.missing_confirmation_pending,
