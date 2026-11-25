@@ -12,7 +12,7 @@ function makeNode(){
   };
 }
 
-async function createStudioSnapshot(csvInputs=null){
+async function createStudioSnapshot(csvInputs=null,workbookProbe=null){
   const nodes=new Map();
   const document={
     getElementById(id){if(!nodes.has(id))nodes.set(id,makeNode());return nodes.get(id);},
@@ -20,7 +20,7 @@ async function createStudioSnapshot(csvInputs=null){
     createElement(){return makeNode();}
   };
   const alerts=[];
-  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(message){alerts.push(String(message));},console,setTimeout,clearTimeout};
+  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,XLSX:{utils:{sheet_to_json(worksheet){return worksheet.rows;}}},alert(message){alerts.push(String(message));},console,setTimeout,clearTimeout};
   context.alerts=alerts;
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
@@ -31,6 +31,7 @@ async function createStudioSnapshot(csvInputs=null){
     globalThis.__reportingTestHooks = {
       parseCSV,
       mapHeaders,
+      suggestEmailDetailsSheet(sheetNames,sheets){return suggestWorkbookSheet("emailDetails",sheetNames,sheets);},
       async process(csvs) {
         const ticketData=parseCSV(csvs.tickets);
         const assignmentData=parseCSV(csvs.assignments);
@@ -50,7 +51,7 @@ async function createStudioSnapshot(csvInputs=null){
         const usedMappings=JSON.parse(JSON.stringify(mappings));
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,mappings:usedMappings,alerts,privateAgentLookup:privateAgentLookup.slice()};
+        return {snapshot:currentSnapshot,mappings:usedMappings,alerts,privateAgentLookup:privateAgentLookup.slice(),emailDetailsSheetSuggestion:workbookProbe?suggestWorkbookSheet("emailDetails",workbookProbe.sheetNames,workbookProbe.sheets):null};
       }
     };
   `;
@@ -447,6 +448,44 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   ]) assert.equal(serialised.includes(prohibited),false,"unmapped sensitive value leaked: "+prohibited);
 });
 
+
+test("Email Details workbook selection never falls back to an Assignments-like worksheet",async()=>{
+  const assignmentHeaders=[
+    "Email Key / ID","Received At (UK)","Source Inbox","Email Subject","Original Assignee",
+    "Current Owner","Assignment Flag","Incident Count","Last Incident At","Status",
+    "Handover Notes","Last Verified At","LoginUserEmail (optional)","Record Updated At",
+    "Allocated At (Egypt)","Roster Period Start","Outlook Entry ID","Outlook Store ID",
+    "Pending Since (Egypt)","Last Category State","Handover Count"
+  ];
+  const emailDetailsHeaders=[
+    "Email Key / ID","Internet Message ID","Brand","Order Number","VIN","Received At (UK)",
+    "First Source Inbox","Last Monitored Inbox","Original Assignee","Current Owner",
+    "Completion Status","First Missing At (UK)","Completion Time (UK)",
+    "Handling Time (Minutes)","Metadata Captured At (UK)"
+  ];
+  const assignmentSheet={rows:[["ASSIGNMENTS"],[],[],[],assignmentHeaders,["KEY-1","","","","","","","","","","","","","","","","","","","",""]]};
+  const emailSheet={rows:[["EMAIL DETAILS"],[],[],[],emailDetailsHeaders]};
+  const run=await createStudioSnapshot(null,{
+    sheetNames:["Assignments","Activity Log","Team & Shifts"],
+    sheets:{
+      "Assignments":assignmentSheet,
+      "Activity Log":{rows:[["ACTIVITY LOG"],[],[],[],["Event Time (Egypt)","Event Type","Email Key / ID","Folder Path"]]},
+      "Team & Shifts":{rows:[["TEAM & SHIFTS"],[],[],[],["Colleague","Outlook Category (exact)"]]}
+    }
+  });
+  assert.equal(run.emailDetailsSheetSuggestion,"",
+    "The Studio must leave Email Details unselected when only the 21-column Assignments ledger is available; it must never map Brand/Order/VIN to that sheet.");
+
+  const validRun=await createStudioSnapshot(null,{
+    sheetNames:["Assignments","Email Metrics Export"],
+    sheets:{
+      "Assignments":assignmentSheet,
+      "Email Metrics Export":emailSheet
+    }
+  });
+  assert.equal(validRun.emailDetailsSheetSuggestion,"Email Metrics Export",
+    "A worksheet with the complete 15-column Email Details schema may be selected even if the tab has a different name.");
+});
 
 test("the Team & Shifts roster is pseudonymised and drives actual imported shift groups",async()=>{
   const read=path=>fs.readFileSync(new URL("../"+path,import.meta.url),"utf8");
