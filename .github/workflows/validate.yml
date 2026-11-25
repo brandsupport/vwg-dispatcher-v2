@@ -78,7 +78,7 @@ jobs:
             if (!html.includes(asset)) throw new Error('Reporting Studio asset is not linked: ' + asset);
             if (!pages.includes(asset)) throw new Error('GitHub Pages workflow does not publish: ' + asset);
           }
-          for (const file of ['examples/synthetic-ticket-snapshot.csv', 'examples/synthetic-assignment-history.csv', 'examples/synthetic-workflow-history.csv']) {
+          for (const file of ['examples/synthetic-ticket-snapshot.csv', 'examples/synthetic-assignment-history.csv', 'examples/synthetic-workflow-history.csv', 'examples/synthetic-email-details.csv']) {
             if (!fs.existsSync(file)) throw new Error('Missing synthetic example: ' + file);
           }
           const outbound = /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\b|sendBeacon|localStorage|sessionStorage|indexedDB|serviceWorker/i;
@@ -163,7 +163,7 @@ jobs:
             const sizes = [...sheet.matchAll(/font-size\s*:\s*([\d.]+)px/g)].map(match => Number(match[1]));
             if (sizes.length && Math.min(...sizes) < 11) throw new Error(name + ' contains very small text (' + Math.min(...sizes) + 'px).');
           }
-          const views = ['overview','live','tickets','brands','workflow','folders','team','my','roster','rules','reliability','audit','reports','admin'];
+          const views = ['overview','live','tickets','email','brands','workflow','folders','team','my','roster','rules','reliability','audit','reports','admin'];
           for (const view of views) {
             const name = 'render' + view[0].toUpperCase() + view.slice(1);
             if (!js.includes('function ' + name + '(')) throw new Error('Missing screen renderer: ' + name);
@@ -242,6 +242,16 @@ jobs:
           }
           if (overview.includes('smallChart([')) throw new Error('Old fixed, unscoped Overview trend remains.');
 
+
+          const emailStart = js.indexOf('function renderEmail(){');
+          const emailEnd = js.indexOf('\nfunction render(){', emailStart);
+          const emailView = emailStart >= 0 && emailEnd > emailStart ? js.slice(emailStart, emailEnd) : '';
+          for (const text of ['EMAIL LIFECYCLE INTELLIGENCE','Confirmed exits','Missing - Confirmation Pending','first-missing detection','not first response']) {
+            if (!emailView.includes(text)) throw new Error('Email Performance definition or lifecycle disclosure missing: ' + text);
+          }
+          if (!emailView.includes('email_metrics') || !js.includes('email:"Email Performance"')) {
+            throw new Error('Email Performance must be a snapshot-backed Dashboard view.');
+          }
 
           const ticketStart = js.indexOf('function renderTickets(){');
           const ticketEnd = js.indexOf('\nfunction chartPair(', ticketStart);
