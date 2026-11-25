@@ -1945,7 +1945,7 @@ function agentActivityMetrics(agentRef){
     automatic:distinctTickets("assigned"),
     manual:distinctTickets("manual_assignment"),
     handovers:events.filter(event=>event.event_type==="handover").length,
-    recovery:events.filter(event=>["flagged","recovery_requested","recovery_held","recovery_restored","exception"].includes(event.event_type)).length
+    recovery:events.filter(event=>["flagged","recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview","exception"].includes(event.event_type)).length
   };
 }
 function agentPerformanceReviewPanel(profiles){
