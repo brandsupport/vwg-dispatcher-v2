@@ -262,7 +262,7 @@ async function readSource(kind,file){
 function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
   workbookSelections[kind]=sheetName||"";
   mappings[kind]={};
-  if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(kind==="emailDetails"&&$("emailDetailsSheetStatus"))$("emailDetailsSheetStatus").textContent="No Email Details worksheet selected. Choose the dedicated Email Details tab; Assignments is not a substitute.";if(rerender)renderMappings();return;}
+  if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(kind==="emailDetails"&&$("emailDetailsSheetStatus"))$("emailDetailsSheetStatus").textContent="No valid Email Details worksheet was found in this workbook. If the Email Details tab is absent, the operational workbook needs its Email Metrics sheet upgrade. Do not select Assignments as a substitute.";if(rerender)renderMappings();return;}
   try{
     const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
     if(kind==="emailDetails"){
