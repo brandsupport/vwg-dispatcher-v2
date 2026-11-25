@@ -32,7 +32,7 @@ async function createStudioSnapshot(csvInputs=null,workbookProbe=null){
       parseCSV,
       mapHeaders,
       suggestEmailDetailsSheet(sheetNames,sheets){return suggestWorkbookSheet("emailDetails",sheetNames,sheets);},
-      async process(csvs) {
+      async process(csvs,workbookProbe) {
         const ticketData=parseCSV(csvs.tickets);
         const assignmentData=parseCSV(csvs.assignments);
         const workflowData=parseCSV(csvs.workflow);
