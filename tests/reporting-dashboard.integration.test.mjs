@@ -81,7 +81,7 @@ function createWorkbookTestHooks(){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
