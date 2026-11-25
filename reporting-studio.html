@@ -23,7 +23,7 @@
     <section class="intro">
       <div class="eyebrow">LOCAL REPORTING WORKSPACE</div>
       <h1>Turn your tracker workbook into safe management insight.</h1>
-      <p>Upload the complete five-tab Excel workbook once, choose the relevant worksheets, confirm the columns and create a pseudonymised reporting snapshot. You do not need to export or split the tabs.</p>
+      <p>Upload the complete tracker workbook once, choose the relevant worksheets, confirm the columns and create a pseudonymised reporting snapshot. Email Details is an optional sixth-tab source for inbox-exit and handling metrics.</p>
       <div class="privacy-banner" role="note">
         <span class="privacy-icon">✓</span>
         <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API, and raw records are not saved to browser storage.</span></div>
@@ -32,17 +32,17 @@
 
     <section class="workflow-grid">
       <article class="step-card">
-        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment, workflow and Team & Shifts are optional.</p></div></div>
+        <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment history, workflow, Team & Shifts and Email Details are optional.</p></div></div>
         <div class="file-picker">
           <label for="workbookFile">Complete tracker workbook (.xlsx or .xls) <em>Required</em></label>
           <input id="workbookFile" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
           <small id="workbookFileMeta">No workbook selected</small>
         </div>
         <div id="workbookSheetSelectors" class="mapping-panels" hidden></div>
-        <p class="field-note">Upload the whole workbook containing all five tabs. The Studio will suggest Assignments for current ticket state, Activity Log for both history inputs, and Team & Shifts for the roster. The other tabs can remain in the workbook and will be ignored.</p>
+        <p class="field-note">Upload the whole workbook. The Studio suggests Assignments for current ticket state, Activity Log for both history inputs, Team & Shifts for the roster, and Email Details for lifecycle metrics. Dashboard and Settings remain in the workbook and are ignored.</p>
         <details class="schema-details">
           <summary>Alternative: use separate CSV files</summary>
-          <p class="field-note">Use this only when separate CSV exports are available. For your normal five-tab workbook export, use the single workbook upload above.</p>
+          <p class="field-note">Use this only when separate CSV exports are available. For your normal workbook export, use the single workbook upload above.</p>
           <div class="file-picker">
             <label for="ticketsFile">Ticket / current-state CSV <em>Required</em></label>
             <input id="ticketsFile" type="file" accept=".csv,text/csv">
