@@ -262,7 +262,7 @@ async function readSource(kind,file){
 function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
   workbookSelections[kind]=sheetName||"";
   mappings[kind]={};
-  if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(rerender)renderMappings();return;}
+  if(!sheetName){files[kind]=null;$(kind+"FileMeta").textContent="Not selected";if(kind==="emailDetails"&&$("emailDetailsSheetStatus"))$("emailDetailsSheetStatus").textContent="No Email Details worksheet selected. Choose the dedicated Email Details tab; Assignments is not a substitute.";if(rerender)renderMappings();return;}
   try{
     const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
     if(kind==="emailDetails"){
@@ -275,9 +275,11 @@ function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
     }
     files[kind]={...parsed,rowCount:parsed.records.length,sourceSheet:sheetName};
     $(kind+"FileMeta").textContent=sheetName+" · "+parsed.records.length+" data rows · "+parsed.headers.length+" columns detected";
+    if(kind==="emailDetails"&&$("emailDetailsSheetStatus"))$("emailDetailsSheetStatus").textContent="Validated Email Details worksheet: "+sheetName+" · all "+SOURCE_CONFIG.emailDetails.fields.length+" required headers matched.";
   }catch(error){
     files[kind]=null;
     $(kind+"FileMeta").textContent=sheetName+" · could not read worksheet";
+    if(kind==="emailDetails"&&$("emailDetailsSheetStatus"))$("emailDetailsSheetStatus").textContent="Not a valid Email Details worksheet: "+error.message;
     if(showError)alert("Could not read the "+SOURCE_CONFIG[kind].title+" worksheet: "+error.message);
   }
   if(rerender)renderMappings();
@@ -292,8 +294,8 @@ function renderWorkbookSelectors(){
     Object.keys(labels).map(kind=>{
       const suggested=suggestWorkbookSheet(kind,workbookData.sheetNames,workbookData.workbook.Sheets);
       workbookSelections[kind]=suggested;
-      const warning=kind==="emailDetails"&&!suggested
-        ?'<p class="field-note email-sheet-warning" role="status">No valid Email Details worksheet was detected. The workbook tabs found are listed above, but none has the complete Email Details headers. Add/upgrade the Email Details tab in the operational tracker, save the workbook, then upload it again. Do not select Assignments as a substitute.</p>'
+      const warning=kind==="emailDetails"
+        ?'<p id="emailDetailsSheetStatus" class="field-note email-sheet-warning" role="status">'+(suggested?"Checking the selected worksheet for the required Email Details headers…":"No valid Email Details worksheet was detected. The workbook tabs found are listed above, but none has the complete Email Details headers. Add/upgrade the Email Details tab in the operational tracker, save the workbook, then upload it again. Do not select Assignments as a substitute.")+'</p>'
         :"";
       return '<div class="mapping-field"><label for="sheet-'+kind+'">'+labels[kind]+' <small>'+descriptions[kind]+'</small></label><select id="sheet-'+kind+'" data-sheet-kind="'+kind+'"><option value="">— Not selected —</option>'+workbookData.sheetNames.map(name=>'<option value="'+escapeHtml(name)+'" '+(suggested===name?'selected':'')+'>'+escapeHtml(name)+'</option>').join("")+'</select></div>'+warning;
     }).join("")+'</section>';
