@@ -74,18 +74,18 @@ const SOURCE_CONFIG={
   emailDetails:{
     title:"Email Details lifecycle metrics",
     fields:[
-      {id:"email_key",label:"Email key (used only for local duplicate removal)",aliases:["email key / id"]},
-      {id:"brand",label:"Brand",aliases:["brand","brand name"]},
-      {id:"order_number",label:"Order number (counts blank values only)",aliases:["order number"]},
-      {id:"vin",label:"VIN (counts blank values only)",aliases:["vin"]},
-      {id:"received_at",label:"Received timestamp (UK)",aliases:["received at uk","received at"]},
-      {id:"first_inbox",label:"First source Inbox",aliases:["first source inbox"]},
-      {id:"original_assignee",label:"Original assignee (pseudonymised)",aliases:["original assignee"]},
-      {id:"current_owner",label:"Current owner (pseudonymised)",aliases:["current owner"]},
-      {id:"completion_status",label:"Completion status",aliases:["completion status"]},
-      {id:"first_missing_at",label:"First missing timestamp (UK)",aliases:["first missing at uk","first missing at"]},
-      {id:"completion_at",label:"Completion / first-missing timestamp (UK)",aliases:["completion time uk","completion time"]},
-      {id:"handling_minutes",label:"Handling time (minutes)",aliases:["handling time minutes","handling time"]}
+      {id:"email_key",label:"Email key (used only for local duplicate removal)",required:true,aliases:["email key / id"]},
+      {id:"brand",label:"Brand",required:true,aliases:["brand","brand name"]},
+      {id:"order_number",label:"Order number (counts blank values only)",required:true,aliases:["order number"]},
+      {id:"vin",label:"VIN (counts blank values only)",required:true,aliases:["vin"]},
+      {id:"received_at",label:"Received timestamp (UK)",required:true,aliases:["received at uk","received at"]},
+      {id:"first_inbox",label:"First source Inbox",required:true,aliases:["first source inbox"]},
+      {id:"original_assignee",label:"Original assignee (pseudonymised)",required:true,aliases:["original assignee"]},
+      {id:"current_owner",label:"Current owner (pseudonymised)",required:true,aliases:["current owner"]},
+      {id:"completion_status",label:"Completion status",required:true,aliases:["completion status"]},
+      {id:"first_missing_at",label:"First missing timestamp (UK)",required:true,aliases:["first missing at uk","first missing at"]},
+      {id:"completion_at",label:"Completion / first-missing timestamp (UK)",required:true,aliases:["completion time uk","completion time"]},
+      {id:"handling_minutes",label:"Handling time (minutes)",required:true,aliases:["handling time minutes","handling time"]}
     ]
   }
 };
