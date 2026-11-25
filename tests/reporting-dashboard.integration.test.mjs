@@ -50,7 +50,7 @@ async function createStudioSnapshot(csvInputs=null){
         const usedMappings=JSON.parse(JSON.stringify(mappings));
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,mappings:usedMappings,alerts};
+        return {snapshot:currentSnapshot,mappings:usedMappings,alerts,privateAgentLookup:privateAgentLookup.slice()};
       }
     };
   `;
@@ -231,6 +231,56 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
 });
 
 
+test("real Activity Log schema retains moved allocations, system events, email source Inbox and private names",async()=>{
+  const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
+    tickets:[
+      "ticket_ref,inbox,status,resolution_status,brand,received_at,current_owner",
+      "SAMPLE-MOVED-01,Transfers,Assigned,Open,Audi,2026-11-22T09:00:00Z,agent-a"
+    ].join("\\n"),
+    assignments:[
+      "Event Time (Egypt),Event Type,Email Key / ID,Folder Path,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details",
+      "2026-11-22T11:00:00+02:00,AUTO_ASSIGNMENT,SAMPLE-MOVED-01,VWGUK R: Milton Keynes\\\\AgencyDetags\\\\Inbox,agent-a,agent-a,TRUE,0,PRIVATE TEST NOTE"
+    ].join("\\n"),
+    workflow:[
+      "Event Time (Egypt),Event Type,Email Key / ID,Folder Path,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details",
+      "2026-11-22T11:00:00+02:00,HANDOVER,SAMPLE-MOVED-01,VWGUK R: Milton Keynes\\\\AgencyDetags\\\\Inbox,agent-a,agent-b,FALSE,0,PRIVATE HANDOVER NOTE",
+      "2026-11-22T12:00:00+02:00,EMAIL_COMPLETED,SAMPLE-MOVED-01,Email Details,agent-a,agent-b,FALSE,0,PRIVATE EMAIL NOTE",
+      "2026-11-22T12:30:00+02:00,BASELINE_COMPLETE,,Four Inboxes,,,FALSE,0,PRIVATE SYSTEM NOTE"
+    ].join("\\n"),
+    roster:[
+      "Colleague,Outlook Category (exact),Shift Group,Shift Start (Egypt),Shift End (Egypt),Active This Fortnight",
+      "Alice Adams,agent-a,Early,10:00,18:45,Yes",
+      "Bob Baker,agent-b,Late,11:00,19:45,Yes"
+    ].join("\\n"),
+    emailDetails:[
+      "Email Key / ID,Internet Message ID,Brand,Order Number,VIN,Received At (UK),First Source Inbox,Last Monitored Inbox,Original Assignee,Current Owner,Completion Status,First Missing At (UK),Completion Time (UK),Handling Time (Minutes),Metadata Captured At (UK)",
+      "SAMPLE-MOVED-01,<sample-moved@example.invalid>,Audi,ORDER-PRIVATE,VIN-PRIVATE,2026-11-22T09:00:00+00:00,Agency Detags,Transfers,agent-a,agent-b,Completed,2026-11-22T10:00:00+00:00,2026-11-22T10:00:00+00:00,60,2026-11-22T09:00:01+00:00"
+    ].join("\\n")
+  })));
+  const snapshot=run.snapshot;
+  assert.ok(snapshot,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
+  assert.equal(snapshot.tickets.total,1);
+  assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="transfers").ticket_records,1);
+  assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="agency").initially_assigned,1,
+    "The original Agency Detags allocation must remain in its source Inbox after the ticket moves to Transfers.");
+  assert.equal(snapshot.tickets.by_inbox.reduce((sum,row)=>sum+row.initially_assigned,0),1);
+  assert.equal(snapshot.assignment_methods.automatic,1);
+  assert.equal(snapshot.allocations.reduce((sum,row)=>sum+row.initial_assignments,0),1);
+  assert.ok(snapshot.workflow.some(row=>row.event_type==="handover"&&row.inbox_code==="agency"&&row.event_count===1));
+  assert.ok(snapshot.workflow.some(row=>row.event_type==="email_completed"&&row.inbox_code==="agency"&&row.event_count===1));
+  assert.ok(snapshot.workflow.some(row=>row.event_type==="baseline_complete"&&row.inbox_code==="system"&&row.event_count===1));
+  const systemEvent=snapshot.activity_log.find(row=>row.event_type==="baseline_complete");
+  assert.equal(systemEvent.system_event,true);
+  assert.equal(snapshot.activity_log.filter(row=>row.event_type==="handover")[0].system_event,false);
+  assert.equal(snapshot.data_quality.sources.find(row=>row.source==="Workflow history").rows_accepted,3);
+  assert.ok(run.privateAgentLookup.some(row=>row.display_name==="Alice Adams"));
+  assert.ok(run.privateAgentLookup.some(row=>row.display_name==="Bob Baker"));
+  const serialised=JSON.stringify(snapshot);
+  for(const raw of ["agent-a","agent-b","Alice Adams","Bob Baker","PRIVATE TEST NOTE","PRIVATE HANDOVER NOTE","PRIVATE EMAIL NOTE","PRIVATE SYSTEM NOTE","ORDER-PRIVATE","VIN-PRIVATE","<sample-moved@example.invalid>"]){
+    assert.equal(serialised.includes(raw),false,"Private source value leaked to aggregate snapshot: "+raw);
+  }
+});
+
 test("the full six-tab workbook selects Email Details and reuses Activity Log twice",()=>{
   const hooks=createWorkbookTestHooks();
   const sheets={
@@ -241,8 +291,8 @@ test("the full six-tab workbook selects Email Details and reuses Activity Log tw
     ],
     "Activity Log":[
       ["Activity history export"],
-      ["Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner","Assignment Flag"],
-      ["2026-11-22T11:00:00+02:00","true","SYN-WB-01","Agency Detags","Synthetic Agent A","Synthetic Agent A","auto assigned"]
+      ["Event Time (Egypt)","Event Type","Email Key / ID","Folder Path","Original Assignee","Current Owner","Assignment Flag","Incident Count","Details"],
+      ["2026-11-22T11:00:00+02:00","AUTO_ASSIGNMENT","SYN-WB-01","VWGUK R: Milton Keynes\\AgencyDetags\\Inbox","Synthetic Agent A","Synthetic Agent A","TRUE","0","SAFE TEST FIXTURE"]
     ],
     "Team & Shifts":[
       ["Colleague","Outlook Category (exact)","Shift Group","Shift Start (Egypt)","Shift End (Egypt)","Active This Fortnight"],
@@ -271,8 +321,10 @@ test("the full six-tab workbook selects Email Details and reuses Activity Log tw
   assert.equal(assignmentHistory.headers[0],"Event Time (Egypt)");
   assert.equal(assignmentHistory.records.length,1);
   assert.equal(workflowHistory.records.length,1);
-  assert.equal(assignmentHistory.records[0]["Assignment Flag"],"auto assigned");
-  assert.equal(workflowHistory.records[0]["Assignment Flag"],"auto assigned");
+  assert.equal(assignmentHistory.records[0]["Event Type"],"AUTO_ASSIGNMENT");
+  assert.equal(workflowHistory.records[0]["Event Type"],"AUTO_ASSIGNMENT");
+  assert.equal(workflowHistory.records[0]["Folder Path"],"VWGUK R: Milton Keynes\\AgencyDetags\\Inbox");
+  assert.equal(workflowHistory.records[0]["Assignment Flag"],"TRUE");
   assert.equal(roster.headers.includes("Outlook Category (exact)"),true);
   assert.equal(roster.records[0]["Shift Group"],"Early");
   assert.equal(emailDetails.records.length,1);
