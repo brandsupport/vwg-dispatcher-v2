@@ -259,6 +259,12 @@ test("real Activity Log schema retains moved allocations, system events, email s
   })));
   const snapshot=run.snapshot;
   assert.ok(snapshot,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
+  const imported=validateWithDashboard(snapshot);
+  assert.equal(imported.tickets.total,1);
+  assert.equal(imported.tickets.by_inbox.find(row=>row.inbox_code==="agency").initially_assigned,1,
+    "Dashboard validation must retain original-Inbox first-allocation history even when current ticket volume is zero there.");
+  assert.ok(imported.workflow.some(row=>row.event_type==="baseline_complete"&&row.inbox_code==="system"));
+  assert.equal(imported.activity_log.find(row=>row.event_type==="baseline_complete").system_event,true);
   assert.equal(snapshot.tickets.total,1);
   assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="transfers").ticket_records,1);
   assert.equal(snapshot.tickets.by_inbox.find(row=>row.inbox_code==="agency").initially_assigned,1,
