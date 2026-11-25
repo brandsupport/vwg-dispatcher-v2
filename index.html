@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./dashboard.css?v=20261124-reporting-overhaul-3">
-  <script src="./dashboard.js?v=20261124-source-tracking-4" defer></script>
+  <link rel="stylesheet" href="./dashboard.css?v=20261125-activity-mapping-fix-1">
+  <script src="./dashboard.js?v=20261125-activity-mapping-fix-1" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -85,7 +85,7 @@
           </label>
           <div class="dataset-actions">
             <button class="dataset-import-button" id="importSnapshotButton" type="button">Import snapshot</button>
-            <button class="dataset-import-button" id="importAgentLookupButton" type="button" hidden>Import private names</button>
+            <button class="dataset-import-button" id="importAgentLookupButton" type="button" title="Load the private agent-name lookup CSV from Reporting Studio" hidden>Load colleague names</button>
             <button class="dataset-reset-button" id="resetSnapshotButton" type="button" hidden>Use demo</button>
             <input id="snapshotFileInput" type="file" accept=".json,application/json" hidden>
             <input id="agentLookupFileInput" type="file" accept=".csv,text/csv" hidden>
