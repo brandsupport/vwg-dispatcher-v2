@@ -53,7 +53,7 @@ Map these fields:
 | Received timestamp | No | Parsed as UK-local time because the source header explicitly identifies UK time. Invalid or ambiguous values are excluded from date metrics. |
 | Resolution status | No today | Proposed tracker field. Use explicit Open / Resolved / Closed / Reopened values; do not reuse the operational Assignment Status. |
 | Resolved timestamp | No today | Proposed tracker field. Required alongside Received At (UK) to calculate elapsed solve time. |
-| Resolved by | No today | Proposed exact Outlook category field so a completed ticket can be attributed to the resolver. Names stay in a separate private lookup. |
+| Resolved by | No today | Proposed exact Outlook category field so a completed ticket can be attributed to the resolver. Colleague names are resolved locally from the browser directory. |
 
 The current workbook cannot support a resolution rate or solve-time calculation: it has no explicit resolution status, resolved timestamp or resolver field. A future tracker build can populate these fields after the resolution workflow is agreed. The Studio will show **Not tracked** until those columns are present; it does not treat Recovered, Assigned or Handed Over as resolved.
 
