@@ -34,9 +34,11 @@ test("imported Live Operations and Audit History use the aggregate snapshot and 
 
 test("unsupported brand and resolution metrics are labelled as not captured",()=>{
   assert.match(dashboard,/BRAND FIELD NOT CAPTURED/);
-  assert.match(dashboard,/resolution_tracking!=="source_status_present"\?"Not tracked"/);
-  assert.match(dashboard,/AVERAGE ELAPSED RESOLUTION/);
+  assert.match(dashboard,/function hasResolutionTracking\(\)/);
+  assert.match(dashboard,/resolution_tracking==="source_status_present"/);
+  assert.match(dashboard,/Avg solve time · owned cases/);
   assert.match(dashboard,/Resolution rate/);
+  assert.match(dashboard,/First response/);
 });
 
 
@@ -61,8 +63,8 @@ test("imported Activity Log has a dedicated light investigation layout and respo
   assert.match(dashboard,/class="audit-demo-strip local-snapshot-strip"/);
   assert.match(dashboard,/class="activity-search-label">SEARCH/);
   assert.match(dashboard,/class="activity-search-input"/);
-  assert.match(dashboard,/class="activity-time-cell"/);
-  assert.match(dashboard,/class="activity-event-type"/);
+  assert.match(dashboard,/activity-time-cell/);
+  assert.match(dashboard,/activity-event-type/);
   assert.match(css,/\.activity-history-panel \.audit-filter-toolbar\.imported-audit-filters\s*\{/);
   assert.match(css,/\.activity-history-panel \.data-table thead th\s*\{[^}]*position:\s*sticky/s);
   assert.match(css,/\.page-content\[data-view="audit"\] \.audit-demo-strip\.local-snapshot-strip/);
