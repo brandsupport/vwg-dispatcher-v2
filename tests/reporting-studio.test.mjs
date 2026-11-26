@@ -449,19 +449,19 @@ test("subject brand detection is reused by Email Performance when only Assignmen
   const ticketCsv=[
     "Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner",
     ...subjects.map(([key,subject])=>[key,"Detags","Assigned","",subject,"2026-11-24 08:30:00","Belal"].join(","))
-  ].join("\\r\\n");
+  ].join("\r\n");
   const activityCsv=[
     "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
     ...subjects.map(([key],index)=>["2026-11-24 "+String(10+index).padStart(2,"0")+":30:00","AUTO_ASSIGNMENT",key,"Detags","Belal Category","Belal","TRUE","0",""].join(","))
-  ].join("\\r\\n");
+  ].join("\r\n");
   const rosterCsv=[
     "Colleague,Outlook Category (exact),Shift Group,Shift Start (Egypt),Shift End (Egypt),Active This Fortnight",
     "Belal,Belal Category,Early,10:00,19:00,Yes"
-  ].join("\\r\\n");
+  ].join("\r\n");
   const emailCsv=[
     "Email Key / ID,Brand,Order Number,VIN,Received At (UK),First Source Inbox,Original Assignee,Current Owner,Completion Status,First Missing At (UK),Completion Time (UK),Handling Time (Minutes)",
     ...subjects.map(([key])=>[key,"","","","2026-11-24 08:30:00","Detags","Belal Category","Belal","Open","","",""].join(","))
-  ].join("\\r\\n");
+  ].join("\r\n");
   const result=await hooks.processVwg(ticketCsv,activityCsv,rosterCsv,emailCsv);
   const emailBrandCounts=Object.fromEntries(result.snapshot.email_metrics.by_brand.map(row=>[row.brand_code,row.email_records]));
   const ticketBrandCounts=Object.fromEntries(result.snapshot.tickets.by_brand.map(row=>[row.brand_code,row.count]));
@@ -485,8 +485,8 @@ test("subject brand detection is reused by Email Performance when only Assignmen
 
 test("private name persistence fails closed when browser storage is unavailable",async()=>{
   const hooks=loadStudio();
-  const ticketCsv="Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner\\r\\nK1,Detags,Assigned,,Form submission from Audi customer de-tag request form on Hub,2026-11-24 08:30:00,Belal";
-  const activityCsv="Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count\\r\\n2026-11-24 10:30:00,AUTO_ASSIGNMENT,K1,Detags,Belal,Belal,TRUE,0";
+  const ticketCsv="Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner\r\nK1,Detags,Assigned,,Form submission from Audi customer de-tag request form on Hub,2026-11-24 08:30:00,Belal";
+  const activityCsv="Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count\r\n2026-11-24 10:30:00,AUTO_ASSIGNMENT,K1,Detags,Belal,Belal,TRUE,0";
   const result=await hooks.processVwg(ticketCsv,activityCsv);
   assert.equal(result.privateDirectorySaved,false);
   assert.ok(result.snapshot.data_quality.warnings.some(message=>message.toLowerCase().includes("browser could not save the private colleague directory")));
