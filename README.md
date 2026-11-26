@@ -2,13 +2,25 @@
 
 A standalone operations intelligence and management platform for the VWG Brand Support ticket operation.
 
-> **Current status: synthetic-data dashboard with a browser-local Reporting Studio and staging backend foundation.** The public dashboard has no live Outlook or Excel connection. Studio processes Assignments, Activity Log, Team & Shifts and optional Email Details locally in the browser, then exports a pseudonymised aggregate JSON snapshot. After sanitisation it saves colleague `{agent_ref, display_name}` pairs plus a separate private Order Number / VIN lookup index in the same-origin browser-local directory. The lookup index contains only Order Number, VIN, brand, Inbox, lifecycle status, received/completion dates and a pseudonymous ticket reference; it links a local email match to sanitised Activity Log events without putting raw identifiers into the shared JSON. Full workbook rows, subjects, message bodies, raw email keys and human-readable names are never included in the shared JSON or public JavaScript. Order Numbers and VINs remain in the same browser/device local storage until cleared with the dashboard's **Clear local names & lookup** control. The directory is not an authentication boundary. The individual ticket queue remains demonstration-only. The frontend is public, unauthenticated and not an access-control boundary; only company-approved sanitised aggregate snapshots should be imported. A staging D1 database and Worker have been created separately, but the dashboard is not connected to them; no production database, approved identity integration, real operational data feed or operational write route is configured.
+> **Edition: Final Reporting Edition (target v2.0.0).** Dispatcher 2.0 is a snapshot-based management reporting product: the existing Excel tracker is processed locally in Reporting Studio, a sanitised JSON snapshot is handed to the dashboard, and aggregate reports are explored in the ten reporting workspaces. It is not a live mailbox dispatcher or authenticated production operations console. The public dashboard has no live Outlook or Excel connection. Studio processes Assignments, Activity Log, Team & Shifts and optional Email Details locally in the browser, then exports a pseudonymised aggregate JSON snapshot. After sanitisation it saves colleague `{agent_ref, display_name}` pairs plus a separate private Order Number / VIN lookup index in the same-origin browser-local directory. The lookup index contains only Order Number, VIN, brand, Inbox, lifecycle status, received/completion dates and a pseudonymous ticket reference; it links a local email match to sanitised Activity Log events without putting raw identifiers into the shared JSON. Full workbook rows, subjects, message bodies, raw email keys and human-readable names are never included in the shared JSON or public JavaScript. Order Numbers and VINs remain in the same browser/device local storage until cleared with the dashboard's **Clear local names & lookup** control. The directory is not an authentication boundary. The individual ticket queue remains demonstration-only. The frontend is public, unauthenticated and not an access-control boundary; only company-approved sanitised aggregate snapshots should be imported. A staging D1 database and Worker have been created separately, but the dashboard is not connected to them; no production database, approved identity integration, real operational data feed or operational write route is configured.
 
 ## Cherry Glass design system and workspace navigation
 
 The dashboard and standalone Reporting Studio share the Dispatcher **Cherry Glass** visual system: a black-cherry canvas, translucent cherry-tinted panels, vivid cherry-red and rose accents, and restrained plum highlights. The Studio keeps the same Knowledge Base home-page VW mark artwork and animated glass-tile construction, recoloured with the Cherry Glass accents. Typography, cards, controls, spacing and table surfaces use a consistent component scale with overflow-safe layouts. The imported Activity Log keeps the dark Cherry Glass palette with a simplified search-first toolbar, responsive filters, sticky event headings and horizontal scrolling. It can search the private browser-local Email Details index by Order Number or VIN and show linked sanitised Activity Log events; it does not expose full email subjects or message bodies. Both pages end with matching signature footers featuring a neon-gradient Momo credit.
 
 The dashboard provides a persistent **Reporting Studio** entry in its workspace navigation. The Studio header provides a matching, always-visible **Dashboard** return button. Both pages remain independently loadable; the Studio retains its local-only processing boundary.
+
+## Start here — the normal reporting cycle
+
+1. Open the Dashboard and Reporting Studio in the same approved browser profile and device.
+2. In Reporting Studio, select the complete tracker workbook and map Assignments, Activity Log (twice), Team & Shifts and Email Details where available. Dashboard and Settings are ignored.
+3. Reuse the same private workspace key, sanitise locally and review the data-quality checks.
+4. Open the Dashboard using direct hand-off, or download the JSON snapshot and choose **Import snapshot**.
+5. Use the ten reporting workspaces and aggregate CSV exports. For Order Number / VIN lookup and colleague display names, keep the Studio and Dashboard in the same browser profile/device.
+
+Start with the [User Guide](docs/USER_GUIDE.md). The product scope is frozen in [Final Release Scope](docs/FINAL_RELEASE_SCOPE.md), with [v2.0.0 release notes](docs/RELEASE_NOTES_v2.0.0.md) and a [Final Release Checklist](docs/FINAL_RELEASE_CHECKLIST.md).
+
+**Important:** the dashboard uses synthetic demonstration data until a snapshot is imported. Imported data is held in the current tab's memory; refreshing clears it. The public site is unauthenticated and only company-approved sanitised aggregate snapshots should be used. There is no OneDrive, Microsoft Graph, live mailbox sync or dispatch-control integration in this reporting release.
 
 ## Implementation status
 
@@ -27,7 +39,7 @@ The platform is designed to help authorised managers understand and manage the f
 
 Its central goals are to make ticket volume, brand mix, workload allocation, resolution performance, team fairness and dispatcher reliability understandable and auditable.
 
-## Current prototype
+## Final reporting release
 
 The v2.0 reporting release exposes ten navigable workspaces:
 
