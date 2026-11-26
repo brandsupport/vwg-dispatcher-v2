@@ -2838,22 +2838,21 @@ function renderAudit(){
 }
 function renderReports(){
   const imported=Boolean(state.importedSnapshot);
-  pageContent.innerHTML=heading("REPORTING","Make the operation measurable","Prepare consistent daily, weekly and monthly snapshots for managers.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
-    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Separate reporting from live operations")+'</strong><span>'+(imported?"The aggregate snapshot is held in browser memory only; it is not uploaded or saved. Refreshing the page clears it.":"The studio processes selected CSV files locally in your browser. It has no mailbox, Worker or D1 connection and does not upload raw files.")+'</span></div></div>'+
-    '<div class="prototype-warning"><strong>Import workflow:</strong> in the Offline Reporting Studio, select approved CSV exports, confirm the mappings, sanitise locally and download the JSON snapshot. Return here and use <strong>Import snapshot</strong> in the top bar. Only the aggregate JSON is read by this dashboard.</div>'+
+  pageContent.innerHTML=heading("REPORTING & EXPORTS","Build reports from imported evidence","Each report creates a separate CSV from the current sanitised snapshot. Downloads are generated locally in this tab.",'<a class="btn btn-primary" href="./reporting-studio.html">Open local reporting studio ↗</a>')+
+    '<div class="reporting-privacy-banner"><span class="reporting-privacy-icon">✓</span><div><strong>'+(imported?"Sanitised snapshot loaded in this tab":"Import a sanitised snapshot to enable reports")+'</strong><span>'+(imported?"Exports are generated locally from browser memory and downloaded to your device. Refreshing the page clears the imported data.":"Select your approved workbook in Reporting Studio, confirm mappings, sanitise locally and hand off the aggregate snapshot. Raw workbook rows are not uploaded.")+'</span></div></div>'+
     '<div class="report-grid">'+
-      reportCard("Daily operations report","Ticket records, first assignments, resolved, open backlog and inbox distribution.","Daily","CSV export ready")+
-      reportCard("Weekly performance report","Team allocation, handovers, flags and validated event summaries. Shift comparison requires rota data.","Weekly","CSV export ready")+
-      reportCard("Monthly management report","Brand volumes, folder share and current-state summaries.","Monthly","CSV export ready")+
-      reportCard("Individual performance report","Private per-agent workload and resolution summary with scheduled-hour context.","Individual","Permission required")+
-      reportCard("Brand volume report","Distinct ticket counts and brand share across all inboxes.","By brand","CSV export ready")+
-      reportCard("Reliability report","Assignment failures, recoveries, retries and service health.","System","Sample only")+
-      '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Map tracker CSV columns, remove direct identifiers, create stable pseudonymous agent references and export aggregate reporting files.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
+      reportCard("Daily operations report","Daily received volumes plus timestamped first-assignment, resolved and reopened events by inbox.","DAILY","Daily source-date breakdown","export-daily-report",imported)+
+      reportCard("Weekly workflow report","ISO-week Activity Log counts and distinct tickets affected. Event activity is not equivalent to paid hours or employee productivity.","WEEKLY","Timestamped events only","export-weekly-report",imported)+
+      reportCard("Management snapshot","Current ticket state, resolution coverage, brand mix and data-quality counts.","SNAPSHOT","Point-in-time management summary","export-management-report",imported)+
+      reportCard("Individual performance","Per-agent first assignments, current-owner resolution rate, solve time and brand portfolio. Names are included only when loaded privately in this browser.","BY AGENT","Local colleague-level export","export-individual-report",imported)+
+      reportCard("Brand volume & agent share","All brand totals and each agent's current-owner brand mix, including portfolio share and share of total brand volume.","BY BRAND","Brand-by-agent export","export-brand-report",imported)+
+      reportCard("Reliability events","Exception, recovery, review and pending events from the Activity Log. Free-text notes and message content are excluded.","SYSTEM","Safe event evidence","export-reliability-report",imported)+
+      '<article class="report-card report-studio-card"><div class="report-card-icon">✓</div><span class="subtle-tag">LOCAL ONLY</span><h3>Offline sanitisation studio</h3><p>Map tracker columns, pseudonymise colleague references and create the approved aggregate snapshot and CSV bundle.</p><div class="report-card-foot"><span>Raw files stay on this device</span><a class="panel-action" href="./reporting-studio.html">Open studio ↗</a></div></article>'+
     '</div>'+
-    panel("Current report scope","The selected inbox filter applies to this snapshot; period selection is unavailable for point-in-time aggregates",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>'+(imported?"Sanitised local snapshot":"Demonstration only")+'</strong></div></div>',"");
+    panel("Current report scope","Imported snapshots are point-in-time. Weekly and daily exports only include rows with valid timestamps; no missing dates are estimated.",'<div class="report-scope"><div><span>Period</span><strong>'+PERIODS[state.period].label+'</strong></div><div><span>Inbox</span><strong>'+scopeName()+'</strong></div><div><span>Data status</span><strong>'+(imported?"Sanitised local snapshot":"Demonstration only")+'</strong></div></div><p class="team-panel-note">Every export is based on the currently imported snapshot and selected Inbox scope. Brand data follows the explicit Brand field or Email Details join; unrecorded values remain unclassified.</p>',"");
 }
-function reportCard(title,copy,tag,foot){
-  return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="export-summary">Export ↗</button></div></article>';
+function reportCard(title,copy,tag,foot,action,enabled){
+  return '<article class="report-card"><div class="report-card-icon">▤</div><span class="subtle-tag">'+tag+'</span><h3>'+title+'</h3><p>'+copy+'</p><div class="report-card-foot"><span>'+foot+'</span><button class="panel-action" data-action="'+action+'" '+(enabled?'':'disabled title="Import a sanitised snapshot first"')+'>Export CSV ↗</button></div></article>';
 }
 function adminRoleById(id){
   return ADMIN_ROLE_PROFILES.find(role=>role.id===id)||ADMIN_ROLE_PROFILES[0];
@@ -3072,7 +3071,8 @@ function csvDownload(filename,rows){
   const csv=rows.map(row=>row.map(value=>'"'+String(value??"").replaceAll('"','""')+'"').join(",")).join("\r\n");
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
   const url=URL.createObjectURL(blob),a=document.createElement("a");
-  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
   showToast(state.importedSnapshot?"Sanitised snapshot CSV exported locally.":"Sample CSV exported. It contains demonstration data only.");
 }
 function exportLiveQueue(){
@@ -3235,6 +3235,139 @@ function exportSummary(){
     ["Source mode",imported?"Sanitised aggregate · local browser memory":"Synthetic demonstration"]
   ]);
 }
+function exportDailyOperationsReport(){
+  if(!state.importedSnapshot){exportSummary();return;}
+  const snapshot=state.importedSnapshot,daily=new Map();
+  const add=(date,inbox)=>{
+    const key=date+"|"+inbox;
+    if(!daily.has(key))daily.set(key,{date,inbox,received:0,firstAssignments:0,resolved:0,reopened:0});
+    return daily.get(key);
+  };
+  for(const row of snapshot.tickets.daily_volume){
+    if(state.folder!=="all"&&row.inbox_code!==state.folder)continue;
+    add(row.date_utc,row.inbox_code).received+=row.ticket_records;
+  }
+  for(const event of snapshot.activity_log||[]){
+    if(state.folder!=="all"&&event.inbox_code!==state.folder)continue;
+    if(!event.event_time_utc)continue;
+    const row=add(event.event_time_utc.slice(0,10),event.inbox_code);
+    if(["assigned","manual_assignment"].includes(event.event_type))row.firstAssignments++;
+    if(event.event_type==="resolved")row.resolved++;
+    if(event.event_type==="reopened")row.reopened++;
+  }
+  const rows=[["Date UTC","Inbox","Ticket records received","First-assignment events","Resolved / closed events","Reopened events"],
+    ...[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.inbox.localeCompare(b.inbox))
+      .map(row=>[row.date,FOLDERS.find(folder=>folder.id===row.inbox)?.name||row.inbox,row.received,row.firstAssignments,row.resolved,row.reopened])];
+  if(rows.length===1)rows.push(["Not available","No date-stamped ticket or Activity Log records were supplied","","","",""]);
+  csvDownload("dispatcher-daily-operations-report.csv",rows);
+}
+function isoWeekKey(value){
+  const date=new Date(value);
+  if(!Number.isFinite(date.getTime()))return "";
+  const day=(date.getUTCDay()+6)%7;
+  date.setUTCDate(date.getUTCDate()-day+3);
+  const firstThursday=new Date(Date.UTC(date.getUTCFullYear(),0,4));
+  const firstDay=(firstThursday.getUTCDay()+6)%7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate()-firstDay+3);
+  const week=1+Math.round((date-firstThursday)/604800000);
+  return date.getUTCFullYear()+"-W"+String(week).padStart(2,"0");
+}
+function exportWeeklyPerformanceReport(){
+  if(!state.importedSnapshot){exportTeam();return;}
+  const grouped=new Map();
+  for(const event of state.importedSnapshot.activity_log||[]){
+    if(state.folder!=="all"&&event.inbox_code!==state.folder)continue;
+    if(!event.event_time_utc)continue;
+    const week=isoWeekKey(event.event_time_utc);
+    if(!week)continue;
+    const key=week+"|"+event.event_type+"|"+event.inbox_code;
+    const row=grouped.get(key)||{week,event_type:event.event_type,inbox:event.inbox_code,events:0,tickets:new Set()};
+    row.events++;
+    if(!event.system_event)row.tickets.add(event.ticket_ref);
+    grouped.set(key,row);
+  }
+  const rows=[["ISO week","Event type","Inbox","Events recorded","Distinct tickets affected"],
+    ...[...grouped.values()].sort((a,b)=>a.week.localeCompare(b.week)||a.inbox.localeCompare(b.inbox)||a.event_type.localeCompare(b.event_type))
+      .map(row=>[row.week,row.event_type,FOLDERS.find(folder=>folder.id===row.inbox)?.name||row.inbox,row.events,row.tickets.size])];
+  if(rows.length===1)rows.push(["Not available","Activity Log timestamps were not supplied","","",""]);
+  csvDownload("dispatcher-weekly-workflow-report.csv",rows);
+}
+function exportManagementSnapshotReport(){
+  if(!state.importedSnapshot){exportSummary();return;}
+  const t=state.importedSnapshot.tickets;
+  const rows=[
+    ["Metric","Value"],
+    ["Generated UTC",state.importedSnapshot.generated_at_utc],
+    ["First received date UTC",state.importedSnapshot.reporting_period?.first_received_date_utc||"Not available"],
+    ["Last received date UTC",state.importedSnapshot.reporting_period?.last_received_date_utc||"Not available"],
+    ["Inbox scope",scopeName()],
+    ["Ticket records",t.overall.ticket_records],
+    ["First assigned",t.overall.initially_assigned],
+    ["Resolved / closed",t.overall.resolved],
+    ["Outstanding",t.overall.outstanding],
+    ["Resolution rate",t.overall.ticket_records?(t.overall.resolved/t.overall.ticket_records*100).toFixed(1)+"%":"Not available"],
+    ["Average solve time",formatDurationMinutes(t.resolution_metrics?.overall?.average_minutes)],
+    ["Timed resolved tickets",t.resolution_metrics?.overall?.timed_tickets||0],
+    ["Brand field captured",t.brand_field_mapped?"Yes":"No"],
+    [],
+    ["Inbox","Records","First assigned","Resolved / closed","Outstanding","Unassigned"],
+    ...t.by_inbox.filter(row=>state.folder==="all"||row.inbox_code===state.folder)
+      .map(row=>[FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code,row.ticket_records,row.initially_assigned,row.resolved,row.outstanding,row.unassigned]),
+    [],
+    ["Brand","Ticket records","Share of all ticket records"],
+    ...brandRows().map(row=>[row.name,row.value,t.total?(row.value/t.total*100).toFixed(1)+"%":"0.0%"]),
+    [],
+    ["Source","Rows read","Accepted","Skipped","Duplicates","Unknown inbox","Unmapped brand","Unknown status","Ambiguous time"],
+    ...state.importedSnapshot.data_quality.sources.map(row=>[row.source,row.rows_read,row.rows_accepted,row.rows_skipped,row.duplicate_rows,row.unknown_inbox,row.unknown_brand,row.unknown_status,row.ambiguous_time])
+  ];
+  csvDownload("dispatcher-management-snapshot-report.csv",rows);
+}
+function exportIndividualPerformanceReport(){
+  if(!state.importedSnapshot){exportTeam();return;}
+  const profiles=teamProfileRows().filter(agent=>activeSearch(agent.name));
+  const codes=["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"];
+  const byBrand=new Map((state.importedSnapshot.brand_by_agent||[]).map(row=>[row.agent_ref+"|"+row.brand_code,row]));
+  const rows=[["Colleague","Agent reference","Shift","First assignments","Current open workload","Current owned tickets","Resolved by agent","Resolved tickets · current owner","Average solve minutes · current owner","Resolution rate · current owner",...codes.map(code=>code+" count")]];
+  for(const agent of profiles){
+    const ref=agent.id.replace(/^snapshot-/,"");
+    const owned=agentOwnedResolutionMetrics(ref),resolvedBy=agentResolutionMetrics(ref);
+    rows.push([
+      displayAgentName(ref),ref,agent.shift||"Not supplied",agent.firstAssigned||0,agent.open||0,owned.ownedTickets,
+      state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped?resolvedBy.resolvedTickets:"Not captured",
+      owned.resolvedTickets,owned.averageMinutes===null?"Not available":Math.round(owned.averageMinutes),
+      owned.resolutionRatePct===null?"Not available":owned.resolutionRatePct.toFixed(1)+"%",
+      ...codes.map(code=>byBrand.get(ref+"|"+code)?.ticket_count||0)
+    ]);
+  }
+  csvDownload("dispatcher-individual-performance-report.csv",rows);
+}
+function exportBrandVolumeReport(){
+  if(!state.importedSnapshot){exportBrands();return;}
+  const total=state.importedSnapshot.tickets.total;
+  const rows=[["Record type","Brand","Colleague","Ticket count","Share of colleague portfolio","Colleague share of brand volume"],
+    ...brandRows().map(row=>["Brand total",row.name,"",row.value,total?(row.value/total*100).toFixed(2)+"%":"0.00%",""]),
+    ...(state.importedSnapshot.brand_by_agent||[]).map(row=>[
+      "Current-owner portfolio",row.brand_code,displayAgentName(row.agent_ref),row.ticket_count,
+      row.agent_portfolio_share_pct.toFixed(2)+"%",row.brand_owner_share_pct.toFixed(2)+"%"
+    ])
+  ];
+  csvDownload("dispatcher-brand-volume-and-agent-share.csv",rows);
+}
+function exportReliabilitySnapshotReport(){
+  if(!state.importedSnapshot){exportReliability();return;}
+  const relevant=new Set(["exception","flagged","recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview","assignment_pending","assignment_preview"]);
+  const events=(state.importedSnapshot.activity_log||[]).filter(event=>
+    relevant.has(event.event_type)&&(state.folder==="all"||event.inbox_code===state.folder)
+  ).sort((a,b)=>(a.event_time_utc||"").localeCompare(b.event_time_utc||""));
+  csvDownload("dispatcher-reliability-events-report.csv",[
+    ["Event time UTC","Event time Egypt","Event type","Inbox","Ticket reference (pseudonymised)","Original agent reference","Current agent reference","Assignment flag","Incident count"],
+    ...events.map(event=>[
+      event.event_time_utc||"Not supplied",event.event_time_egypt||"Not supplied",event.event_type,
+      FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code,event.ticket_ref,
+      event.original_agent_ref||"",event.current_agent_ref||"",event.assignment_flag?"TRUE":"FALSE",event.incident_count
+    ])
+  ]);
+}
 function openTicket(ref){
   const ticket=TICKETS.find(t=>t.ref===ref);if(!ticket)return;
   const sla=liveSla(ticket);
@@ -3269,6 +3402,13 @@ function handleAction(action){
   if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}
   if(action==="reset-admin-review"){state.adminRequestSearch="";state.adminRequestStatus="all";state.adminRole="operations_manager";state.selectedAdminRequest="ACCESS-SAMPLE-004";renderAdmin();return;}
   if(action==="export-summary"){exportSummary();return;}
+  if(action==="export-daily-report"){exportDailyOperationsReport();return;}
+  if(action==="export-weekly-report"){exportWeeklyPerformanceReport();return;}
+  if(action==="export-management-report"){exportManagementSnapshotReport();return;}
+  if(action==="export-individual-report"){exportIndividualPerformanceReport();return;}
+  if(action==="export-brand-report"){exportBrandVolumeReport();return;}
+  if(action==="export-reliability-report"){exportReliabilitySnapshotReport();return;}
+  if(action==="load-agent-names"){document.getElementById("importAgentLookupButton").click();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
   if(action==="reset-roster-filters"){state.rosterSearch="";state.rosterShift="all";state.rosterAvailability="all";state.selectedRosterAgent=null;render();return;}
