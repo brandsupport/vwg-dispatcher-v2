@@ -1,7 +1,7 @@
 # Dispatcher 2.0 — Implementation Status
 
 **Reviewed:** 26 November 2026  
-**Scope:** Public dashboard, Offline Reporting Studio and Cloudflare Worker/D1 foundation.
+**Scope:** Final Reporting Edition dashboard, Offline Reporting Studio and separate Cloudflare Worker/D1 foundation.
 
 This document distinguishes working prototype/reporting capabilities from production operations. A visible screen or clickable prototype control does not, by itself, mean the underlying live service has been implemented.
 
@@ -11,7 +11,7 @@ The active dashboard navigation contains ten workspaces: Overview, Current Opera
 
 Folder Share, My Performance, Dispatch Configuration, Reliability Centre and Administration are intentionally hidden from user-facing navigation. Their source code, renderers, data structures, styles and export logic are retained for future work; navigation guards prevent ordinary dashboard shortcuts from opening them. Folder Share's useful allocation matrix is included in Team Performance.
 
-## Implemented and verified in the current prototype
+## Capabilities included in the reporting release
 
 | Area | Current implementation | Boundary |
 |---|---|---|
@@ -25,7 +25,7 @@ Folder Share, My Performance, Dispatch Configuration, Reliability Centre and Adm
 | Imported Activity Log | Read-only view of accepted source events with search, event-type/colleague/date filters and local CSV export | No trusted actor identity, persistent audit store or tamper-evident guarantee |
 | Roster & Coverage | Pseudonymised roster directory, Early/Late shifts, Egypt-local scheduled hours and scheduled headcount overlaps | Scheduled headcount only; not live availability or capacity |
 | Reports & Exports | Separate local CSV builders for daily, weekly, management, individual, brand and reliability report formats | Downloads are generated from the snapshot in the current browser tab |
-| Private colleague names | Studio automatically saves only `agent_ref` / `display_name` pairs in the same-origin browser-local directory; Dashboard resolves names on both direct handoff and ordinary downloaded-JSON imports | No separate names file or manual import; device-local only, not included in public source or shared JSON, and not an identity/authentication control; clear with **Clear saved names** |
+| Private colleague names | Studio automatically saves `agent_ref` / `display_name` pairs plus a restricted Email Details Order Number / VIN lookup in the same-origin browser-local directory; Dashboard resolves names and local email matches on both direct handoff and ordinary downloaded-JSON imports | No separate names file or manual import; device/profile-specific, not included in public source, shared JSON or aggregate CSVs, and not an identity/authentication control; clear with **Clear local names & lookup** |
 | Backend foundation | Staging D1 foundation schema and separate Cloudflare Worker with Access-oriented role checks and read-only endpoints for liveness, identity/permissions, inbox catalogue, readiness and audit reads | Staging foundation, not an operational backend; protected routes fail closed while Access role configuration is incomplete |
 
 ## Not implemented or not production-ready
@@ -81,7 +81,9 @@ Folder Share, My Performance, Dispatch Configuration, Reliability Centre and Adm
 - Imports are manual and point-in-time. There is no scheduled refresh, source-change detection or multi-user shared reporting workspace.
 - Private name mappings do not sync across different browsers/devices; each approved browser/device must run the local sanitisation workflow to populate its own directory.
 
-## Recommended implementation order
+## Future implementation roadmap (outside v2.0.0 reporting scope)
+
+The following work belongs to later authenticated/operational milestones; it is not required for the v2.0.0 Final Reporting Edition and must not be implied as already configured.
 
 1. Complete the security design and obtain company approval for a private authenticated frontend and data-processing boundary.
 2. Configure and test Cloudflare Access identity/groups, secrets, private origin policy and production-grade D1 separation before connecting operational data.
@@ -91,3 +93,8 @@ Folder Share, My Performance, Dispatch Configuration, Reliability Centre and Adm
 6. Add brand review/correction workflow and governed multi-device colleague directory access under authenticated permissions.
 
 **Production readiness:** not ready. The current public site is a reporting/prototype frontend; the backend is a staging foundation. Do not connect real customer-level operational data or enable live dispatch actions until security, identity, integrations, transactional writes and audit requirements have been approved and validated.
+
+
+## Final Reporting Edition boundary
+
+The v2.0.0 product scope is documented in [FINAL_RELEASE_SCOPE.md](FINAL_RELEASE_SCOPE.md). Its intended operating path is Excel tracker → local Reporting Studio sanitisation → approved JSON snapshot → Dashboard. OneDrive/SharePoint sync, Microsoft Graph, Outlook relay, automatic ingestion and dispatch writes are deliberately excluded. The public GitHub Pages site remains unauthenticated and is suitable only for company-approved sanitised aggregate snapshots. See [USER_GUIDE.md](USER_GUIDE.md) for the supported workflow and [FINAL_RELEASE_CHECKLIST.md](FINAL_RELEASE_CHECKLIST.md) for the manual acceptance gates.
