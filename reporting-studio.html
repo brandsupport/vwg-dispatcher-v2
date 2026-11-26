@@ -8,7 +8,7 @@
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
   <link rel="stylesheet" href="./reporting-studio.css?v=20261126-workbook-picker-fallback-1">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261126-workbook-input-lifetime-1" defer></script>
+  <script src="./reporting-studio.js?v=20261126-native-picker-stream-read-1" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -36,8 +36,8 @@
         <div class="file-picker">
           <label for="workbookFile">Complete tracker workbook (.xlsx, .xls or .xlsm) <em>Required</em></label>
           <div class="workbook-picker-actions">
-            <button id="chooseWorkbookButton" class="button button-secondary" type="button">Choose workbook…</button>
-            <span>Or use the file control below</span>
+            <button id="chooseWorkbookButton" class="button button-secondary" type="button">Open workbook directly…</button>
+            <span>Uses Chrome's native file picker when supported; the file control below remains as a fallback</span>
           </div>
           <div id="workbookDropZone" class="workbook-drop-zone" role="button" tabindex="0" aria-label="Drop an Excel workbook here or press Enter to browse">
             <strong>Drop your Excel workbook here</strong>
