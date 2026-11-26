@@ -81,7 +81,7 @@ function createWorkbookTestHooks(){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -301,6 +301,23 @@ test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers"
   assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.XLSM"),true);
   assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xlsb"),false);
   assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.csv"),false);
+});
+
+test("Activity Log Source Inbox header maps in the same way as Folder Path",()=>{
+  const hooks=createWorkbookTestHooks();
+  const headers=[
+    "Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox",
+    "Original Assignee","Current Owner","Assignment Flag","Incident Count","Details / Notes"
+  ];
+  const sheet={rows:[["ACTIVITY LOG"],[],[],[],headers,["2026-11-25T10:00:00+02:00","AUTO_ASSIGNMENT","SAFE-KEY","\\\\VWGUK R: Milton Keynes, AgencyDetags\\Inbox","Synthetic Agent","Synthetic Agent","TRUE","0","PRIVATE NOTE"]]};
+  const assignments=hooks.worksheetToTable(sheet,"assignments");
+  const workflow=hooks.worksheetToTable(sheet,"workflow");
+  const assignmentInbox=hooks.autoMap(assignments.headers,["source inbox","folder path","source folder","inbox"]);
+  const workflowInbox=hooks.autoMap(workflow.headers,["source inbox","folder path","source folder","inbox"]);
+  assert.equal(assignmentInbox,"Source Inbox");
+  assert.equal(workflowInbox,"Source Inbox");
+  assert.equal(assignments.records.length,1);
+  assert.equal(workflow.records.length,1);
 });
 
 test("the full six-tab workbook selects Email Details and reuses Activity Log twice",()=>{
