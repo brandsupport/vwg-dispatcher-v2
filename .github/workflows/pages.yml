@@ -1,4 +1,5 @@
-name: Deploy Dispatcher 2.0 demo to GitHub Pages
+name: Deploy Dispatcher 2.0 Final Reporting Edition to GitHub Pages
+run-name: Deploy final reporting edition · ${{ github.sha }}
 
 on:
   push:
