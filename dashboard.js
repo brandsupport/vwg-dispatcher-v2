@@ -484,9 +484,15 @@ const state = {
   adminRole:"operations_manager", adminRequestSearch:"", adminRequestStatus:"all", selectedAdminRequest:"ACCESS-SAMPLE-004"
 };
 
+// These screens are intentionally hidden from the v2.0 reporting release.
+// Their renderers, data models, styles and export logic remain in this source
+// for later authenticated/operational milestones. Folder Share is consolidated
+// into the Team Performance allocation matrix.
+const HIDDEN_VIEWS = new Set(["folders","my","rules","reliability","admin"]);
+
 const VIEW_TITLES = {
   overview:"Overview",
-  live:"Live Operations",
+  live:"Current Operations",
   tickets:"Ticket Analytics",
   email:"Email Performance",
   brands:"Brand Insights",
@@ -1434,7 +1440,7 @@ function renderOverview(){
     '</div>'+
     '<div class="grid-two overview-primary-grid">'+
       trendPanel+
-      panel("Initial allocation distribution","First assignment only · handovers and recoveries remain separate",overviewAllocationSummary(rows),'<button class="panel-action" data-go="folders">Open folder share matrix ↗</button>')+
+      panel("Initial allocation distribution","First assignment only · handovers and recoveries remain separate",overviewAllocationSummary(rows),'<button class="panel-action" data-go="team">Open team performance ↗</button>')+
     '</div>'+
     '<div class="section-heading overview-section-heading"><div><h2>Inbox performance</h2><p>'+(imported?"Current ticket records, first assignments, resolved and outstanding counts from the imported snapshot.":"Compare received, first-assigned, resolved and outstanding sample totals across the selected inbox scope.")+'</p></div><span class="subtle-tag">'+inboxes.length+' INBOXES IN SCOPE</span></div>'+
     overviewInboxSnapshot(inboxes)+
@@ -1612,7 +1618,7 @@ function renderImportedLiveOperations(){
   const eventRows=workflow.map(row=>
     '<tr><td>'+esc(row.event_type.replaceAll("_"," "))+'</td><td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td><td class="total-cell">'+fmt(row.event_count)+'</td><td>'+fmt(row.distinct_tickets)+'</td></tr>'
   );
-  pageContent.innerHTML=heading("CURRENT-STATE OPERATIONS","Workstream control room","This is the operational summary for the imported point-in-time workbook snapshot. It is not a live Outlook connection and does not contain individual ticket details.",'<button class="btn btn-secondary" data-go="folders">Open folder share ↗</button>')+
+  pageContent.innerHTML=heading("CURRENT OPERATIONS","Workstream status from imported snapshot","Review the sanitised point-in-time tracker snapshot across all four inboxes. This is read-only reporting, not a live Outlook connection and it does not contain individual ticket details.",'<button class="btn btn-secondary" data-go="team">Open team performance ↗</button>')+
     '<div class="live-environment-strip local-snapshot-strip"><span class="live-env-tag"><i class="demo-dot"></i> SANITISED SNAPSHOT</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Not controlled from this dashboard</span><span><b>Records</b> '+fmt(received)+'</span></div>'+
     kpiGrid([
       kpi("Ticket records",fmt(received),"Current Assignments register rows","▤"),
@@ -1643,7 +1649,7 @@ function renderLive(){
   const available=AGENTS.filter(a=>a.availability==="Available").length;
   const owners=[...new Set(TICKETS.map(t=>t.member).filter(name=>name!=="Unassigned"))].sort();
   const brands=[...new Set(TICKETS.map(t=>t.brand))].sort();
-  pageContent.innerHTML=heading("LIVE OPERATIONS","Queue-first control room","Find and inspect individual tickets, filter unassigned and at-risk work, and review the illustrative team-coverage snapshot. This is a sample workbench, not a live mailbox connection.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export visible queue</button>')+
+  pageContent.innerHTML=heading("CURRENT OPERATIONS","Queue context and workstream overview","Review a sanitised imported snapshot or inspect the clearly labelled demonstration queue. Individual sample tickets are illustrative only; this is not a live mailbox connection.",'<button class="btn btn-secondary" data-action="export-live-queue">↓ Export sample queue</button>')+
     '<div class="live-environment-strip"><span class="live-env-tag"><i class="demo-dot"></i> DEMONSTRATION DATA</span><span><b>Mailbox sync</b> Not connected</span><span><b>Dispatch engine</b> Preview only</span><span><b>Last sample refresh</b> Static dataset</span></div>'+
     (state.importedSnapshot?'<div class="prototype-warning"><strong>Separate data source.</strong> Your sanitised aggregate snapshot is loaded in Overview and the aggregate analytics screens. It contains no ticket IDs or message details, so this individual queue and its sample ticket timelines remain demonstration-only.</div>':'')+
     kpiGrid([
@@ -1679,7 +1685,7 @@ function renderLive(){
         healthRow("Excel tracker","Not connected","warning","No assignment records are being written")+
         healthRow("Dispatcher service","Preview only","neutral","No allocation or recovery actions are enabled")+
         healthRow("Event history","Sample records","neutral","Synthetic timeline for interface testing")+
-      '</div>','<button class="panel-action" data-go="reliability">Open reliability centre ↗</button>')
+      '</div>','<button class="panel-action" data-go="audit">Review event history ↗</button>')
     '</div>';
 }
 function ticketQueueBase(){
@@ -3298,6 +3304,10 @@ function showToast(message){
 }
 function navigate(view){
   if(!VIEW_TITLES[view])return;
+  if(HIDDEN_VIEWS.has(view)){
+    showToast("This workspace is reserved for a future implementation milestone.");
+    return;
+  }
   state.view=view;state.memberSearch="";render();
   if(window.innerWidth<820)pageContent.scrollIntoView({behavior:"smooth",block:"start"});
 }
@@ -3719,7 +3729,8 @@ document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click"
 document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
 document.getElementById("folderSelect").addEventListener("change",e=>{state.folder=e.target.value;render();});
 document.getElementById("globalSearch").addEventListener("input",e=>{state.search=e.target.value;render();});
-document.getElementById("profileButton").addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
+// Future sign-in entry point; the placeholder profile button is omitted from this reporting release.
+document.getElementById("profileButton")?.addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
 document.addEventListener("change",event=>{
   const ticketFilter=event.target.closest("[data-ticket-filter]");
   if(ticketFilter){

@@ -5,11 +5,17 @@
 
 This document distinguishes working prototype/reporting capabilities from production operations. A visible screen or clickable prototype control does not, by itself, mean the underlying live service has been implemented.
 
+## v2.0 reporting-release navigation
+
+The active dashboard navigation contains ten workspaces: Overview, Current Operations, Ticket Analytics, Email Performance, Brand Insights, Workflow Analytics, Team Performance, Roster & Coverage, Audit History, and Reports & Exports. Reporting Studio remains a separate local utility.
+
+Folder Share, My Performance, Dispatch Configuration, Reliability Centre and Administration are intentionally hidden from user-facing navigation. Their source code, renderers, data structures, styles and export logic are retained for future work; navigation guards prevent ordinary dashboard shortcuts from opening them. Folder Share's useful allocation matrix is included in Team Performance.
+
 ## Implemented and verified in the current prototype
 
 | Area | Current implementation | Boundary |
 |---|---|---|
-| Dashboard shell | Fifteen navigable workspaces, global search, period and inbox controls, responsive cards/tables and CSV exports | Public, unauthenticated static application |
+| Dashboard shell | Ten navigable reporting workspaces, global search, period and inbox controls, responsive cards/tables and CSV exports; five dormant views remain in source but are not exposed in the release navigation | Public, unauthenticated static application |
 | Offline Reporting Studio | Reads the tracker workbook or separate CSVs in the browser; maps Assignments, Activity Log, Team & Shifts and optional Email Details; pseudonymises agent references; produces aggregate JSON and local CSVs | No source workbook rows are uploaded or persisted |
 | Brand classification | Uses a mapped Brand value, Email Details join by Email Key / ID, and the recognised Hub de-tag subject pattern as a fallback. Specific matching supports Audi, Volkswagen, SEAT, Škoda, CUPRA and Volkswagen Commercial Vehicles | Unmatched or ambiguous rows remain unclassified; there is no general manual review/override workflow yet |
 | Team Performance | Initial assignments, allocation share by inbox, current-owner portfolio, owner workload and brand share by colleague | Resolution-rate/solve-time metrics require explicit source status and timestamps; not all workbook versions provide them |
@@ -27,7 +33,7 @@ This document distinguishes working prototype/reporting capabilities from produc
 ### 1. Live operational data and actions
 
 - No production connection from the public dashboard to Outlook shared mailboxes, the Excel tracker, Citrix or Microsoft 365.
-- No live ticket queue, ticket detail retrieval, message preview, attachment access or ticket-level search from the imported snapshot. The aggregate snapshot deliberately removes ticket references and message/source rows; Live Operations' individual ticket workbench therefore remains synthetic.
+- No live ticket queue, ticket detail retrieval, message preview, attachment access or ticket-level search from the imported snapshot. The aggregate snapshot deliberately removes ticket references and message/source rows; Current Operations' individual ticket workbench therefore remains synthetic.
 - No API endpoints for ticket creation/update, assignment, handover, manual reassignment, recovery/restoration, category changes or assignment confirmation.
 - No live queue streaming, scheduled snapshot refresh, incremental sync or verified reconciliation with the operational workbook/mailboxes.
 - The existing Outlook VBA dispatcher is a separate operational component; the public web dashboard does not control it.
@@ -50,13 +56,13 @@ This document distinguishes working prototype/reporting capabilities from produc
 
 - The imported Activity Log is a read-only representation of the workbook's recorded events. It cannot prove who authenticated and performed an action.
 - No production append-only audit ingestion, trusted actor claims, signed/externally replicated audit chain, retention enforcement or privileged-change approval history is connected.
-- Reliability Centre data remains a demonstration. Live dispatcher heartbeat, mailbox/Excel connection telemetry, queue age/depth, retry/backoff health, write reconciliation, Worker/database health and incident alerting are not wired to live sources.
+- The retained Reliability Centre data remains a demonstration. Live dispatcher heartbeat, mailbox/Excel connection telemetry, queue age/depth, retry/backoff health, write reconciliation, Worker/database health and incident alerting are not wired to live sources.
 
 ### 5. Workforce, fairness and dispatch control
 
 - Roster views do not have live attendance, break, leave, absence or availability signals.
 - Inbox eligibility, skills/capability constraints, minimum staffing targets, hours-adjusted fairness and actual capacity forecasts are not derived from the current imported roster.
-- Dispatch Configuration is a local scenario/preview workspace. It cannot validate against live conditions, obtain authenticated approval, apply a new policy or roll back a live configuration.
+- The retained Dispatch Configuration code is a local scenario/preview workspace. It cannot validate against live conditions, obtain authenticated approval, apply a new policy or roll back a live configuration.
 - No live global or per-inbox emergency stop, pause/resume command, manager approval workflow or verified dispatch-control API exists in the web application.
 
 ### 6. Performance measures still awaiting evidence

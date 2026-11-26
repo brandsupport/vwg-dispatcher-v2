@@ -36,10 +36,10 @@ function makeNode(dataset={}) {
 test("dashboard starts with the Overview rendered and navigation handlers attached",()=>{
   const nodes=new Map();
   const pageContent=makeNode();
-  const navNodes=Array.from(
-    ["overview","live","tickets","brands","workflow","folders","team","my","roster","rules","reliability","audit","reports","admin"],
-    view=>makeNode({view})
-  );
+  const activeViews=[
+    "overview","live","tickets","email","brands","workflow","team","roster","audit","reports"
+  ];
+  const navNodes=activeViews.map(view=>makeNode({view}));
   const document={
     getElementById(id){
       if(id==="pageContent")return pageContent;
@@ -75,8 +75,10 @@ test("dashboard starts with the Overview rendered and navigation handlers attach
   assert.equal(pageContent.dataset.view,"overview");
   assert.ok(pageContent.innerHTML.length>1000,"initial dashboard content must replace the loading placeholder");
   assert.equal(document.getElementById("topbarPage").textContent,"Overview");
+  assert.deepEqual(navNodes.map(node=>node.dataset.view),activeViews,
+    "startup fixture must represent the ten active reporting workspaces");
   assert.ok(navNodes.every(node=>(node.listeners.get("click")||[]).length===1),
-    "all navigation buttons must receive click handlers");
+    "all active navigation buttons must receive click handlers");
   assert.equal((document.getElementById("importSnapshotButton").listeners.get("click")||[]).length,1);
   assert.equal((document.getElementById("snapshotFileInput").listeners.get("change")||[]).length,1);
 });
