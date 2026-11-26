@@ -885,6 +885,20 @@ async function sanitise(){
         if(!ticket.resolvedByRef&&evidence.agentRef)ticket.resolvedByRef=evidence.agentRef;
       }
     }
+    // Rebuild current-state totals after lifecycle events have overridden the
+    // initial ticket Status. This keeps the Inbox summary and overall totals
+    // consistent with the ticket-level resolution calculations below.
+    for(const stats of Object.values(inboxStats)){
+      stats.resolved=0;stats.outstanding=0;stats.unassigned=0;
+    }
+    for(const ticket of ticketMap.values()){
+      const stats=inboxStats[ticket.inbox];
+      if(ticket.resolved)stats.resolved++;
+      else{
+        stats.outstanding++;
+        if(ticket.unassigned)stats.unassigned++;
+      }
+    }
     const workflow=[...workflowMap.values()].map(row=>({event_type:row.event_type,inbox_code:row.inbox_code,event_count:row.event_count,distinct_tickets:row.tickets.size})).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
     const byInbox=Object.keys(INBOXES).map(inbox_code=>({inbox_code,...inboxStats[inbox_code]}));
     const dailyVolume=[...dailyMap.values()].sort((a,b)=>a.date_utc.localeCompare(b.date_utc)||a.inbox_code.localeCompare(b.inbox_code));
