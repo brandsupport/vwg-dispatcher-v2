@@ -3328,7 +3328,8 @@ body { font-size:15.2px !important; line-height:1.52; }
 .activity-event-results .table-wrap {
   max-width: 100%;
   max-height: min(62vh, 680px);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid rgba(255, 77, 123, .18);
   border-radius: 12px;
   background: rgba(8, 6, 11, .57);
