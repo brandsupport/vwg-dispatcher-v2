@@ -878,10 +878,7 @@ async function loadPrivateAgentLookup(file){
   render();
   showToast("Loaded "+next.size+" colleague names in this browser tab only.");
 }
-async function loadLocalSnapshot(file){
-  if(!file)return;
-  if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
-  const parsed=JSON.parse(await file.text());
+function applyLocalSnapshotObject(parsed,announce=true){
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
   privateAgentNames=new Map();
@@ -904,8 +901,16 @@ async function loadLocalSnapshot(file){
   document.getElementById("globalSearch").value="";
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
-  showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
+  if(announce)showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
+  return clean;
 }
+async function loadLocalSnapshot(file){
+  if(!file)return;
+  if(file.size>5*1024*1024)throw new Error("Snapshot files must be smaller than 5 MB.");
+  const parsed=JSON.parse(await file.text());
+  return applyLocalSnapshotObject(parsed,true);
+}
+
 function clearLocalSnapshot(){
   state.importedSnapshot=null;
   state.period="month";
@@ -3151,6 +3156,29 @@ function handleAction(action){
   if(action==="reset-reliability-filters"){state.reliabilitySearch="";state.reliabilityType="all";state.reliabilityStatus="all";state.reliabilitySeverity="all";state.selectedReliabilityEvent=null;renderReliability();return;}
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
+function bindStudioSnapshotReceiver(){
+  const token=new URLSearchParams(window.location.search).get("receiveSnapshot")||"";
+  if(!token||typeof BroadcastChannel!=="function")return;
+  const channel=new BroadcastChannel("vwg-dispatcher-snapshot-transfer-v1");
+  let handled=false;
+  channel.addEventListener("message",event=>{
+    const message=event.data||{};
+    if(handled||message.token!==token||message.type!=="VWG_IMPORT_SNAPSHOT")return;
+    handled=true;
+    try{
+      applyLocalSnapshotObject(message.snapshot,false);
+      channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:true});
+      showToast("Dashboard populated with the sanitised Reporting Studio snapshot.");
+      const cleanUrl=new URL(window.location.href);
+      cleanUrl.searchParams.delete("receiveSnapshot");
+      window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
+    }catch(error){
+      channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:false,error:error.message});
+    }
+  });
+  channel.postMessage({type:"VWG_DASHBOARD_READY",token});
+}
+
 document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
 document.getElementById("importAgentLookupButton").addEventListener("click",()=>document.getElementById("agentLookupFileInput").click());
 document.getElementById("agentLookupFileInput").addEventListener("change",async event=>{
@@ -3309,4 +3337,5 @@ document.addEventListener("keydown",event=>{
   }
   if(event.key==="Escape")closeModal();
 });
+bindStudioSnapshotReceiver();
 render();
