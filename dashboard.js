@@ -963,6 +963,7 @@ function applyLocalSnapshotObject(parsed,announce=true){
   state.memberSearch="";
   state.search="";
   document.getElementById("globalSearch").value="";
+  state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
   if(announce)showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
@@ -992,6 +993,7 @@ function clearLocalSnapshot(){
   document.getElementById("importAgentLookupButton").hidden=true;
   document.getElementById("agentLookupFileInput").value="";
   privateAgentNames=new Map();
+  state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
   state.selectedAgent=null;
   state.memberSearch="";
   render();
@@ -2727,6 +2729,14 @@ function importedActivityRows(){
   const term=String(state.auditSearch||"").trim().toLowerCase();
   return (state.importedSnapshot.activity_log||[])
     .filter(event=>state.folder==="all"||event.inbox_code===state.folder)
+    .filter(event=>state.auditEventType==="all"||event.event_type===state.auditEventType)
+    .filter(event=>state.auditAgent==="all"||event.original_agent_ref===state.auditAgent||event.current_agent_ref===state.auditAgent)
+    .filter(event=>{
+      const date=String(event.event_time_utc||"").slice(0,10);
+      if(state.auditFromDate&&(!date||date<state.auditFromDate))return false;
+      if(state.auditToDate&&(!date||date>state.auditToDate))return false;
+      return true;
+    })
     .filter(event=>!term||[
       event.event_time_egypt,event.event_type,event.ticket_ref,event.inbox_code,
       displayAgentName(event.original_agent_ref||""),displayAgentName(event.current_agent_ref||""),
@@ -2770,6 +2780,9 @@ function renderImportedActivityAudit(){
       '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
     '</tr>'
   );
+  const eventTypes=[...new Set(all.map(event=>event.event_type))].sort();
+  const agentRefs=[...new Set(all.flatMap(event=>[event.original_agent_ref,event.current_agent_ref]).filter(Boolean))]
+    .sort((a,b)=>displayAgentName(a).localeCompare(displayAgentName(b)));
   const emptyMessage=!sourceSupplied
     ?"No Activity Log data was included in this snapshot. In Studio, select Activity Log for both assignment history and workflow history."
     :(rowsRead>0&&rowsAccepted===0
@@ -2785,7 +2798,13 @@ function renderImportedActivityAudit(){
       kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
     ])+
     '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
-    '<div class="audit-filter-toolbar"><label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or agent…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label><span class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</span></div>'+
+    '<div class="audit-filter-toolbar imported-audit-filters">'+
+      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+      '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
+      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent">'+auditSelectOptions(agentRefs,state.auditAgent,"All colleagues").replace(/<option value="([^"]+)"/g,(match,value)=>match.replace(value,esc(value)))+'</select></label>'+
+      '<label class="filter-control"><span>FROM DATE</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
+      '<label class="filter-control"><span>TO DATE</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
+    '</div><div class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</div>'+
     (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+emptyMessage+'</div>')+
     '</section>'+
     '<div class="prototype-warning"><strong>Source limitations.</strong> Free-text Details / Notes are deliberately excluded because they can contain subjects or personal data. This view reports only events preserved in the workbook and does not claim authenticated actors or tamper-evident audit integrity.</div>';
@@ -3246,7 +3265,7 @@ function handleAction(action){
   if(action==="export-team"){exportTeam();return;}
   if(action==="export-roster"){exportRoster();return;}
   if(action==="export-audit"){if(state.importedSnapshot)exportImportedActivityLog();else exportAuditHistory();return;}
-  if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.selectedAuditEvent=null;renderAudit();return;}
+  if(action==="reset-audit-filters"){state.auditSearch="";state.auditCategory="all";state.auditOutcome="all";state.auditActor="all";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";state.selectedAuditEvent=null;renderAudit();return;}
   if(action==="export-admin-security"){exportAdminSecurityBlueprint();return;}
   if(action==="reset-admin-review"){state.adminRequestSearch="";state.adminRequestStatus="all";state.adminRole="operations_manager";state.selectedAdminRequest="ACCESS-SAMPLE-004";renderAdmin();return;}
   if(action==="export-summary"){exportSummary();return;}
