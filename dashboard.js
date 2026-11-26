@@ -467,6 +467,8 @@ const ADMIN_INTEGRATIONS = [
 ];
 
 let privateAgentNames=new Map();
+let privateEmailLookup=[];
+let privateEmailLookupSnapshotId="";
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   importedSnapshot:null,
@@ -879,47 +881,86 @@ function importedSourceAvailable(source){
 function displayAgentName(reference){return privateAgentNames.get(reference)||reference;}
 const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1";
 function readSavedPrivateAgentDirectory(){
+  privateEmailLookup=[];
+  privateEmailLookupSnapshotId="";
   try{
     if(typeof localStorage==="undefined")return new Map();
     const raw=localStorage.getItem(PRIVATE_AGENT_DIRECTORY_KEY);
     if(!raw)return new Map();
-    const rows=JSON.parse(raw);
-    if(!Array.isArray(rows))return new Map();
+    const payload=JSON.parse(raw);
+    // Continue to read the original array format from earlier dashboard releases.
+    const agents=Array.isArray(payload)?payload:(Array.isArray(payload?.agents)?payload.agents:[]);
     const result=new Map();
-    for(const row of rows.slice(0,250)){
+    for(const row of agents.slice(0,250)){
       const reference=String(row?.agent_ref||"").trim();
       const name=String(row?.display_name||"").trim().slice(0,100);
       if(/^Agent-[A-F0-9]{10}$/.test(reference)&&name)result.set(reference,name);
     }
+    const lookup=Array.isArray(payload)?null:payload?.email_lookup;
+    const snapshotId=String(lookup?.snapshot_generated_at_utc||"");
+    const currentSnapshotId=typeof state!=="undefined"&&state.importedSnapshot?String(state.importedSnapshot.generated_at_utc||""):"";
+    if(lookup&&Array.isArray(lookup.rows)&&snapshotId&&(!currentSnapshotId||snapshotId===currentSnapshotId)){
+      privateEmailLookup=lookup.rows.slice(0,5000).map(row=>({
+        ticket_ref:String(row?.ticket_ref||""),
+        order_number:String(row?.order_number||"").slice(0,100),
+        vin:String(row?.vin||"").toUpperCase().slice(0,100),
+        brand_code:String(row?.brand_code||""),
+        inbox_code:String(row?.inbox_code||""),
+        received_date:String(row?.received_date||""),
+        completion_date:String(row?.completion_date||""),
+        status:String(row?.status||""),
+        original_agent_ref:String(row?.original_agent_ref||""),
+        current_agent_ref:String(row?.current_agent_ref||"")
+      })).filter(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)&&
+        (row.order_number||row.vin)&&
+        ["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"].includes(row.brand_code)&&
+        ["agency","detags","transfers","unadopts"].includes(row.inbox_code));
+      privateEmailLookupSnapshotId=snapshotId;
+    }
     return result;
-  }catch(error){return new Map();}
+  }catch(error){
+    privateEmailLookup=[];
+    privateEmailLookupSnapshotId="";
+    return new Map();
+  }
 }
 function savePrivateAgentDirectory(directory){
   try{
     if(typeof localStorage==="undefined")return false;
     const rows=[...directory.entries()].slice(0,250).map(([agent_ref,display_name])=>({agent_ref,display_name}));
-    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(rows));
+    const emailLookup=privateEmailLookupSnapshotId?{
+      snapshot_generated_at_utc:privateEmailLookupSnapshotId,
+      rows:privateEmailLookup.slice(0,5000)
+    }:null;
+    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify({agents:rows,email_lookup:emailLookup}));
     return true;
   }catch(error){return false;}
 }
 function restorePrivateAgentDirectoryForSnapshot(){
   const known=knownSnapshotAgentRefs();
   const saved=readSavedPrivateAgentDirectory();
+  if(privateEmailLookupSnapshotId!==String(state.importedSnapshot?.generated_at_utc||"")){
+    privateEmailLookup=[];
+    privateEmailLookupSnapshotId="";
+  }
   privateAgentNames=new Map([...saved.entries()].filter(([reference])=>known.has(reference)));
   updatePrivateNameControls();
   return privateAgentNames.size;
 }
 function updatePrivateNameControls(){
   const clearButton=document.getElementById("clearAgentDirectoryButton");
-  if(clearButton)clearButton.hidden=!state.importedSnapshot||privateAgentNames.size===0;
+  if(clearButton)clearButton.hidden=!state.importedSnapshot||(!privateAgentNames.size&&!privateEmailLookup.length);
 }
 function clearSavedPrivateAgentDirectory(){
   try{if(typeof localStorage!=="undefined")localStorage.removeItem(PRIVATE_AGENT_DIRECTORY_KEY);}catch(error){}
   privateAgentNames=new Map();
+  privateEmailLookup=[];
+  privateEmailLookupSnapshotId="";
   updatePrivateNameControls();
   render();
-  showToast("Private colleague names cleared from this browser.");
+  showToast("Private colleague names and order/VIN lookup cleared from this browser.");
 }
+
 function memberInitials(name){
   const value=String(name||"").trim();
   if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
