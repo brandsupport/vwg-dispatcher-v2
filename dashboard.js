@@ -59,6 +59,7 @@ function workflowSummaryRows(){
     {id:"reassignment",label:"Reassignment",codes:["reassigned"],color:"#f1846f"},
     {id:"exceptions",label:"Exceptions / pending",codes:["exception","assignment_pending","assignment_preview"],color:"#ef8d75"},
     {id:"email_lifecycle",label:"Email lifecycle",codes:["email_metadata_captured","email_exit_pending","email_completed"],color:"#8e9cff"},
+    {id:"resolution",label:"Resolved / reopened",codes:["resolved","reopened"],color:"#ffd166"},
     {id:"baseline",label:"Baseline / discovery",codes:["received","baseline_complete"],color:"#8babc8"}
   ];
   const ticketTotal=state.importedSnapshot.tickets.by_inbox
@@ -2085,13 +2086,27 @@ function teamBrandPortfolioPanel(profiles){
   if(!state.importedSnapshot.tickets.brand_field_mapped||!rows.length)return '<div class="empty-state">No ticket brand-by-owner records are available. Map a Brand field on the Assignments sheet or join Email Details by Email Key / ID. Unmatched records remain Other / unclassified.</div>';
   const codes=["volkswagen","audi","skoda","seat","cupra","vwcv","other"];
   const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other / unclassified"};
-  const byKey=new Map(rows.map(row=>[row.agent_ref+"|"+(row.brand_code==="unclassified"?"other":row.brand_code),row]));
+  const grouped=new Map();
+  for(const row of rows){
+    const code=row.brand_code==="unclassified"?"other":row.brand_code;
+    const key=row.agent_ref+"|"+code;
+    const prior=grouped.get(key)||{agent_ref:row.agent_ref,brand_code:code,ticket_count:0,agent_portfolio_total:row.agent_portfolio_total,brand_ticket_total:row.brand_ticket_total};
+    prior.ticket_count+=row.ticket_count;
+    prior.agent_portfolio_total=Math.max(prior.agent_portfolio_total,row.agent_portfolio_total);
+    prior.brand_ticket_total+=row.brand_code==="unclassified"?row.brand_ticket_total:row.brand_ticket_total;
+    grouped.set(key,prior);
+  }
+  const byKey=grouped;
+  const brandTotals=new Map();
+  for(const row of byKey.values())brandTotals.set(row.brand_code,(brandTotals.get(row.brand_code)||0)+row.ticket_count);
   const body=profiles.map(agent=>{
     const ref=agent.id.replace(/^snapshot-/,"");
     const cells=codes.map(code=>{
       const row=byKey.get(ref+"|"+code);
       if(!row)return '<td class="brand-share-zero">0 <small>0.0% mix</small></td>';
-      return '<td><strong>'+fmt(row.ticket_count)+'</strong><small>'+row.agent_portfolio_share_pct.toFixed(1)+'% of agent · '+row.brand_owner_share_pct.toFixed(1)+'% of brand</small></td>';
+      const agentShare=row.agent_portfolio_total?row.ticket_count/row.agent_portfolio_total*100:0;
+      const brandShare=brandTotals.get(code)?row.ticket_count/brandTotals.get(code)*100:0;
+      return '<td><strong>'+fmt(row.ticket_count)+'</strong><small>'+agentShare.toFixed(1)+'% of agent · '+brandShare.toFixed(1)+'% of brand</small></td>';
     }).join("");
     return '<tr><td>'+memberCell(agent.name,agent.shift)+'</td>'+cells+'</tr>';
   });
@@ -2119,7 +2134,8 @@ function renderTeam(){
       kpi(state.importedSnapshot&&!hasResolutionTracking()?"Current owner records":"Current open workload",fmt(openWorkload),state.importedSnapshot?(hasResolutionTracking()?"Owner snapshot · independent of inbox filter":"Current owner counts; resolution state not tracked"):"All-profile sample snapshot · not period or inbox scoped","◷"),
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
-    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Agent names remain pseudonymised until you use the top-bar “Load colleague names” button with the matching private CSV from Studio. Names stay in this browser only; the shared JSON remains pseudonymised. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolution status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; event involvement is not the same as authenticated action attribution. Resolution rate is not tracked yet.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
+    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Colleague names are shown after the matching private lookup has been loaded; direct Studio handoff now carries that lookup in browser memory. The shared JSON snapshot remains pseudonymised. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolved status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; Activity Log owner associations are not authenticated actor proof. Resolution rate is calculated against the current-owner portfolio.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
+    (state.importedSnapshot&&!privateAgentNames.size?'<div class="team-name-prompt"><span><strong>Colleague names are not loaded.</strong><small>Use the private agent-name lookup CSV exported by Reporting Studio. The names stay in this browser tab only.</small></span><button class="btn btn-secondary" type="button" data-action="load-agent-names">Load colleague names</button></div>':'')+
     '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and '+(state.importedSnapshot&&!hasResolutionTracking()?"records with a current owner. Resolution state is not tracked.": "current open-work "+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile."))+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
       '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
@@ -2801,7 +2817,7 @@ function renderImportedActivityAudit(){
     '<div class="audit-filter-toolbar imported-audit-filters">'+
       '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
       '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
-      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent">'+auditSelectOptions(agentRefs,state.auditAgent,"All colleagues").replace(/<option value="([^"]+)"/g,(match,value)=>match.replace(value,esc(value)))+'</select></label>'+
+      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
       '<label class="filter-control"><span>FROM DATE</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
       '<label class="filter-control"><span>TO DATE</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
     '</div><div class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</div>'+
