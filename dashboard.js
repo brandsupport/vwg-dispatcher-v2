@@ -2875,9 +2875,11 @@ function privateEmailLookupMatches(){
     const date=row.received_date||row.completion_date||"";
     if(state.auditFromDate&&(!date||date<state.auditFromDate))return false;
     if(state.auditToDate&&(!date||date>state.auditToDate))return false;
-    return [
-      row.order_number,row.vin,row.ticket_ref,row.brand_code,row.status
-    ].some(value=>compactAuditToken(value).includes(token));
+    return compactAuditToken(row.order_number).includes(token)||
+      compactAuditToken(row.vin).includes(token)||
+      compactAuditToken(row.ticket_ref).includes(token)||
+      compactAuditToken(row.brand_code).includes(token)||
+      compactAuditToken(row.status).includes(token);
   });
 }
 function importedActivityRows(emailMatches){
