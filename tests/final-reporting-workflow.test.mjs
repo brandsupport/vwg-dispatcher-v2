@@ -20,7 +20,7 @@ test("Dashboard has a useful first-run path and working JSON import action", () 
   assert.match(dashboardJs, /Import sanitised JSON/);
   assert.match(dashboardJs, /data-action="open-snapshot-picker"/);
   assert.match(dashboardJs, /action==="open-snapshot-picker".*snapshotFileInput/s);
-  assert.match(dashboardCss, /.reporting-start-panel/);
+  assert.match(dashboardCss, /\\.reporting-start-panel/);
   assert.match(dashboardHtml, /Demo dataset · Sample figures only · No live Outlook or Excel connection/);
 });
 
@@ -32,10 +32,10 @@ test("Dashboard labels demo and imported state without claiming a live connectio
 
 test("Reporting Studio explains the reporting cycle and preserves both hand-off routes", () => {
   assert.match(studioHtml, /workflow-roadmap/);
-  for (const step of ["Select","Map","Review","Publish"]) assert.ok(studioHtml.includes(">"+step+"<"), "Missing workflow step "+step);
+  for (const step of ["Select","Map","Review","Publish"]) assert.ok(studioHtml.includes("<strong>"+step+"</strong>"), "Missing workflow step "+step);
   assert.match(studioHtml, /openDashboardWithDataButton/);
   assert.match(studioHtml, /downloadSnapshot/);
-  assert.match(studioCss, /.workflow-roadmap/);
+  assert.match(studioCss, /\\.workflow-roadmap/);
 });
 
 test("Release documents agree on the supported workflow", () => {
