@@ -335,7 +335,7 @@ test("maps resolved and closed ticket statuses and calculates brand share by cur
     "KEY-CLOSED-01,Detags,Closed,Skoda Auto,2026-11-24 08:30:00,Agent One",
     "KEY-RESOLVED-02,Agency Detags,Resolved,SEAT UK,2026-11-24 09:00:00,Agent Two",
     "KEY-OPEN-03,Detags,Assigned,CUPRA UK,2026-11-24 09:30:00,Agent One",
-    "KEY-CLOSED-04,Transfers,Closed,Volkswagen Commercial Vehicles,2026-11-24 10:00:00,Agent Three"
+    "KEY-CLOSED-04,Transfers,Assigned,Volkswagen Commercial Vehicles,2026-11-24 10:00:00,Agent Three"
   ].join("\r\n");
   const activity=[
     "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
