@@ -71,6 +71,8 @@ jobs:
         run: node --test tests/reporting-dashboard.integration.test.mjs
       - name: Test final reporting edition workflow and scope
         run: node --test tests/final-reporting-workflow.test.mjs
+      - name: Test shared Dashboard and Studio app branding icons
+        run: node --test tests/branding-icon.test.mjs
       - name: Validate local-only reporting studio boundary
         run: |
           node --input-type=module <<'NODE'
