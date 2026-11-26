@@ -320,27 +320,30 @@ test("the workbook reader explains how to recover when both browser readers fail
   const file={name:"tracker.xlsx",arrayBuffer(){const error=new Error("File access denied.");error.name="NotReadableError";return Promise.reject(error);}};
   await assert.rejects(
     hooks.readFileArrayBuffer(file),
-    /local Downloads folder.*not OneDrive, SharePoint, a network drive/i
+    error=>/Blob\\.stream\\(\\) is unavailable/.test(error.message)&&
+      /File\\.arrayBuffer\\(\\): NotReadableError/.test(error.message)&&
+      /FileReader: NotReadableError/.test(error.message)&&
+      /not uploaded/.test(error.message)
   );
 });
 
-test("the Choose workbook button uses showPicker when the browser supports it",()=>{
+test("the workbook picker uses the compatibility showPicker when the native picker is unavailable",async()=>{
   const hooks=createWorkbookTestHooks();
   let showed=0,clicked=0;
   const input={showPicker(){showed++;},click(){clicked++;}};
-  assert.equal(hooks.openWorkbookPicker(input),true);
+  assert.equal(await hooks.openWorkbookPicker(input),true);
   assert.equal(showed,1);
   assert.equal(clicked,0);
 });
 
-test("the Choose workbook button falls back to click when showPicker is unavailable or blocked",()=>{
+test("the workbook picker falls back to click when showPicker is unavailable or blocked",async()=>{
   const hooks=createWorkbookTestHooks();
   let clicked=0;
-  assert.equal(hooks.openWorkbookPicker({click(){clicked++;}}),true);
+  assert.equal(await hooks.openWorkbookPicker({click(){clicked++;}}),true);
   assert.equal(clicked,1);
-  assert.equal(hooks.openWorkbookPicker({showPicker(){throw new Error("blocked");},click(){clicked++;}}),true);
+  assert.equal(await hooks.openWorkbookPicker({showPicker(){throw new Error("blocked");},click(){clicked++;}}),true);
   assert.equal(clicked,2);
-  assert.equal(hooks.openWorkbookPicker({}),false);
+  assert.equal(await hooks.openWorkbookPicker({}),false);
 });
 
 test("the selected workbook input is not cleared until its asynchronous read has completed",async()=>{
