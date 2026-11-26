@@ -71,6 +71,31 @@ test("dashboard exposes a device-local private name directory without placing na
 });
 
 
+test("Activity Log searches private Order/VIN metadata and updates results without rebuilding the page",()=>{
+  assert.match(dashboard,/function privateEmailLookupMatches\(\)/);
+  assert.match(dashboard,/compactAuditToken\(row\.order_number\)/);
+  assert.match(dashboard,/compactAuditToken\(row\.vin\)/);
+  assert.match(dashboard,/linkedTicketRefs\.has\(event\.ticket_ref\)/);
+  assert.match(dashboard,/function refreshImportedActivityAuditPanels\(\)/);
+  assert.match(dashboard,/refreshImportedActivityAuditPanels\(\);\s*return;/);
+  assert.match(dashboard,/id="auditEmailLookupRows"/);
+  assert.match(dashboard,/placeholder="Enter an Order Number, VIN, ticket reference or event/);
+  assert.match(dashboard,/snapshot_generated_at_utc/);
+  assert.match(dashboard,/function applyPrivateEmailLookupRows\(/);
+});
+
+test("Team Performance exposes per-agent brand and handling-time detail with wider colleague cells",()=>{
+  assert.match(dashboard,/function agentBrandInsightMarkup\(agentRef\)/);
+  assert.match(dashboard,/function agentEmailHandlingMetrics\(agentRef\)/);
+  assert.match(dashboard,/Avg handling time · emails/);
+  assert.match(dashboard,/Avg solve time · resolver/);
+  assert.match(dashboard,/Resolve rate · owned/);
+  assert.match(dashboard,/team-brand-share-table/);
+  assert.match(css,/\.team-performance-table td:first-child/);
+  assert.match(css,/\.team-brand-share-table td:first-child/);
+  assert.match(css,/\.agent-brand-grid/);
+});
+
 test("imported Activity Log keeps the dark Cherry Glass palette with responsive filters",()=>{
   assert.match(dashboard,/class="audit-demo-strip local-snapshot-strip"/);
   assert.match(dashboard,/class="activity-search-label">SEARCH/);
@@ -78,6 +103,9 @@ test("imported Activity Log keeps the dark Cherry Glass palette with responsive 
   assert.match(dashboard,/activity-time-cell/);
   assert.match(dashboard,/activity-event-type/);
   assert.ok(css.includes(".activity-history-panel .audit-filter-toolbar.imported-audit-filters"));
+  assert.ok(css.includes(".activity-audit-toolbar"));
+  assert.ok(css.includes(".activity-audit-filters"));
+  assert.ok(css.includes(".activity-email-table"));
   assert.ok(css.includes(".activity-history-panel .data-table thead th {\n  position: sticky"));
   assert.ok(css.includes("background: linear-gradient(145deg, rgba(30, 12, 21, .96), rgba(17, 10, 17, .98))"));
   assert.ok(css.includes("background: rgba(8, 6, 11, .78)"));
