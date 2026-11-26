@@ -22,6 +22,8 @@ function loadDirectory(seed = null, storageAvailable = true) {
   const context = {
     Map,
     JSON,
+    privateEmailLookup:[],
+    privateEmailLookupSnapshotId:"",
     localStorage: storageAvailable ? storage : undefined
   };
   vm.createContext(context);
