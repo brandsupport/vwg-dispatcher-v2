@@ -899,6 +899,38 @@ function parseCsvRows(input){
   if(quoted)throw new Error("The private lookup CSV has an unterminated quoted field.");
   return rows;
 }
+function knownSnapshotAgentRefs(){
+  const snapshot=state.importedSnapshot;
+  if(!snapshot)return new Set();
+  return new Set([
+    ...(snapshot.team_roster||[]).map(row=>row.agent_ref),
+    ...(snapshot.allocations||[]).map(row=>row.agent_ref),
+    ...(snapshot.activity_log||[]).flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean)),
+    ...(snapshot.email_metrics?.by_original_owner||[]).map(row=>row.agent_ref),
+    ...(snapshot.email_metrics?.by_current_owner||[]).map(row=>row.agent_ref),
+    ...(snapshot.tickets.resolution_by_agent||[]).map(row=>row.agent_ref),
+    ...(snapshot.tickets.resolution_by_current_owner||[]).map(row=>row.agent_ref),
+    ...(snapshot.brand_by_agent||[]).map(row=>row.agent_ref)
+  ]);
+}
+function applyPrivateAgentLookupRows(rows,announce=true){
+  if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before applying its private name lookup.");
+  if(!Array.isArray(rows))throw new Error("The private name lookup must be a list of agent references and display names.");
+  const known=knownSnapshotAgentRefs(),next=new Map();
+  for(const row of rows){
+    const reference=String(row?.agent_ref||"").trim(),name=String(row?.display_name||"").trim();
+    if(!reference&&!name)continue;
+    if(!/^Agent-[A-F0-9]{10}$/.test(reference)||!name)throw new Error("A private lookup row has an invalid agent reference or blank display name.");
+    if(!known.has(reference))continue;
+    if(next.has(reference)&&next.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
+    next.set(reference,name);
+  }
+  if(!next.size)throw new Error("No private agent references matched the imported snapshot. Use the same local workspace key when creating the name lookup.");
+  privateAgentNames=next;
+  render();
+  if(announce)showToast("Loaded "+next.size+" colleague names in this browser tab only.");
+  return next.size;
+}
 async function loadPrivateAgentLookup(file){
   if(!file)return;
   if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before importing its private name lookup.");
@@ -908,26 +940,7 @@ async function loadPrivateAgentLookup(file){
   const headers=rows[0].map(value=>value.trim().toLowerCase());
   const refIndex=headers.indexOf("agent_ref"),nameIndex=headers.indexOf("display_name");
   if(refIndex<0||nameIndex<0)throw new Error("The private lookup needs agent_ref and display_name columns.");
-  const known=new Set([
-    ...(state.importedSnapshot.team_roster||[]).map(row=>row.agent_ref),
-    ...state.importedSnapshot.allocations.map(row=>row.agent_ref),
-    ...state.importedSnapshot.activity_log.flatMap(row=>[row.original_agent_ref,row.current_agent_ref].filter(Boolean)),
-    ...(state.importedSnapshot.email_metrics?.by_original_owner||[]).map(row=>row.agent_ref),
-    ...(state.importedSnapshot.email_metrics?.by_current_owner||[]).map(row=>row.agent_ref)
-  ]);
-  const next=new Map();
-  for(const row of rows.slice(1)){
-    const reference=String(row[refIndex]||"").trim(),name=String(row[nameIndex]||"").trim();
-    if(!reference&&!name)continue;
-    if(!/^Agent-[A-F0-9]{10}$/.test(reference)||!name)throw new Error("A private lookup row has an invalid agent reference or blank display name.");
-    if(!known.has(reference))continue;
-    if(next.has(reference)&&next.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
-    next.set(reference,name);
-  }
-  if(!next.size)throw new Error("No private agent references matched the imported snapshot. Export the name lookup with the same workspace key.");
-  privateAgentNames=next;
-  render();
-  showToast("Loaded "+next.size+" colleague names in this browser tab only.");
+  applyPrivateAgentLookupRows(rows.slice(1).map(row=>({agent_ref:row[refIndex],display_name:row[nameIndex]})),true);
 }
 function applyLocalSnapshotObject(parsed,announce=true){
   const clean=validateAndSanitiseSnapshot(parsed);
@@ -3222,8 +3235,12 @@ function bindStudioSnapshotReceiver(){
     handled=true;
     try{
       applyLocalSnapshotObject(message.snapshot,false);
+      let namesLoaded=0;
+      if(Array.isArray(message.privateAgentLookup)&&message.privateAgentLookup.length){
+        namesLoaded=applyPrivateAgentLookupRows(message.privateAgentLookup,false);
+      }
       channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:true});
-      showToast("Dashboard populated with the sanitised Reporting Studio snapshot.");
+      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" and "+namesLoaded+" colleague names":"")+".");
       const cleanUrl=new URL(window.location.href);
       cleanUrl.searchParams.delete("receiveSnapshot");
       window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
