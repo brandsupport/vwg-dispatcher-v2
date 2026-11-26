@@ -29,35 +29,32 @@ Its central goals are to make ticket volume, brand mix, workload allocation, res
 
 ## Current prototype
 
-The complete UI foundation now includes fifteen navigable areas:
+The v2.0 reporting release exposes ten navigable workspaces:
 
-- Overview and live operations control room.
-- Ticket analytics and ticket explorer with sample ticket detail timelines.
-- Email Performance, a separate aggregate view of Email Details lifecycle state and receipt-to-first-missing handling time when that optional source is supplied.
-- Brand insights for Volkswagen, Audi, Škoda, SEAT, CUPRA, Volkswagen Commercial Vehicles and Other / unclassified.
-- Workflow analytics for handovers, flags, manual allocation, recoveries, reassignments and exceptions.
-- Folder share matrix showing each member's initial-allocation count and percentage share within each folder.
-- Team Performance 2.0 with anonymised member profiles, separate open-work snapshots, first-allocation shares by inbox and a team-level workflow event ledger.
-- Private-performance screen layout (placeholder identity in the prototype).
-- Roster & Coverage 2.0 with a filterable anonymised directory, derived shift-overlap map, four-inbox eligibility matrix and coverage-readiness guardrails.
-- Dispatch Configuration 2.0 with a proposed cross-inbox policy matrix, local open-work scenario preview, change-governance gates and configuration-proposal CSV export. It is design-only and cannot change live dispatch settings.
-- Reliability centre.
-- Audit history.
-- Reports and CSV exports.
-- Administration and environment overview.
+- Overview and Current Operations snapshot.
+- Ticket Analytics and aggregate ticket-flow reporting.
+- Email Performance for Email Details lifecycle state and confirmed-exit handling time.
+- Brand Insights for Volkswagen, Audi, Škoda, SEAT, CUPRA, Volkswagen Commercial Vehicles and Other / unclassified.
+- Workflow Analytics for handovers, flags, manual allocation, recoveries, reassignments and exceptions.
+- Team Performance 2.0, including the merged per-inbox allocation matrix, anonymised member profiles, workload, brand mix and available resolution/handling measures.
+- Roster & Coverage 2.0 with the filterable anonymised directory and Egypt-local scheduled coverage.
+- Audit History with Activity Log search and same-device private Order Number / VIN lookup.
+- Reports & Exports for local management and operational CSV outputs.
+
+The source code deliberately retains the hidden My Performance, Folder Share, Dispatch Configuration, Reliability Centre and Administration views, including their renderers, data models, styles and export logic. They are not exposed in this reporting release and can be reactivated or completed in a later authenticated/operational milestone. Folder Share analysis is already available within Team Performance.
 
 Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal and CSV exports work with synthetic data. The Dispatch Configuration scenario preview recalculates a local illustrative priority order only; it does not persist settings, create assignments or contact an operational service.
 
 The shared JSON and public code continue to use anonymised agent references only. Studio automatically saves the matching colleague display names in the same-origin browser-local directory; the dashboard reads that directory on the same browser/device. This is a display convenience, not authentication, proof of identity or an access-control boundary. Do not publish colleague names in source code or shared snapshots.
 
-## Overview and Live Operations
+## Overview and Current Operations
 
 These are deliberately different workspaces:
 
 - **Overview** is the management/performance view. It summarises selected-period ticket demand, first allocations, completions, inbox pressure, brand mix and allocation distribution. It avoids the individual ticket queue.
-- **Live Operations** is the ticket workbench. It is where an operator searches and filters individual sample tickets, checks unassigned or at-risk work, reviews the attention list, and inspects illustrative coverage and recent sample events.
+- **Current Operations** is the ticket workbench. It is where an operator searches and filters individual sample tickets, checks unassigned or at-risk work, reviews the attention list, and inspects illustrative coverage and recent sample events.
 
-Without an imported snapshot, the public dashboard uses synthetic sample data. When a sanitised snapshot is explicitly imported, the aggregate analytics views use only imported counts and pseudonymised agent references for the current tab session. If Team & Shifts is included, Team Performance and Roster & Coverage also use keyed pseudonymous shift groups, Egypt-local scheduled hours and active-fortnight status. If Email Details is included, Email Performance reports Open, Missing - Confirmation Pending and Completed counts, recorded handling-time summaries, brand completeness and source-Inbox breakdowns. This does not create a live feed or validate source quality beyond the checks displayed. The Live Operations page remains synthetic, is not connected to Outlook or Excel, and cannot assign, move, recover or update real tickets. SLA, first-response time, business resolution time and live availability are not supplied by the aggregate import.
+Without an imported snapshot, the public dashboard uses synthetic sample data. When a sanitised snapshot is explicitly imported, the aggregate analytics views use only imported counts and pseudonymised agent references for the current tab session. If Team & Shifts is included, Team Performance and Roster & Coverage also use keyed pseudonymous shift groups, Egypt-local scheduled hours and active-fortnight status. If Email Details is included, Email Performance reports Open, Missing - Confirmation Pending and Completed counts, recorded handling-time summaries, brand completeness and source-Inbox breakdowns. This does not create a live feed or validate source quality beyond the checks displayed. The Current Operations page remains synthetic, is not connected to Outlook or Excel, and cannot assign, move, recover or update real tickets. SLA, first-response time, business resolution time and live availability are not supplied by the aggregate import.
 
 ## Offline Reporting Studio
 
@@ -65,7 +62,7 @@ The standalone `reporting-studio.html` companion is available through the persis
 
 The inputs are a ticket/current-state snapshot (required), assignment history (optional), workflow/activity history (optional), Team & Shifts roster (optional) and Email Details lifecycle data (optional). For the current tracker workbook, upload the complete workbook once: use Assignments as ticket state, Activity Log twice, Team & Shifts as the roster and Email Details for lifecycle metrics. Dashboard and Settings remain in the workbook and are ignored. Older workbooks without Email Details remain supported, but Email Performance metrics will not be available. In Activity Log, map column B `Event Type` as the event name; column G `Assignment Flag` is only TRUE/FALSE. Automatic and manual first allocations come from `AUTO_ASSIGNMENT` and `MANUAL_ASSIGNMENT_CAPTURED`. Email Details maps Brand, received time, first source Inbox, original/current owner, completion status, first-missing/completion timestamps and recorded handling minutes. Email Key / ID is used only for local duplicate removal; order number and VIN are used only to count rows where both are blank. Those raw values and Internet Message IDs are never exported. Reuse the same private workspace key. Studio exports the sanitised JSON and automatically stores only the `{agent_ref, display_name}` mapping in the browser-local directory. Importing the downloaded JSON in the same browser/device resolves colleague names without an extra file or manual import; the direct dashboard handoff also works. **Clear saved names** removes the directory. Snapshot, workbook rows and customer data are not stored in browser storage. Email Details supplies email brand mix and inbox-exit handling metrics, not business ticket resolution. Ticket-level brand or resolution performance still requires explicit fields in the ticket/current-state source. See [docs/REAL_EXPORT_MAPPING_WORKSHEET.md](docs/REAL_EXPORT_MAPPING_WORKSHEET.md) and [docs/OFFLINE_REPORTING_WORKFLOW.md](docs/OFFLINE_REPORTING_WORKFLOW.md).
 
-The studio does not upload data to D1, call the Worker or feed the dashboard automatically. It creates a local aggregate snapshot for controlled review. To use the aggregates in Dispatcher 2.0, download the JSON snapshot, return to the dashboard, choose **Import snapshot**, and select the downloaded JSON. The dashboard validates the schema, totals, inbox rollups, brand totals, pseudonymous agent references, allocation shares, optional roster records and event allow-list before rebuilding a safe in-memory snapshot. The imported snapshot stays in memory only for the current browser tab; the separate private colleague-name directory is the only browser-persisted item. The imported data powers Overview, aggregate Ticket Analytics, Brand Insights, Workflow Analytics, Folder Share, Team Performance, the snapshot-based Live Operations workstream summary, and (when supplied) Roster & Coverage. Audit History displays the sanitised Activity Log entries. Imported roster coverage counts active scheduled headcount by Egypt-local shift interval; inactive profiles remain listed but are excluded from coverage. Inbox eligibility, breaks, absence events and staffing targets are not inferred. The ticket workbench remains synthetic-data-only: imported snapshots do not contain ticket references, subjects or individual source rows. Individual ticket-level queue details remain demonstration data because the aggregate export deliberately removes source ticket identifiers and message content. A snapshot is point-in-time, so the reporting-period selector is disabled while it is loaded. Use **Use demo** or refresh the page to clear the imported snapshot; the separate private name directory remains on this device until **Clear saved names** is used. Nothing is uploaded or connected to an operational API. Real operational exports still require approval from the relevant company data owner/security process.
+The studio does not upload data to D1, call the Worker or feed the dashboard automatically. It creates a local aggregate snapshot for controlled review. To use the aggregates in Dispatcher 2.0, download the JSON snapshot, return to the dashboard, choose **Import snapshot**, and select the downloaded JSON. The dashboard validates the schema, totals, inbox rollups, brand totals, pseudonymous agent references, allocation shares, optional roster records and event allow-list before rebuilding a safe in-memory snapshot. The imported snapshot stays in memory only for the current browser tab; the separate private colleague-name directory is the only browser-persisted item. The imported data powers Overview, aggregate Ticket Analytics, Brand Insights, Workflow Analytics, Folder Share, Team Performance, the snapshot-based Current Operations workstream summary, and (when supplied) Roster & Coverage. Audit History displays the sanitised Activity Log entries. Imported roster coverage counts active scheduled headcount by Egypt-local shift interval; inactive profiles remain listed but are excluded from coverage. Inbox eligibility, breaks, absence events and staffing targets are not inferred. The ticket workbench remains synthetic-data-only: imported snapshots do not contain ticket references, subjects or individual source rows. Individual ticket-level queue details remain demonstration data because the aggregate export deliberately removes source ticket identifiers and message content. A snapshot is point-in-time, so the reporting-period selector is disabled while it is loaded. Use **Use demo** or refresh the page to clear the imported snapshot; the separate private name directory remains on this device until **Clear saved names** is used. Nothing is uploaded or connected to an operational API. Real operational exports still require approval from the relevant company data owner/security process.
 
 ## Backend & Database Foundation 1.0
 
@@ -190,7 +187,7 @@ The shared dashboard typography has been increased slightly for easier scanning 
 ## Planned application areas
 
 1. Overview
-2. Live Operations
+2. Current Operations
 3. Ticket Analytics
 4. Brand Insights
 5. Workflow Analytics
