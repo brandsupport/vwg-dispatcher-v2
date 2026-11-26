@@ -82,7 +82,7 @@ function createWorkbookTestHooks(fileReaderClass=null){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer,openWorkbookPicker};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -322,6 +322,25 @@ test("the workbook reader explains how to recover when both browser readers fail
     hooks.readFileArrayBuffer(file),
     /local Downloads folder.*not OneDrive, SharePoint, a network drive/i
   );
+});
+
+test("the Choose workbook button uses showPicker when the browser supports it",()=>{
+  const hooks=createWorkbookTestHooks();
+  let showed=0,clicked=0;
+  const input={showPicker(){showed++;},click(){clicked++;}};
+  assert.equal(hooks.openWorkbookPicker(input),true);
+  assert.equal(showed,1);
+  assert.equal(clicked,0);
+});
+
+test("the Choose workbook button falls back to click when showPicker is unavailable or blocked",()=>{
+  const hooks=createWorkbookTestHooks();
+  let clicked=0;
+  assert.equal(hooks.openWorkbookPicker({click(){clicked++;}}),true);
+  assert.equal(clicked,1);
+  assert.equal(hooks.openWorkbookPicker({showPicker(){throw new Error("blocked");},click(){clicked++;}}),true);
+  assert.equal(clicked,2);
+  assert.equal(hooks.openWorkbookPicker({}),false);
 });
 
 test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{

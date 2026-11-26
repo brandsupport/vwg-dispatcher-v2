@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1019">
   <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
-  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-workbook-to-dashboard-fix-1">
+  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-workbook-picker-fallback-1">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261126-workbook-file-read-fallback-1" defer></script>
+  <script src="./reporting-studio.js?v=20261126-workbook-picker-fallback-1" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -35,6 +35,14 @@
         <div class="step-heading"><span class="step-number">01</span><div><h2>Select source exports</h2><p>Ticket state is required. Assignment history, workflow, Team & Shifts and Email Details are optional.</p></div></div>
         <div class="file-picker">
           <label for="workbookFile">Complete tracker workbook (.xlsx, .xls or .xlsm) <em>Required</em></label>
+          <div class="workbook-picker-actions">
+            <button id="chooseWorkbookButton" class="button button-secondary" type="button">Choose workbook…</button>
+            <span>Or use the file control below</span>
+          </div>
+          <div id="workbookDropZone" class="workbook-drop-zone" role="button" tabindex="0" aria-label="Drop an Excel workbook here or press Enter to browse">
+            <strong>Drop your Excel workbook here</strong>
+            <span>Drag it from File Explorer to this area</span>
+          </div>
           <input id="workbookFile" type="file" accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12">
           <small id="workbookFileMeta" role="status" aria-live="polite">No workbook selected</small>
         </div>
