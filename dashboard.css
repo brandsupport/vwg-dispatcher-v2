@@ -3118,7 +3118,8 @@ select:focus-visible, textarea:focus-visible {
 .activity-history-panel .table-wrap {
   max-height: min(66vh, 720px);
   margin-top: 0;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #e7ebf2;
   border-radius: 12px;
   background: #fff;
