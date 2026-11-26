@@ -222,7 +222,7 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
   const eventCounts=Object.fromEntries(overall.workflow.map(row=>[row.id,row.events]));
   assert.deepEqual(eventCounts,{
     handover:1,flag:1,automatic:0,manual:0,recovery:1,
-    reassignment:0,exceptions:0,email_lifecycle:0,baseline:1
+    reassignment:0,exceptions:0,email_lifecycle:0,resolution:1,baseline:1
   });
 
   const detags=calculateDashboardViews(imported,"detags");
@@ -231,7 +231,7 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
     ["handover",1],["flag",0],["automatic",0],["manual",0],["recovery",1],
-    ["reassignment",0],["exceptions",0],["email_lifecycle",0],["baseline",0]
+    ["reassignment",0],["exceptions",0],["email_lifecycle",0],["resolution",0],["baseline",0]
   ]);
 
   const rawValues=[
@@ -527,7 +527,7 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
 
   assert.equal(snapshot.tickets.total,4);
   assert.deepEqual(snapshot.tickets.overall,{
-    ticket_records:4,initially_assigned:3,resolved:0,outstanding:4,unassigned:1
+    ticket_records:4,initially_assigned:3,resolved:1,outstanding:3,unassigned:1
   });
   assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
   assert.equal(snapshot.tickets.brand_field_mapped,false);
