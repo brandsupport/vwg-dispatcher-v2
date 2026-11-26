@@ -69,6 +69,8 @@ jobs:
         run: node --test tests/dashboard-layout.test.mjs tests/dashboard-private-directory.test.mjs
       - name: Test Reporting Studio to Dashboard synthetic integration
         run: node --test tests/reporting-dashboard.integration.test.mjs
+      - name: Test final reporting edition workflow and scope
+        run: node --test tests/final-reporting-workflow.test.mjs
       - name: Validate local-only reporting studio boundary
         run: |
           node --input-type=module <<'NODE'
