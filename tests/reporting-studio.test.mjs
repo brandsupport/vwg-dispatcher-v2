@@ -51,7 +51,7 @@ function loadStudio(extraContext={}){
         await sanitise();
         return currentSnapshot;
       },
-      async processVwg(ticketCsv,activityCsv) {
+      async processVwg(ticketCsv,activityCsv,rosterCsv="",emailDetailsCsv="") {
         const ticketData=parseCSV(ticketCsv);
         const activityData=parseCSV(activityCsv);
         files.tickets={...ticketData,rowCount:ticketData.records.length};
@@ -60,9 +60,15 @@ function loadStudio(extraContext={}){
         mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",subject:ticketData.headers.includes("Subject")?"Subject":"",received_at:"Received At (UK)",current_owner:"Current Owner",resolution_status:ticketData.headers.includes("Resolution Status")?"Resolution Status":"",resolved_at:ticketData.headers.includes("Resolved At (UK)")?"Resolved At (UK)":"",resolved_by:ticketData.headers.includes("Resolved By")?"Resolved By":""};
         mappings.assignments={ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"};
         mappings.workflow={ticket_ref:"Email Key / ID",event_type:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",original_assignee:"Original Assignee",current_owner:"Current Owner",assignment_flag:"Assignment Flag",incident_count:"Incident Count"};
+        const rosterData=rosterCsv?parseCSV(rosterCsv):null;
+        files.roster=rosterData?{...rosterData,rowCount:rosterData.records.length}:null;
+        mappings.roster=rosterData?{identity:"Outlook Category (exact)",display_name:"Colleague",shift_group:"Shift Group",shift_start:"Shift Start (Egypt)",shift_end:"Shift End (Egypt)",active:"Active This Fortnight"}:{};
+        const emailData=emailDetailsCsv?parseCSV(emailDetailsCsv):null;
+        files.emailDetails=emailData?{...emailData,rowCount:emailData.records.length}:null;
+        mappings.emailDetails=emailData?{email_key:"Email Key / ID",brand:"Brand",subject:emailData.headers.includes("Subject")?"Subject":"",order_number:"Order Number",vin:"VIN",received_at:"Received At (UK)",first_inbox:"First Source Inbox",original_assignee:"Original Assignee",current_owner:"Current Owner",completion_status:"Completion Status",first_missing_at:"First Missing At (UK)",completion_at:"Completion Time (UK)",handling_minutes:"Handling Time (Minutes)"}:{};
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,privateLookup:privateAgentLookup};
+        return {snapshot:currentSnapshot,privateLookup:privateAgentLookup,privateDirectorySaved};
       }
     };
   `;
@@ -421,4 +427,67 @@ test("the same local workspace key keeps agent references stable between runs",a
   const firstRefs=first.allocations.map(row=>row.agent_ref).sort();
   const second=await hooks.process(csvs);
   assert.deepEqual(second.allocations.map(row=>row.agent_ref).sort(),firstRefs);
+});
+
+
+test("subject brand detection is reused by Email Performance when only Assignments contains the Hub subject",async()=>{
+  const storageValues=new Map();
+  const localStorage={
+    getItem:key=>storageValues.get(key)||null,
+    setItem:(key,value)=>storageValues.set(key,String(value)),
+    removeItem:key=>storageValues.delete(key)
+  };
+  const hooks=loadStudio({localStorage});
+  const subjects=[
+    ["EMAIL-AUDI","Form submission from Audi customer de-tag request form on Hub","audi"],
+    ["EMAIL-VW","Form submission from Volkswagen customer de-tag request form on Hub","volkswagen"],
+    ["EMAIL-SEAT","Form submission from SEAT customer de-tag request form on Hub","seat"],
+    ["EMAIL-SKODA","Form submission from Škoda customer de-tag request form on Hub","skoda"],
+    ["EMAIL-CUPRA","Form submission from CUPRA customer de-tag request form on Hub","cupra"],
+    ["EMAIL-VWCV","Form submission from Volkswagen Commercial Vehicles customer de-tag request form on Hub","vwcv"]
+  ];
+  const ticketCsv=[
+    "Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner",
+    ...subjects.map(([key,subject])=>[key,"Detags","Assigned","",subject,"2026-11-24 08:30:00","Belal"].join(","))
+  ].join("\\r\\n");
+  const activityCsv=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    ...subjects.map(([key],index)=>["2026-11-24 "+String(10+index).padStart(2,"0")+":30:00","AUTO_ASSIGNMENT",key,"Detags","Belal Category","Belal","TRUE","0",""].join(","))
+  ].join("\\r\\n");
+  const rosterCsv=[
+    "Colleague,Outlook Category (exact),Shift Group,Shift Start (Egypt),Shift End (Egypt),Active This Fortnight",
+    "Belal,Belal Category,Early,10:00,19:00,Yes"
+  ].join("\\r\\n");
+  const emailCsv=[
+    "Email Key / ID,Brand,Order Number,VIN,Received At (UK),First Source Inbox,Original Assignee,Current Owner,Completion Status,First Missing At (UK),Completion Time (UK),Handling Time (Minutes)",
+    ...subjects.map(([key])=>[key,"","","","2026-11-24 08:30:00","Detags","Belal Category","Belal","Open","","",""].join(","))
+  ].join("\\r\\n");
+  const result=await hooks.processVwg(ticketCsv,activityCsv,rosterCsv,emailCsv);
+  const emailBrandCounts=Object.fromEntries(result.snapshot.email_metrics.by_brand.map(row=>[row.brand_code,row.email_records]));
+  const ticketBrandCounts=Object.fromEntries(result.snapshot.tickets.by_brand.map(row=>[row.brand_code,row.count]));
+  for(const [, ,code] of subjects){
+    assert.equal(ticketBrandCounts[code],1,"ticket brand should be recognised for "+code);
+    assert.equal(emailBrandCounts[code],1,"Email Performance must reuse the matching Assignments subject for "+code);
+  }
+  assert.equal(result.snapshot.email_metrics.by_brand.find(row=>row.brand_code==="unclassified")?.email_records||0,0);
+  const nameRow=result.privateLookup.find(row=>row.display_name==="Belal");
+  assert.ok(nameRow,"Team & Shifts Colleague value should be the display name");
+  assert.ok(result.snapshot.allocations.some(row=>row.agent_ref===nameRow.agent_ref),
+    "Assignment history values matching either roster alias must map to the same colleague reference");
+  assert.ok(result.snapshot.team_roster.some(row=>row.agent_ref===nameRow.agent_ref));
+  assert.equal(result.privateDirectorySaved,true);
+  const stored=JSON.parse(storageValues.get("vwg-dispatcher.private-agent-directory.v1"));
+  assert.ok(stored.some(row=>row.agent_ref===nameRow.agent_ref&&row.display_name==="Belal"));
+  assert.equal(JSON.stringify(stored).includes("EMAIL-AUDI"),false);
+  assert.equal(JSON.stringify(stored).includes("Form submission"),false);
+  assert.equal(JSON.stringify(stored).includes("Belal Category"),false);
+});
+
+test("private name persistence fails closed when browser storage is unavailable",async()=>{
+  const hooks=loadStudio();
+  const ticketCsv="Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner\\r\\nK1,Detags,Assigned,,Form submission from Audi customer de-tag request form on Hub,2026-11-24 08:30:00,Belal";
+  const activityCsv="Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count\\r\\n2026-11-24 10:30:00,AUTO_ASSIGNMENT,K1,Detags,Belal,Belal,TRUE,0";
+  const result=await hooks.processVwg(ticketCsv,activityCsv);
+  assert.equal(result.privateDirectorySaved,false);
+  assert.ok(result.snapshot.data_quality.warnings.some(message=>message.toLowerCase().includes("browser could not save the private colleague directory")));
 });
