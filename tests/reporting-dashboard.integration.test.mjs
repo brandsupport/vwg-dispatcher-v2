@@ -106,9 +106,13 @@ function filterImportedActivityRows(snapshot,filters={},emailMatches=[]){
     auditEventType:"all",auditAgent:"all",auditFromDate:"",auditToDate:"",
     ...filters
   };
-  const context={state,displayAgentName:reference=>({
-    "Agent-AAAAAAAAAA":"Belal","Agent-BBBBBBBBBB":"Mariam"
-  }[reference]||reference)};
+  const context={
+    state,
+    compactAuditToken:value=>String(value||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,""),
+    displayAgentName:reference=>({
+      "Agent-AAAAAAAAAA":"Belal","Agent-BBBBBBBBBB":"Mariam"
+    }[reference]||reference)
+  };
   vm.createContext(context);
   return vm.runInContext(dashboard.slice(start,end)+"\nimportedActivityRows",context)(emailMatches);
 }
