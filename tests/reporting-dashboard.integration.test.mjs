@@ -320,10 +320,10 @@ test("the workbook reader explains how to recover when both browser readers fail
   const file={name:"tracker.xlsx",arrayBuffer(){const error=new Error("File access denied.");error.name="NotReadableError";return Promise.reject(error);}};
   await assert.rejects(
     hooks.readFileArrayBuffer(file),
-    error=>/Blob\\.stream\\(\\) is unavailable/.test(error.message)&&
-      /File\\.arrayBuffer\\(\\): NotReadableError/.test(error.message)&&
-      /FileReader: NotReadableError/.test(error.message)&&
-      /not uploaded/.test(error.message)
+    error=>error.message.includes("Blob.stream() is unavailable")&&
+      error.message.includes("File.arrayBuffer(): NotReadableError")&&
+      error.message.includes("FileReader: NotReadableError")&&
+      error.message.includes("not uploaded")
   );
 });
 
