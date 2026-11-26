@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./dashboard.css?v=20261126-audit-order-search-team-performance-v3">
-  <script src="./dashboard.js?v=20261126-audit-order-search-team-performance-v3" defer></script>
+  <link rel="stylesheet" href="./dashboard.css?v=20261126-final-reporting-navigation-v1">
+  <script src="./dashboard.js?v=20261126-final-reporting-navigation-v1" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -21,25 +21,20 @@
       </a>
       <div class="workspace-label">OPERATIONS WORKSPACE</div>
       <nav class="primary-nav" id="primaryNav" aria-label="Main navigation">
-        <div class="nav-group-label">COMMAND</div>
+        <div class="nav-group-label">MANAGEMENT</div>
         <button class="nav-item active" type="button" data-view="overview"><span class="nav-icon">◫</span><span>Overview</span></button>
-        <button class="nav-item" type="button" data-view="live"><span class="nav-icon">◉</span><span>Live operations</span><span class="nav-count">4</span></button>
+        <button class="nav-item" type="button" data-view="live"><span class="nav-icon">◉</span><span>Current Operations</span></button>
         <div class="nav-group-label">ANALYTICS</div>
-        <button class="nav-item" type="button" data-view="tickets"><span class="nav-icon">▤</span><span>Ticket analytics</span></button>
-        <button class="nav-item" type="button" data-view="email"><span class="nav-icon">◷</span><span>Email performance</span></button>
-        <button class="nav-item" type="button" data-view="brands"><span class="nav-icon">◈</span><span>Brand insights</span></button>
-        <button class="nav-item" type="button" data-view="workflow"><span class="nav-icon">⌁</span><span>Workflow analytics</span></button>
-        <button class="nav-item" type="button" data-view="folders"><span class="nav-icon">▦</span><span>Folder share</span></button>
-        <button class="nav-item" type="button" data-view="team"><span class="nav-icon">♧</span><span>Team performance</span></button>
-        <button class="nav-item" type="button" data-view="my"><span class="nav-icon">◎</span><span>My performance</span></button>
-        <div class="nav-group-label">WORKFORCE & CONTROL</div>
-        <button class="nav-item" type="button" data-view="roster"><span class="nav-icon">▣</span><span>Roster & coverage</span></button>
-        <button class="nav-item" type="button" data-view="rules"><span class="nav-icon">⌘</span><span>Dispatch configuration</span></button>
-        <div class="nav-group-label">SYSTEM</div>
-        <button class="nav-item" type="button" data-view="reliability"><span class="nav-icon">◇</span><span>Reliability centre</span></button>
-        <button class="nav-item" type="button" data-view="audit"><span class="nav-icon">◷</span><span>Audit history</span></button>
-        <button class="nav-item" type="button" data-view="reports"><span class="nav-icon">↗</span><span>Reports & exports</span></button>
-        <button class="nav-item" type="button" data-view="admin"><span class="nav-icon">⚙</span><span>Administration</span></button>
+        <button class="nav-item" type="button" data-view="tickets"><span class="nav-icon">▤</span><span>Ticket Analytics</span></button>
+        <button class="nav-item" type="button" data-view="email"><span class="nav-icon">◷</span><span>Email Performance</span></button>
+        <button class="nav-item" type="button" data-view="brands"><span class="nav-icon">◈</span><span>Brand Insights</span></button>
+        <button class="nav-item" type="button" data-view="workflow"><span class="nav-icon">⌁</span><span>Workflow Analytics</span></button>
+        <button class="nav-item" type="button" data-view="team"><span class="nav-icon">♧</span><span>Team Performance</span></button>
+        <div class="nav-group-label">WORKFORCE</div>
+        <button class="nav-item" type="button" data-view="roster"><span class="nav-icon">▣</span><span>Roster & Coverage</span></button>
+        <div class="nav-group-label">RECORDS & REPORTING</div>
+        <button class="nav-item" type="button" data-view="audit"><span class="nav-icon">◷</span><span>Audit History</span></button>
+        <button class="nav-item" type="button" data-view="reports"><span class="nav-icon">↗</span><span>Reports & Exports</span></button>
       </nav>
       <a class="sidebar-studio-link" href="./reporting-studio.html" aria-label="Open the Offline Reporting Studio">
         <span class="sidebar-studio-icon" aria-hidden="true">↗</span>
@@ -49,7 +44,7 @@
       <div class="sidebar-spacer"></div>
       <div class="sidebar-note">
         <span class="status-dot"></span>
-        <div><strong>Prototype environment</strong><small>Sample data · Not connected</small></div>
+        <div><strong>Reporting workspace</strong><small>Snapshot-based · Read only</small></div>
       </div>
       <div class="sidebar-footer">VWG BRAND SUPPORT <span>•</span> DISPATCH 2.0</div>
     </aside>
