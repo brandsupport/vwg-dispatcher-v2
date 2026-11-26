@@ -1024,7 +1024,7 @@ function applyLocalSnapshotObject(parsed,announce=true){
   const datasetBadge=document.getElementById("datasetBadge");
   datasetBadge.innerHTML="<span></span> LOCAL SNAPSHOT";
   datasetBadge.title="Public, unauthenticated preview. Only company-approved sanitised aggregate snapshots should be imported.";
-  document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Snapshot in tab memory · Private names remembered on this device";
+  document.getElementById("footerNote").textContent="Sanitised snapshot · Held in this tab · No live mailbox connection · Private lookup stays on this device";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
   state.selectedAgent=null;
@@ -1055,7 +1055,7 @@ function clearLocalSnapshot(){
   const datasetBadge=document.getElementById("datasetBadge");
   datasetBadge.innerHTML="<span></span> DEMO DATA";
   datasetBadge.title="Synthetic demonstration data only.";
-  document.getElementById("footerNote").textContent="Prototype preview · No Outlook or Excel connection · All figures synthetic";
+  document.getElementById("footerNote").textContent="Demo dataset · Sample figures only · No live Outlook or Excel connection";
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
   document.getElementById("snapshotFileInput").value="";
@@ -1419,12 +1419,24 @@ function renderOverview(){
   const banner=imported
     ? '<div class="overview-demo-strip local-snapshot-strip"><span class="overview-demo-label"><i></i> SANITISED LOCAL SNAPSHOT</span><span>Generated '+esc(new Date(state.importedSnapshot.generated_at_utc).toLocaleString("en-GB"))+'</span><span>In memory only · refresh clears import</span></div>'
     : '<div class="overview-demo-strip"><span class="overview-demo-label"><i></i> DEMONSTRATION DATA · READ ONLY</span><span>Portfolio reporting view</span><span>All figures are synthetic and illustrative</span></div>';
+  const startPanel=imported?"":'<section class="reporting-start-panel" aria-label="Start here: prepare and import a reporting snapshot">'+
+    '<div class="reporting-start-heading"><div><span class="reporting-start-kicker">START HERE · REPORTING WORKFLOW</span><h2>From your tracker to management insight.</h2><p>This dashboard is currently showing synthetic demonstration data. Prepare a sanitised snapshot in Reporting Studio, then load it here to explore your approved tracker figures.</p></div><span class="reporting-start-status">DEMO DATA ONLY</span></div>'+
+    '<div class="reporting-start-steps">'+
+      '<div class="reporting-start-step"><span>01</span><strong>Prepare</strong><small>Open the complete Excel tracker in Reporting Studio.</small></div>'+
+      '<div class="reporting-start-step"><span>02</span><strong>Map & check</strong><small>Select Assignments, Activity Log, Team & Shifts and Email Details where available.</small></div>'+
+      '<div class="reporting-start-step"><span>03</span><strong>Sanitise</strong><small>Reuse your private workspace key and review the data-quality checks.</small></div>'+
+      '<div class="reporting-start-step"><span>04</span><strong>Load report</strong><small>Use direct hand-off or download the JSON snapshot and import it here.</small></div>'+
+    '</div>'+
+    '<div class="reporting-start-actions"><a class="btn btn-primary" href="./reporting-studio.html">Open Reporting Studio ↗</a><button class="btn btn-secondary" type="button" data-action="open-snapshot-picker">Import sanitised JSON</button></div>'+
+    '<p class="reporting-start-footnote">The shared JSON contains approved sanitised reporting fields only. Order Number / VIN search and colleague names stay in the separate same-browser private directory; they are not embedded in the shared snapshot. Refreshing this page clears the imported snapshot from tab memory.</p>'+
+  '</section>';
   const allocationValue=assignmentsAvailable?fmt(t.assigned):"Not supplied";
   const allocationRateValue=allocationRate===null?"Not available":allocationRate.toFixed(1)+"%";
   const resolutionRateValue=resolutionRate===null?"—":resolutionRate.toFixed(1)+"%";
   pageContent.innerHTML=
     heading("MANAGEMENT PERFORMANCE",imported?"Imported snapshot overview":"Performance overview",imported?"Explore aggregate ticket, inbox, brand and first-allocation data from the sanitised local snapshot. Individual tickets and source rows are not included.":"A portfolio-level view of demand, first allocations, completed tickets, inbox mix and brand demand. Use Live Operations when you need to inspect individual sample work.",'<a class="btn btn-primary" href="./reporting-studio.html">Open reporting studio ↗</a>')+
     banner+
+    startPanel+
     (imported?'<div class="prototype-warning"><strong>Public, unauthenticated preview.</strong> Only import company-approved sanitised aggregate snapshots on an approved device. This browser-memory workflow is not an access-control boundary.</div>':"")+
     kpiGrid([
       kpi(imported?"Ticket records":"Tickets received",fmt(t.received),imported?"Current-state records in the imported snapshot":"Distinct tickets in selected reporting scope","▤"),
@@ -3631,6 +3643,7 @@ function openTicket(ref){
 }
 function closeModal(){modalRoot.innerHTML="";}
 function handleAction(action){
+  if(action==="open-snapshot-picker"){document.getElementById("snapshotFileInput").click();return;}
   if(action==="refresh"){showToast("Preview refreshed. Sample data remains unchanged.");return;}
   if(action==="export-live-queue"){exportLiveQueue();return;}
   if(action==="reset-live-filters"){state.liveStatus="all";state.liveOwner="all";state.liveBrand="all";state.liveSort="oldest";state.liveSearch="";render();return;}
