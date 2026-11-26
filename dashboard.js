@@ -61,12 +61,24 @@ function workflowSummaryRows(){
     {id:"email_lifecycle",label:"Email lifecycle",codes:["email_metadata_captured","email_exit_pending","email_completed"],color:"#8e9cff"},
     {id:"baseline",label:"Baseline / discovery",codes:["received","baseline_complete"],color:"#8babc8"}
   ];
+  const ticketTotal=state.importedSnapshot.tickets.by_inbox
+    .filter(row=>state.folder==="all"||row.inbox_code===state.folder)
+    .reduce((sum,row)=>sum+row.ticket_records,0);
+  const activity=state.importedSnapshot.activity_log||[];
   return definitions.map(definition=>{
     const matches=state.importedSnapshot.workflow.filter(row=>
       definition.codes.includes(row.event_type)&&(state.folder==="all"||row.inbox_code===state.folder)
     );
-    return {...definition,events:matches.reduce((sum,row)=>sum+row.event_count,0),
-      uniqueTickets:null,rate:"Not available"};
+    const linked=activity.filter(event=>
+      definition.codes.includes(event.event_type)&&!event.system_event&&
+      (state.folder==="all"||event.inbox_code===state.folder)
+    );
+    const uniqueTickets=new Set(linked.map(event=>event.ticket_ref)).size;
+    const events=matches.reduce((sum,row)=>sum+row.event_count,0);
+    const rate= ticketTotal?uniqueTickets/ticketTotal*100:0;
+    return {...definition,events,uniqueTickets,
+      rate:ticketTotal?rate.toFixed(1)+"% of ticket records":"Not available",
+      ratePct:ticketTotal?rate:0,ticketDenominator:ticketTotal};
   });
 }
 function workflowEvent(id){
@@ -463,7 +475,9 @@ const state = {
   rosterSearch:"", rosterShift:"all", rosterAvailability:"all", selectedRosterAgent:null,
   configPreviewFolder:"agency", configPreviewWeight:50,
   reliabilitySearch:"", reliabilityType:"all", reliabilityStatus:"all", reliabilitySeverity:"all", selectedReliabilityEvent:"EXC-2108",
-  auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all", selectedAuditEvent:"AUD-20261123-020",
+  auditSearch:"", auditCategory:"all", auditOutcome:"all", auditActor:"all",
+  auditEventType:"all",auditAgent:"all",auditFromDate:"",auditToDate:"",
+  selectedAuditEvent:"AUD-20261123-020",
   adminRole:"operations_manager", adminRequestSearch:"", adminRequestStatus:"all", selectedAdminRequest:"ACCESS-SAMPLE-004"
 };
 
@@ -587,6 +601,42 @@ function validateAndSanitiseSnapshot(raw){
   });
   if(new Set(resolutionByAgent.map(row=>row.agent_ref)).size!==resolutionByAgent.length)fail("Duplicate per-agent resolution rows were found.");
   if(resolutionByAgent.reduce((sum,row)=>sum+row.resolved_tickets,0)>cleanOverall.resolved)fail("Per-agent resolved ticket totals exceed the resolved ticket count.");
+  const resolutionByCurrentOwnerRaw=raw.tickets.resolution_by_current_owner||[];
+  if(!Array.isArray(resolutionByCurrentOwnerRaw))fail("The current-owner resolution section is invalid.");
+  const resolutionByCurrentOwner=resolutionByCurrentOwnerRaw.map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||"")))fail("A current-owner resolution row has an invalid agent reference.");
+    const ownedTickets=count(row.owned_tickets,"owned ticket count");
+    const resolvedTickets=count(row.resolved_tickets,"current-owner resolved ticket count");
+    const timedTickets=count(row.timed_tickets,"current-owner timed ticket count");
+    if(resolvedTickets>ownedTickets||timedTickets>resolvedTickets)fail("Current-owner resolution counts do not reconcile.");
+    return {
+      agent_ref:row.agent_ref,owned_tickets:ownedTickets,resolved_tickets:resolvedTickets,
+      timed_tickets:timedTickets,total_resolution_minutes:count(row.total_resolution_minutes??0,"current-owner solve minutes"),
+      resolution_rate_pct:pct(row.resolution_rate_pct??0,"current-owner resolution rate")
+    };
+  });
+  if(new Set(resolutionByCurrentOwner.map(row=>row.agent_ref)).size!==resolutionByCurrentOwner.length)fail("Duplicate current-owner resolution rows were found.");
+  const brandByAgentRaw=raw.brand_by_agent||[];
+  if(!Array.isArray(brandByAgentRaw))fail("The brand-by-agent section is invalid.");
+  const brandByAgent=brandByAgentRaw.map(row=>{
+    if(!isObject(row)||!/^Agent-[A-F0-9]{10}$/.test(String(row.agent_ref||""))||!brandCodes.includes(row.brand_code))fail("A brand-by-agent row contains an invalid agent or brand reference.");
+    const ticketCount=count(row.ticket_count,"agent brand ticket count");
+    const agentTotal=count(row.agent_portfolio_total,"agent portfolio total");
+    const brandTotal=count(row.brand_ticket_total,"brand ticket total");
+    if(ticketCount>agentTotal||ticketCount>brandTotal)fail("Brand-by-agent counts do not reconcile.");
+    return {
+      agent_ref:row.agent_ref,brand_code:row.brand_code,ticket_count:ticketCount,
+      agent_portfolio_total:agentTotal,brand_ticket_total:brandTotal,
+      agent_portfolio_share_pct:pct(row.agent_portfolio_share_pct,"agent portfolio brand share"),
+      brand_owner_share_pct:pct(row.brand_owner_share_pct,"brand owner share")
+    };
+  });
+  const brandAgentKeys=new Set();
+  for(const row of brandByAgent){
+    const key=row.agent_ref+"|"+row.brand_code;
+    if(brandAgentKeys.has(key))fail("Duplicate agent and brand rows were found.");
+    brandAgentKeys.add(key);
+  }
   const sum=(rows,key)=>rows.reduce((total,row)=>total+row[key],0);
   for(const key of Object.keys(cleanOverall)){
     if(sum(byInbox,key)!==cleanOverall[key])fail("Inbox totals do not reconcile with the overall "+key+" value.");
@@ -812,7 +862,8 @@ function validateAndSanitiseSnapshot(raw){
     reporting_period:reportingPeriod,
     tickets:{total,overall:cleanOverall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
       resolution_tracking:resolutionTracking,resolution_metrics:resolutionMetrics,resolution_by_agent:resolutionByAgent,
-      brand_field_mapped:brandFieldMapped},
+      resolution_by_current_owner:resolutionByCurrentOwner,brand_field_mapped:brandFieldMapped},
+    brand_by_agent:brandByAgent,
     allocations,assignment_methods:assignmentMethods,team_roster:teamRoster,workflow,activity_log:activityLog,
     ...(emailMetrics?{email_metrics:emailMetrics}:{}),
     data_quality:{
@@ -988,6 +1039,9 @@ function allocationMatrix(){
     }
     for(const owner of state.importedSnapshot.email_metrics?.by_original_owner||[])ensureAgent(owner.agent_ref);
     for(const owner of state.importedSnapshot.email_metrics?.by_current_owner||[])ensureAgent(owner.agent_ref);
+    for(const owner of state.importedSnapshot.tickets.resolution_by_agent||[])ensureAgent(owner.agent_ref);
+    for(const owner of state.importedSnapshot.tickets.resolution_by_current_owner||[])ensureAgent(owner.agent_ref);
+    for(const owner of state.importedSnapshot.brand_by_agent||[])ensureAgent(owner.agent_ref);
     state.importedSnapshot.allocations.forEach(item=>{
       const agent=ensureAgent(item.agent_ref),index=FOLDERS.findIndex(folder=>folder.id===item.inbox_code);
       if(index>=0){agent.cells[index]=item.initial_assignments;agent.openByFolder[index]=item.current_open_workload;}
