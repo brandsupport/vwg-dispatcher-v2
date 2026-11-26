@@ -67,7 +67,7 @@ async function createStudioSnapshot(csvInputs=null,workbookProbe=null){
 }
 
 
-function createWorkbookTestHooks(){
+function createWorkbookTestHooks(fileReaderClass=null){
   const nodes=new Map();
   const document={
     getElementById(id){if(!nodes.has(id))nodes.set(id,makeNode());return nodes.get(id);},
@@ -78,10 +78,11 @@ function createWorkbookTestHooks(){
     document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout,
     XLSX:{utils:{sheet_to_json(worksheet){return worksheet;}}}
   };
+  if(fileReaderClass)context.FileReader=fileReaderClass;
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -291,6 +292,36 @@ test("real Activity Log schema retains moved allocations, system events, email s
   for(const raw of ["agent-a","agent-b","Alice Adams","Bob Baker","PRIVATE TEST NOTE","PRIVATE HANDOVER NOTE","PRIVATE EMAIL NOTE","PRIVATE SYSTEM NOTE","ORDER-PRIVATE","VIN-PRIVATE","<sample-moved@example.invalid>"]){
     assert.equal(serialised.includes(raw),false,"Private source value leaked to aggregate snapshot: "+raw);
   }
+});
+
+test("the workbook reader falls back to FileReader when arrayBuffer is rejected",async()=>{
+  const bytes=new Uint8Array([80,75,3,4]).buffer;
+  class FakeFileReader{
+    readAsArrayBuffer(){
+      this.result=bytes;
+      this.onload();
+    }
+  }
+  const hooks=createWorkbookTestHooks(FakeFileReader);
+  const file={name:"tracker.xlsx",arrayBuffer(){const error=new Error("The requested file could not be read.");error.name="NotReadableError";return Promise.reject(error);}};
+  const result=await hooks.readFileArrayBuffer(file);
+  assert.deepEqual(Array.from(new Uint8Array(result)),[80,75,3,4]);
+});
+
+test("the workbook reader explains how to recover when both browser readers fail",async()=>{
+  class FailingFileReader{
+    readAsArrayBuffer(){
+      this.error=new Error("Access denied by the operating system.");
+      this.error.name="NotReadableError";
+      this.onerror();
+    }
+  }
+  const hooks=createWorkbookTestHooks(FailingFileReader);
+  const file={name:"tracker.xlsx",arrayBuffer(){const error=new Error("File access denied.");error.name="NotReadableError";return Promise.reject(error);}};
+  await assert.rejects(
+    hooks.readFileArrayBuffer(file),
+    /local Downloads folder.*not OneDrive, SharePoint, a network drive/i
+  );
 });
 
 test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{
