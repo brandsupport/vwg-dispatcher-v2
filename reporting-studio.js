@@ -11,12 +11,12 @@ const INBOXES = {
   unadopts: ["unadopts","unadopt"]
 };
 const BRANDS = {
-  volkswagen:["volkswagen","vw","volkswagen passenger cars","vw passenger cars"],
-  audi:["audi"],
-  skoda:["skoda","škoda"],
-  seat:["seat"],
-  cupra:["cupra"],
-  vwcv:["vwcv","vw commercial vehicles","volkswagen commercial vehicles","commercial vehicles"],
+  volkswagen:["volkswagen","vw","volkswagen passenger cars","vw passenger cars","volkswagen uk","vw uk"],
+  audi:["audi","audi uk"],
+  skoda:["skoda","škoda","skoda auto","skoda uk","škoda uk"],
+  seat:["seat","seat uk"],
+  cupra:["cupra","cupra uk"],
+  vwcv:["vwcv","vw cv","vwn","vw commercial","vw commercial vehicle","vw commercial vehicles","volkswagen cv","volkswagen commercial vehicle","volkswagen commercial vehicles","commercial vehicle","commercial vehicles","volkswagen commercial vehicles uk","vw commercial vehicles uk","volkswagen nutzfahrzeuge"],
   other:["other"],
   unclassified:["unclassified","unknown","not known",""]
 };
@@ -434,8 +434,9 @@ function isUnassigned(value){
   return !key||["unassigned","unallocated","queue","none","null","n a","na","not assigned"].includes(key);
 }
 function isResolved(value){
-  const key=norm(value);
-  return ["resolved","closed","complete","completed"].includes(key);
+  const key=norm(value).replace(/\\s+/g," ");
+  if(["resolved","closed","complete","completed","done","case closed","ticket closed","closed successfully","resolved successfully","closed resolved","resolved closed"].includes(key))return true;
+  return /^(resolved|closed|complete|completed|done)(?:\\s+(successfully|by agent|by colleague))?$/.test(key);
 }
 function validShiftClock(value){
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value??"").trim());
@@ -693,7 +694,10 @@ async function sanitise(){
       if(resolvedRaw&&!resolvedAtUtc)quality.tickets.ambiguous_time++;
       const resolvedByRaw=selectedValue(row,"tickets","resolved_by");
       const resolvedByRef=resolvedByRaw&&!isUnassigned(resolvedByRaw)?await rememberAgent(resolvedByRaw):null;
-      const resolved=resolutionStatusRaw?isResolved(resolutionStatus):Boolean(resolvedAtUtc);
+      // Status is the operational current-state field in the tracker. Resolved /
+      // Closed values must be honoured even when the optional future Resolution
+      // Status and Resolved At columns have not been added yet.
+      const resolved=isResolved(resolutionStatusRaw||status)||Boolean(resolvedAtUtc);
       const ticketRef=await pseudonym(key,"ticket",ref);
       ticketMap.set(id,{ticketRef,inbox,brand,status,resolved,ownerRef,unassigned:isUnassigned(owner),receivedDate,receivedAtUtc,resolutionStatus:resolutionStatusRaw||"",resolvedAtUtc,resolvedByRef});
       quality.tickets.rows_accepted++;
@@ -783,6 +787,26 @@ async function sanitise(){
       allocations.push({agent_ref,inbox_code,initial_assignments:count,allocation_share_pct:total?count/total*100:0,current_open_workload:workload.get(group)||0});
     }
     allocations.sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.agent_ref.localeCompare(b.agent_ref));
+
+    const ownerBrandCounts=new Map(),ownerTicketTotals=new Map();
+    for(const ticket of ticketMap.values()){
+      if(!ticket.ownerRef)continue;
+      ownerTicketTotals.set(ticket.ownerRef,(ownerTicketTotals.get(ticket.ownerRef)||0)+1);
+      const keyName=ticket.ownerRef+"|"+ticket.brand;
+      ownerBrandCounts.set(keyName,(ownerBrandCounts.get(keyName)||0)+1);
+    }
+    const brandByAgent=[...ownerBrandCounts.entries()].map(([keyName,ticketCount])=>{
+      const [agent_ref,brand_code]=keyName.split("|");
+      const agentTotal=ownerTicketTotals.get(agent_ref)||0;
+      const brandTotal=brandStats[brand_code]||0;
+      return {
+        agent_ref,brand_code,ticket_count:ticketCount,
+        agent_portfolio_share_pct:agentTotal?Math.round(ticketCount/agentTotal*10000)/100:0,
+        brand_owner_share_pct:brandTotal?Math.round(ticketCount/brandTotal*10000)/100:0,
+        agent_portfolio_total:agentTotal,brand_ticket_total:brandTotal
+      };
+    }).sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref)||a.brand_code.localeCompare(b.brand_code));
+
     const emailOriginInboxByKey=new Map();
     if(files.emailDetails){
       for(const row of files.emailDetails.records){
@@ -792,6 +816,8 @@ async function sanitise(){
       }
     }
     const workflowMap=new Map();const activityLog=[];
+    const lifecycleEvidenceByTicket=new Map();
+    let resolutionEventsWithTime=0,resolutionEventsWithAgent=0;
     if(files.workflow){
       const q=quality.workflow;
       for(let rowIndex=0;rowIndex<files.workflow.records.length;rowIndex++){
@@ -814,6 +840,20 @@ async function sanitise(){
         if(timeRaw&&!eventTime)q.ambiguous_time++;
         const originalName=selectedValue(row,"workflow","original_assignee");
         const currentName=selectedValue(row,"workflow","current_owner");
+        if(ticket&&(event==="resolved"||event==="reopened")){
+          const evidence={
+            event,eventTimeUtc:eventTime,
+            agentRef:(currentName&&!isUnassigned(currentName)?await rememberAgent(currentName):
+              originalName&&!isUnassigned(originalName)?await rememberAgent(originalName):null)
+          };
+          const prior=lifecycleEvidenceByTicket.get(refKey);
+          if(!prior||(!prior.eventTimeUtc&&evidence.eventTimeUtc)||
+             (prior.eventTimeUtc&&evidence.eventTimeUtc&&evidence.eventTimeUtc>=prior.eventTimeUtc)){
+            lifecycleEvidenceByTicket.set(refKey,evidence);
+          }
+          if(event==="resolved"&&eventTime)resolutionEventsWithTime++;
+          if(event==="resolved"&&evidence.agentRef)resolutionEventsWithAgent++;
+        }
         const flagRaw=norm(selectedValue(row,"workflow","assignment_flag"));
         const incidentRaw=selectedValue(row,"workflow","incident_count");
         const ticketRef=ticket?.ticketRef||(ref?await pseudonym(key,"ticket",ref):await pseudonym(key,"ticket","system-event:"+rowIndex+"|"+eventRaw+"|"+timeRaw+"|"+inbox));
@@ -831,6 +871,18 @@ async function sanitise(){
           assignment_flag:flagRaw==="true"||flagRaw==="yes"||flagRaw==="1",
           incident_count:/^\d+$/.test(incidentRaw)?Number(incidentRaw):0
         });
+      }
+    }
+    // When an explicit closure field is absent, use the latest Resolved /
+    // Reopened Activity Log event as lifecycle evidence. The event's associated
+    // owner is a source association, not proof of the authenticated actor.
+    for(const [ticketKey,ticket] of ticketMap.entries()){
+      const evidence=lifecycleEvidenceByTicket.get(ticketKey);
+      if(!evidence)continue;
+      if(!ticket.resolutionStatus&&!isResolved(ticket.status))ticket.resolved=evidence.event==="resolved";
+      if(ticket.resolved&&evidence.event==="resolved"){
+        if(!ticket.resolvedAtUtc&&evidence.eventTimeUtc)ticket.resolvedAtUtc=evidence.eventTimeUtc;
+        if(!ticket.resolvedByRef&&evidence.agentRef)ticket.resolvedByRef=evidence.agentRef;
       }
     }
     const workflow=[...workflowMap.values()].map(row=>({event_type:row.event_type,inbox_code:row.inbox_code,event_count:row.event_count,distinct_tickets:row.tickets.size})).sort((a,b)=>a.inbox_code.localeCompare(b.inbox_code)||a.event_type.localeCompare(b.event_type));
@@ -865,15 +917,37 @@ async function sanitise(){
       };
     };
     const resolutionMetrics={
-      status_field_mapped:Boolean(mappings.tickets.resolution_status),
-      resolved_at_field_mapped:Boolean(mappings.tickets.resolved_at),
-      resolved_by_field_mapped:Boolean(mappings.tickets.resolved_by),
+      status_field_mapped:Boolean(mappings.tickets.status||mappings.tickets.resolution_status),
+      resolved_at_field_mapped:Boolean(mappings.tickets.resolved_at)||resolutionEventsWithTime>0,
+      resolved_by_field_mapped:Boolean(mappings.tickets.resolved_by)||resolutionEventsWithAgent>0,
       overall:summariseDurations(resolutionRows.map(row=>row.minutes)),
       by_inbox:INBOXES&&Object.keys(INBOXES).map(inbox_code=>({
         inbox_code,...summariseDurations(resolutionRows.filter(row=>row.inbox_code===inbox_code).map(row=>row.minutes))
       }))
     };
     const resolutionByAgent=[...resolutionAgentMap.values()].sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
+    const currentOwnerResolutionMap=new Map();
+    for(const ticket of ticketMap.values()){
+      if(!ticket.ownerRef)continue;
+      const entry=currentOwnerResolutionMap.get(ticket.ownerRef)||{
+        agent_ref:ticket.ownerRef,owned_tickets:0,resolved_tickets:0,timed_tickets:0,total_resolution_minutes:0
+      };
+      entry.owned_tickets++;
+      if(ticket.resolved){
+        entry.resolved_tickets++;
+        if(ticket.receivedAtUtc&&ticket.resolvedAtUtc){
+          const elapsed=(Date.parse(ticket.resolvedAtUtc)-Date.parse(ticket.receivedAtUtc))/60000;
+          if(Number.isFinite(elapsed)&&elapsed>=0){
+            entry.timed_tickets++;
+            entry.total_resolution_minutes+=Math.round(elapsed);
+          }
+        }
+      }
+      currentOwnerResolutionMap.set(ticket.ownerRef,entry);
+    }
+    const resolutionByCurrentOwner=[...currentOwnerResolutionMap.values()].map(row=>({
+      ...row,resolution_rate_pct:row.owned_tickets?Math.round(row.resolved_tickets/row.owned_tickets*10000)/100:0
+    })).sort((a,b)=>a.agent_ref.localeCompare(b.agent_ref));
     const byBrand=Object.keys(BRAND_LABELS).map(brand_code=>({brand_code,count:brandStats[brand_code]||0})).filter(row=>row.count||row.brand_code==="unclassified");
 
     // Email Details is a separate lifecycle dataset. "Completed" means the
@@ -1008,7 +1082,9 @@ async function sanitise(){
     }else if(!mappings.tickets.brand&&!brandEnrichedTicketCount){
       warnings.push("No ticket Brand field or matching Email Details Brand records were found. Ticket brand totals remain Other / unclassified.");
     }
-    if(!mappings.tickets.resolution_status&&!mappings.tickets.resolved_at)warnings.push("No explicit Resolution Status or Resolved At field is mapped. Resolved and outstanding totals, resolution rate and solve-time metrics are not tracked by this workbook.");
+    if(!mappings.tickets.status&&!mappings.tickets.resolution_status)warnings.push("No current-status field is mapped. Resolved and outstanding totals cannot be classified.");
+    if(!mappings.tickets.resolved_at&&!resolutionEventsWithTime)warnings.push("No resolution timestamp is available. Resolution counts and rates can still be calculated from current Status values, but average solve time is not available.");
+    if(!mappings.tickets.resolved_by&&!resolutionEventsWithAgent)warnings.push("No resolver field or resolution event owner was supplied. Resolved-by-agent attribution is not available.");
     if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Imported agents will not have shift-group or active-fortnight metadata.");
     if(files.roster){
       const usedAgentRefs=new Set();
@@ -1028,10 +1104,12 @@ async function sanitise(){
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
       tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
-        resolution_tracking:(mappings.tickets.resolution_status||mappings.tickets.resolved_at)?"source_status_present":"not_captured",
+        resolution_tracking:(mappings.tickets.status||mappings.tickets.resolution_status||resolutionEventsWithTime)?"source_status_present":"not_captured",
         resolution_metrics:resolutionMetrics,
         resolution_by_agent:resolutionByAgent,
+        resolution_by_current_owner:resolutionByCurrentOwner,
         brand_field_mapped:Boolean(mappings.tickets.brand)||brandEnrichedTicketCount>0},
+      brand_by_agent:brandByAgent,
       allocations,assignment_methods:assignmentMethods,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
       workflow,activity_log:activityLog.sort((a,b)=>(a.event_time_utc||"").localeCompare(b.event_time_utc||"")),
@@ -1078,7 +1156,10 @@ function openDashboardWithSnapshot(){
     const message=event.data||{};
     if(message.token!==token)return;
     if(message.type==="VWG_DASHBOARD_READY"){
-      channel.postMessage({type:"VWG_IMPORT_SNAPSHOT",token,snapshot:currentSnapshot});
+      channel.postMessage({
+        type:"VWG_IMPORT_SNAPSHOT",token,snapshot:currentSnapshot,
+        privateAgentLookup:privateAgentLookup.map(row=>({agent_ref:row.agent_ref,display_name:row.display_name}))
+      });
     }else if(message.type==="VWG_SNAPSHOT_IMPORTED"){
       finish(Boolean(message.success),message.success?"":"Dashboard rejected the snapshot: "+String(message.error||"Unknown import error"));
     }
@@ -1103,6 +1184,8 @@ function downloadCSVs(){
     ["dispatcher-inbox-summary.csv",["inbox_code","inbox_name","ticket_records","initially_assigned","resolved","outstanding","unassigned"],s.tickets.by_inbox.map(r=>[r.inbox_code,INBOX_LABELS[r.inbox_code],r.ticket_records,r.initially_assigned,r.resolved,r.outstanding,r.unassigned])],
     ["dispatcher-brand-summary.csv",["brand_code","brand_name","ticket_count","share_pct"],s.tickets.by_brand.map(r=>[r.brand_code,BRAND_LABELS[r.brand_code],r.count,s.tickets.total?(r.count/s.tickets.total*100).toFixed(2):"0.00"])],
     ["dispatcher-agent-allocation.csv",["agent_ref","inbox_code","initial_assignments","allocation_share_pct","current_open_workload"],s.allocations.map(r=>[r.agent_ref,r.inbox_code,r.initial_assignments,r.allocation_share_pct.toFixed(2),r.current_open_workload])],
+    ["dispatcher-brand-by-agent.csv",["agent_ref","brand_code","current_owner_ticket_count","agent_portfolio_share_pct","share_of_all_brand_tickets_pct"],(s.brand_by_agent||[]).map(r=>[r.agent_ref,r.brand_code,r.ticket_count,r.agent_portfolio_share_pct.toFixed(2),r.brand_owner_share_pct.toFixed(2)])],
+    ["dispatcher-resolution-by-current-owner.csv",["agent_ref","owned_tickets","resolved_tickets","resolution_rate_pct","timed_tickets","average_solve_minutes"],(s.tickets.resolution_by_current_owner||[]).map(r=>[r.agent_ref,r.owned_tickets,r.resolved_tickets,r.resolution_rate_pct.toFixed(2),r.timed_tickets,r.timed_tickets?Math.round(r.total_resolution_minutes/r.timed_tickets):"Not available"])],
     ["dispatcher-team-roster.csv",["agent_ref","shift_group","shift_start_egypt","shift_end_egypt","active_this_fortnight"],(s.team_roster||[]).map(r=>[r.agent_ref,r.shift_group,r.shift_start_egypt,r.shift_end_egypt,r.active_this_fortnight?"Yes":"No"])],
     ["dispatcher-workflow-summary.csv",["event_type","inbox_code","event_count","distinct_tickets"],s.workflow.map(r=>[r.event_type,r.inbox_code,r.event_count,r.distinct_tickets])],
     ...(s.email_metrics?[
