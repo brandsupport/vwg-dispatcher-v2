@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1019">
   <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
-  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-dark-brand-directory-v2">
+  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-final-reporting-edition-v1">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261126-private-order-vin-search-v3" defer></script>
+  <script src="./reporting-studio.js?v=20261126-final-reporting-edition-v1" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -28,6 +28,20 @@
         <span class="privacy-icon">✓</span>
         <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API. The browser-local directory saves colleague display names plus a private Order Number / VIN lookup index (brand, Inbox, lifecycle status, dates and pseudonymous ticket reference) so Audit History can find matching emails and events. Full workbook rows, email subjects, message bodies and raw email keys are not saved in the shared JSON snapshot or sent to a server. Order Numbers and VINs remain only in this browser's local storage and can be cleared from the Dashboard.</span></div>
       </div>
+    </section>
+
+    <section class="workflow-roadmap" aria-label="The four steps in a reporting cycle">
+      <div class="workflow-roadmap-heading">
+        <span>THE REPORTING CYCLE</span>
+        <strong>From workbook to trusted snapshot</strong>
+        <small>Use the same browser and the same private workspace key for each reporting run.</small>
+      </div>
+      <ol>
+        <li><span>01</span><div><strong>Select</strong><small>Open the current complete tracker workbook.</small></div></li>
+        <li><span>02</span><div><strong>Map</strong><small>Choose source tabs and verify required columns.</small></div></li>
+        <li><span>03</span><div><strong>Review</strong><small>Sanitise locally and check every quality warning.</small></div></li>
+        <li><span>04</span><div><strong>Publish</strong><small>Open the dashboard directly or download and import JSON.</small></div></li>
+      </ol>
     </section>
 
     <section class="workflow-grid">
