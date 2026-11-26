@@ -521,3 +521,10 @@ body { font-size:15.8px !important; line-height:1.55; }
 }
 
 .email-sheet-warning{margin:8px 0 12px;padding:10px 12px;border:1px solid #8a5a39;border-radius:8px;background:#2a1b17;color:#f2c49c;font-size:12px;line-height:1.55}.email-sheet-warning:empty{display:none}
+
+.dashboard-handoff{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:18px 0;padding:18px 20px;border:1px solid #6b3854;border-radius:13px;background:linear-gradient(105deg,#28182a,#171d2b)}
+.dashboard-handoff strong,.dashboard-handoff span{display:block}
+.dashboard-handoff strong{color:#f8e9f0;font-size:14px;font-weight:800}
+.dashboard-handoff span{margin-top:5px;color:#b9a9ba;font-size:12px;line-height:1.55;max-width:690px}
+.dashboard-handoff button{flex:0 0 auto;white-space:nowrap}
+@media(max-width:720px){.dashboard-handoff{align-items:flex-start;flex-direction:column}.dashboard-handoff button{width:100%}}
