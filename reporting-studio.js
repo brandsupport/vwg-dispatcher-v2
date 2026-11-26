@@ -434,9 +434,9 @@ function isUnassigned(value){
   return !key||["unassigned","unallocated","queue","none","null","n a","na","not assigned"].includes(key);
 }
 function isResolved(value){
-  const key=norm(value).replace(/\\s+/g," ");
+  const key=norm(value);
   if(["resolved","closed","complete","completed","done","case closed","ticket closed","closed successfully","resolved successfully","closed resolved","resolved closed"].includes(key))return true;
-  return /^(resolved|closed|complete|completed|done)(?:\\s+(successfully|by agent|by colleague))?$/.test(key);
+  return /^(resolved|closed|complete|completed|done)(?:\s+(successfully|by agent|by colleague))?$/.test(key);
 }
 function validShiftClock(value){
   return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value??"").trim());
@@ -879,7 +879,7 @@ async function sanitise(){
     for(const [ticketKey,ticket] of ticketMap.entries()){
       const evidence=lifecycleEvidenceByTicket.get(ticketKey);
       if(!evidence)continue;
-      if(!ticket.resolutionStatus&&!isResolved(ticket.status))ticket.resolved=evidence.event==="resolved";
+      if(!ticket.resolutionStatus)ticket.resolved=evidence.event==="resolved";
       if(ticket.resolved&&evidence.event==="resolved"){
         if(!ticket.resolvedAtUtc&&evidence.eventTimeUtc)ticket.resolvedAtUtc=evidence.eventTimeUtc;
         if(!ticket.resolvedByRef&&evidence.agentRef)ticket.resolvedByRef=evidence.agentRef;
