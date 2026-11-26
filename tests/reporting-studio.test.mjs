@@ -518,7 +518,7 @@ test("subject brand detection is reused by Email Performance when only Assignmen
   assert.ok(result.snapshot.team_roster.some(row=>row.agent_ref===nameRow.agent_ref));
   assert.equal(result.privateDirectorySaved,true);
   const stored=JSON.parse(storageValues.get("vwg-dispatcher.private-agent-directory.v1"));
-  assert.ok(stored.some(row=>row.agent_ref===nameRow.agent_ref&&row.display_name==="Belal"));
+  assert.ok(stored.agents.some(row=>row.agent_ref===nameRow.agent_ref&&row.display_name==="Belal"));
   assert.equal(JSON.stringify(stored).includes("EMAIL-AUDI"),false);
   assert.equal(JSON.stringify(stored).includes("Form submission"),false);
   assert.equal(JSON.stringify(stored).includes("Belal Category"),false);
@@ -530,5 +530,5 @@ test("private name persistence fails closed when browser storage is unavailable"
   const activityCsv="Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count\r\n2026-11-24 10:30:00,AUTO_ASSIGNMENT,K1,Detags,Belal,Belal,TRUE,0";
   const result=await hooks.processVwg(ticketCsv,activityCsv);
   assert.equal(result.privateDirectorySaved,false);
-  assert.ok(result.snapshot.data_quality.warnings.some(message=>message.toLowerCase().includes("browser could not save the private colleague directory")));
+  assert.ok(result.snapshot.data_quality.warnings.some(message=>message.toLowerCase().includes("browser could not save the private colleague and order/vin lookup directory")));
 });
