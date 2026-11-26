@@ -12,6 +12,8 @@ on:
       - "reporting-studio.css"
       - "reporting-studio.js"
       - "examples/**"
+      - "favicon.svg"
+      - "site.webmanifest"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -45,6 +47,7 @@ jobs:
           mkdir -p _site
           cp index.html dashboard.css dashboard.js reporting-studio.html reporting-studio.css reporting-studio.js _site/
           cp -r examples _site/examples
+          cp favicon.svg site.webmanifest _site/
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
