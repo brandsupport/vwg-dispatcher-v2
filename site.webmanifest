@@ -1,0 +1,18 @@
+{
+  "name": "VWG Dispatch Intelligence",
+  "short_name": "VWG Dispatch",
+  "description": "VWG Dispatcher 2.0 Final Reporting Edition",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b070b",
+  "theme_color": "#0b070b",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
