@@ -1094,11 +1094,13 @@ function bindWorkbook(){
   const zone=$("workbookDropZone");
   if(browse)browse.addEventListener("click",()=>openWorkbookPicker(input));
   input.addEventListener("change",async event=>{
-    const file=event.target.files?.[0]||null;
-    // Clear the picker immediately so the same file can be selected again after any outcome.
-    event.target.value="";
+    const selectedInput=event.target;
+    const file=selectedInput.files?.[0]||null;
     if(!file)return;
-    await processWorkbookFile(file);
+    // Keep the browser's file handle intact throughout the asynchronous read.
+    // Clear only after processing so the same file can be selected again next time.
+    try{await processWorkbookFile(file);}
+    finally{selectedInput.value="";}
   });
   if(zone){
     zone.addEventListener("click",event=>{
