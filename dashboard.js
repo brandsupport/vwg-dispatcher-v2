@@ -2806,9 +2806,34 @@ function refreshAuditPanels(){
   if(detail)detail.innerHTML=auditDetailMarkup(selected);
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
-function importedActivityRows(){
+function privateEmailLookupForCurrentSnapshot(){
+  return state.importedSnapshot&&privateEmailLookupSnapshotId===String(state.importedSnapshot.generated_at_utc||"")
+    ?privateEmailLookup:[];
+}
+function compactAuditToken(value){
+  return String(value||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,"");
+}
+function privateEmailLookupMatches(){
+  const rawTerm=String(state.auditSearch||"").trim();
+  if(!rawTerm)return [];
+  const token=compactAuditToken(rawTerm);
+  if(!token)return [];
+  return privateEmailLookupForCurrentSnapshot().filter(row=>{
+    if(state.folder!=="all"&&row.inbox_code!==state.folder)return false;
+    if(state.auditAgent!=="all"&&row.original_agent_ref!==state.auditAgent&&row.current_agent_ref!==state.auditAgent)return false;
+    const date=row.received_date||row.completion_date||"";
+    if(state.auditFromDate&&(!date||date<state.auditFromDate))return false;
+    if(state.auditToDate&&(!date||date>state.auditToDate))return false;
+    return [
+      row.order_number,row.vin,row.ticket_ref,row.brand_code,row.status
+    ].some(value=>compactAuditToken(value).includes(token));
+  });
+}
+function importedActivityRows(emailMatches){
   if(!state.importedSnapshot)return [];
   const term=String(state.auditSearch||"").trim().toLowerCase();
+  const token=compactAuditToken(term);
+  const linkedTicketRefs=new Set((Array.isArray(emailMatches)?emailMatches:privateEmailLookupMatches()).map(row=>row.ticket_ref));
   return (state.importedSnapshot.activity_log||[])
     .filter(event=>state.folder==="all"||event.inbox_code===state.folder)
     .filter(event=>state.auditEventType==="all"||event.event_type===state.auditEventType)
@@ -2819,12 +2844,87 @@ function importedActivityRows(){
       if(state.auditToDate&&(!date||date>state.auditToDate))return false;
       return true;
     })
-    .filter(event=>!term||[
+    .filter(event=>!term||linkedTicketRefs.has(event.ticket_ref)||[
       event.event_time_egypt,event.event_type,event.ticket_ref,event.inbox_code,
       displayAgentName(event.original_agent_ref||""),displayAgentName(event.current_agent_ref||""),
       event.assignment_flag,event.incident_count
-    ].join(" ").toLowerCase().includes(term))
+    ].join(" ").toLowerCase().includes(term)||[
+      event.ticket_ref,event.event_type,event.inbox_code
+    ].some(value=>compactAuditToken(value).includes(token)))
     .slice().sort((a,b)=>(b.event_time_utc||"").localeCompare(a.event_time_utc||""));
+}
+function importedActivityEventRows(visible){
+  return visible.map(event=>
+    '<tr>'+
+      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
+      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
+    '</tr>'
+  );
+}
+function privateEmailLookupTableRows(matches){
+  if(!matches.length){
+    const available=privateEmailLookupForCurrentSnapshot().length>0;
+    const message=!String(state.auditSearch||"").trim()
+      ?"Search by an order number or VIN to find the matching Email Details records."
+      :!available
+        ?"No private order/VIN lookup is available for this snapshot on this browser. Re-run Reporting Studio sanitisation in this browser to enable identifier search."
+        :"No Email Details records match this order number or VIN in the selected filters.";
+    return '<div class="activity-lookup-empty">'+esc(message)+'</div>';
+  }
+  const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other",unclassified:"Other / unclassified"};
+  return '<div class="table-wrap activity-email-table-wrap"><table class="data-table activity-email-table"><thead><tr><th>Order number / VIN</th><th>Brand</th><th>Inbox</th><th>Email status</th><th>Received</th><th>Current colleague</th><th>Ticket reference</th></tr></thead><tbody>'+
+    matches.map(row=>
+      '<tr>'+
+        '<td><strong>'+esc(row.order_number||"Order number not captured")+'</strong><small class="activity-ref-sub">'+esc(row.vin?"VIN · "+row.vin:"VIN not captured")+'</small></td>'+
+        '<td>'+esc(labels[row.brand_code]||row.brand_code)+'</td>'+
+        '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
+        '<td>'+esc(row.status.replaceAll("_"," "))+'</td>'+
+        '<td>'+esc(row.received_date||"Not recorded")+'</td>'+
+        '<td>'+esc(row.current_agent_ref?displayAgentName(row.current_agent_ref):"Not recorded")+'</td>'+
+        '<td class="mono">'+esc(row.ticket_ref)+'</td>'+
+      '</tr>'
+    ).join("")+
+  '</tbody></table></div>';
+}
+function refreshImportedActivityAuditPanels(){
+  const emailMatches=privateEmailLookupMatches();
+  const visible=importedActivityRows(emailMatches);
+  const all=state.importedSnapshot?.activity_log||[];
+  const ticketEvents=visible.filter(event=>!event.system_event);
+  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const count=document.getElementById("auditResultCount");
+  const emailCount=document.getElementById("auditEmailLookupCount");
+  const emailRows=document.getElementById("auditEmailLookupRows");
+  const activityRows=document.getElementById("auditActivityRows");
+  const lookupStatus=document.getElementById("auditLookupStatus");
+  if(count)count.textContent="Showing "+visible.length+" Activity Log events and "+emailMatches.length+" Email Details matches · "+all.length+" accepted Activity Log rows";
+  if(emailCount)emailCount.textContent=emailMatches.length+" matching Email Details records";
+  if(emailRows)emailRows.innerHTML=privateEmailLookupTableRows(emailMatches);
+  if(activityRows)activityRows.innerHTML=visible.length
+    ?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],importedActivityEventRows(visible))
+    :'<div class="empty-state">'+(emailMatches.length?"The Email Details record matched, but no associated Activity Log event matched the current event/date filters.":"No Activity Log events match the selected Inbox, event and colleague filters or search.")+'</div>';
+  if(lookupStatus){
+    lookupStatus.textContent=privateEmailLookupForCurrentSnapshot().length
+      ?"Private order/VIN lookup available on this device"
+      :"Order/VIN lookup not loaded on this device";
+    lookupStatus.classList.toggle("available",privateEmailLookupForCurrentSnapshot().length>0);
+  }
+  const values={
+    events:visible.length,tickets:totalTickets,allocation:automatic+" / "+manual,workflow:handovers+" / "+recoveries
+  };
+  for(const [key,value] of Object.entries(values)){
+    const node=document.querySelector('[data-audit-kpi="'+key+'"]');
+    if(node)node.textContent=typeof value==="number"?fmt(value):value;
+  }
 }
 function exportImportedActivityLog(){
   const rows=importedActivityRows();
