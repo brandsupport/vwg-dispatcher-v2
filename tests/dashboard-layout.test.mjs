@@ -77,7 +77,7 @@ test("Activity Log searches private Order/VIN metadata and updates results witho
   assert.match(dashboard,/compactAuditToken\(row\.vin\)/);
   assert.match(dashboard,/linkedTicketRefs\.has\(event\.ticket_ref\)/);
   assert.match(dashboard,/function refreshImportedActivityAuditPanels\(\)/);
-  assert.match(dashboard,/refreshImportedActivityAuditPanels\(\);\s*return;/);
+  assert.match(dashboard,/if\(state\.importedSnapshot\)\{\s*refreshImportedActivityAuditPanels\(\);\s*\}else refreshAuditPanels\(\);\s*return;/);
   assert.match(dashboard,/id="auditEmailLookupRows"/);
   assert.match(dashboard,/placeholder="Enter an Order Number, VIN, ticket reference or event/);
   assert.match(dashboard,/snapshot_generated_at_utc/);
