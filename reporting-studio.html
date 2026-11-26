@@ -8,7 +8,7 @@
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
   <link rel="stylesheet" href="./reporting-studio.css?v=20261126-dark-brand-directory-v2">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261126-auto-colleague-directory-brand-v2" defer></script>
+  <script src="./reporting-studio.js?v=20261126-private-order-vin-search-v3" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -26,7 +26,7 @@
       <p>Upload the complete tracker workbook once, choose the relevant worksheets, confirm the columns and create a pseudonymised reporting snapshot. Email Details is an optional sixth-tab source for inbox-exit and handling metrics.</p>
       <div class="privacy-banner" role="note">
         <span class="privacy-icon">✓</span>
-        <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API. Only the private colleague mapping (pseudonymous agent reference plus display name) is saved in this browser's local directory for dashboard display; workbook rows, ticket keys and customer data are not saved.</span></div>
+        <div><strong>Workbook data stays in this browser</strong><span>The Excel parser code loads from the official SheetJS static CDN; that request downloads library code only. Workbook and CSV contents are parsed in this tab and are not uploaded to a server, Worker or API. The browser-local directory saves colleague display names plus a private Order Number / VIN lookup index (brand, Inbox, lifecycle status, dates and pseudonymous ticket reference) so Audit History can find matching emails and events. Full workbook rows, email subjects, message bodies and raw email keys are not saved in the shared JSON snapshot or sent to a server. Order Numbers and VINs remain only in this browser's local storage and can be cleared from the Dashboard.</span></div>
       </div>
     </section>
 
@@ -124,7 +124,7 @@
         <div class="result-grid">
           <section class="result-panel"><h3>Email status by first source Inbox</h3><div id="emailInboxResults"></div></section>
           <section class="result-panel"><h3>Email volume by brand</h3><div id="emailBrandResults"></div></section>
-          <section class="result-panel"><h3>Confirmed exits by current owner</h3><div id="emailOwnerResults"></div><p class="table-note">Owner references are pseudonymous. Names are available only through the separate private lookup file.</p></section>
+          <section class="result-panel"><h3>Confirmed exits by current owner</h3><div id="emailOwnerResults"></div><p class="table-note">Owner references are pseudonymous in the snapshot. The Dashboard resolves colleague names through its separate browser-local directory.</p></section>
           <section class="result-panel"><h3>Email receipts by day</h3><div id="emailDailyResults"></div></section>
           <section class="result-panel"><h3>Confirmed exits by detection day</h3><div id="emailExitDailyResults"></div></section>
         </div>
@@ -133,7 +133,7 @@
       <div class="download-bar">
         <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
         <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
-        <p class="table-note private-lookup-note"><strong>Colleague names are handled automatically.</strong> The Studio saves only pseudonymous agent references and display names in this browser's private directory. The JSON snapshot and report CSVs never contain colleague names.</p>
+        <p class="table-note private-lookup-note"><strong>Colleague names are handled automatically.</strong> The Studio saves pseudonymous agent references and display names, plus a separate local-only Order Number / VIN search index, in this browser's private directory. The JSON snapshot and report CSVs never contain colleague names, Order Numbers or VINs.</p>
       </div>
       <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>
     </section>

@@ -98,19 +98,41 @@ let workbookData=null;
 let sourceMode="";
 let currentSnapshot=null;
 let privateAgentLookup=[];
+let privateEmailLookupForDashboard=[];
 let privateDirectorySaved=false;
 const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1";
 let savedWorkspaceKey="";
 const $=id=>document.getElementById(id);
 
-function persistPrivateAgentDirectoryForDashboard(rows){
+function persistPrivateAgentDirectoryForDashboard(rows,emailRows,snapshotGeneratedAtUtc){
   try{
     if(typeof localStorage==="undefined")return false;
     const safeRows=(Array.isArray(rows)?rows:[]).slice(0,250).map(row=>({
       agent_ref:String(row?.agent_ref||"").trim(),
       display_name:String(row?.display_name||"").trim().slice(0,100)
     })).filter(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)&&row.display_name);
-    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(safeRows));
+    const safeEmailRows=(Array.isArray(emailRows)?emailRows:[]).slice(0,5000).map(row=>({
+      ticket_ref:String(row?.ticket_ref||"").trim(),
+      order_number:String(row?.order_number||"").trim().slice(0,100),
+      vin:String(row?.vin||"").trim().toUpperCase().slice(0,100),
+      brand_code:String(row?.brand_code||"").trim(),
+      inbox_code:String(row?.inbox_code||"").trim(),
+      received_date:String(row?.received_date||"").trim(),
+      completion_date:String(row?.completion_date||"").trim(),
+      status:String(row?.status||"").trim(),
+      original_agent_ref:/^Agent-[A-F0-9]{10}$/.test(String(row?.original_agent_ref||""))?row.original_agent_ref:"",
+      current_agent_ref:/^Agent-[A-F0-9]{10}$/.test(String(row?.current_agent_ref||""))?row.current_agent_ref:""
+    })).filter(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)&&
+      (row.order_number||row.vin)&&["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"].includes(row.brand_code)&&
+      ["agency","detags","transfers","unadopts"].includes(row.inbox_code));
+    const payload={
+      agents:safeRows,
+      email_lookup:{
+        snapshot_generated_at_utc:String(snapshotGeneratedAtUtc||""),
+        rows:safeEmailRows
+      }
+    };
+    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(payload));
     return true;
   }catch(error){return false;}
 }
@@ -1023,6 +1045,7 @@ async function sanitise(){
     // Completion Time is the first-missing detection time, not first response
     // or business resolution. Only aggregate fields leave this browser tab.
     let emailMetrics=null;
+    privateEmailLookupForDashboard=[];
     if(files.emailDetails){
       const q=quality.emailDetails;
       const makeEmailBucket=()=>({
@@ -1088,6 +1111,17 @@ async function sanitise(){
         const currentRaw=selectedValue(row,"emailDetails","current_owner");
         const originalRef=originalRaw&&!isUnassigned(originalRaw)?await rememberAgent(originalRaw):null;
         const currentRef=currentRaw&&!isUnassigned(currentRaw)?await rememberAgent(currentRaw):null;
+        const orderNumberRaw=selectedValue(row,"emailDetails","order_number");
+        const vinRaw=selectedValue(row,"emailDetails","vin");
+        if(emailKey&&(orderNumberRaw||vinRaw)){
+          privateEmailLookupForDashboard.push({
+            ticket_ref:await pseudonym(key,"ticket",emailKey),
+            order_number:orderNumberRaw,vin:vinRaw.toUpperCase(),
+            brand_code:brand,inbox_code:inbox,
+            received_date:receivedDate||"",completion_date:completionDate||"",
+            status,original_agent_ref:originalRef||"",current_agent_ref:currentRef||""
+          });
+        }
         for(const bucket of [byInboxEmail[inbox],byBrandEmail[brand]||byBrandEmail.unclassified]){
           bucket.email_records++;
           bucket[status==="unknown"?"unknown_status":status]++;
@@ -1177,13 +1211,14 @@ async function sanitise(){
     else if(validInitial.size===0)warnings.push("No validated first-assignment events were found. Allocation shares cannot be interpreted as complete.");
     if(!files.workflow)warnings.push("No workflow-history file was supplied. Workflow event metrics are unavailable.");
     privateAgentLookup=[...privateNames.entries()].map(([agent_ref,display_name])=>({agent_ref,display_name})).sort((a,b)=>a.display_name.localeCompare(b.display_name));
-    privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup);
-    if(privateAgentLookup.length&&!privateDirectorySaved){
-      warnings.push("The browser could not save the private colleague directory. Dashboard names will not resolve automatically until browser storage is available; no separate names file is generated.");
+    const generatedAtUtc=new Date().toISOString();
+    privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup,privateEmailLookupForDashboard,generatedAtUtc);
+    if((privateAgentLookup.length||privateEmailLookupForDashboard.length)&&!privateDirectorySaved){
+      warnings.push("The browser could not save the private colleague and order/VIN lookup directory. Human-readable names and order/VIN search will not be available automatically on this device.");
     }
     const snapshot={
       schema_version:"dispatcher-reporting-snapshot-1",
-      generated_at_utc:new Date().toISOString(),
+      generated_at_utc:generatedAtUtc,
       source_mode:"offline_sanitised_aggregate",
       reporting_period:dateSet.size?{first_received_date_utc:[...dateSet].sort()[0],last_received_date_utc:[...dateSet].sort().at(-1)}:null,
       tickets:{total:ticketMap.size,overall,by_inbox:byInbox,by_brand:byBrand,daily_volume:dailyVolume,
@@ -1241,7 +1276,8 @@ function openDashboardWithSnapshot(){
     if(message.type==="VWG_DASHBOARD_READY"){
       channel.postMessage({
         type:"VWG_IMPORT_SNAPSHOT",token,snapshot:currentSnapshot,
-        privateAgentLookup:privateAgentLookup.map(row=>({agent_ref:row.agent_ref,display_name:row.display_name}))
+        privateAgentLookup:privateAgentLookup.map(row=>({agent_ref:row.agent_ref,display_name:row.display_name})),
+        privateEmailLookup:privateEmailLookupForDashboard.map(row=>({...row}))
       });
     }else if(message.type==="VWG_SNAPSHOT_IMPORTED"){
       finish(Boolean(message.success),message.success?"":"Dashboard rejected the snapshot: "+String(message.error||"Unknown import error"));

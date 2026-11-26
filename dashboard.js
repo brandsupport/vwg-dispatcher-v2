@@ -467,6 +467,8 @@ const ADMIN_INTEGRATIONS = [
 ];
 
 let privateAgentNames=new Map();
+let privateEmailLookup=[];
+let privateEmailLookupSnapshotId="";
 const state = {
   view:"overview", period:"month", folder:"all", search:"", memberSearch:"",
   importedSnapshot:null,
@@ -879,47 +881,86 @@ function importedSourceAvailable(source){
 function displayAgentName(reference){return privateAgentNames.get(reference)||reference;}
 const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1";
 function readSavedPrivateAgentDirectory(){
+  privateEmailLookup=[];
+  privateEmailLookupSnapshotId="";
   try{
     if(typeof localStorage==="undefined")return new Map();
     const raw=localStorage.getItem(PRIVATE_AGENT_DIRECTORY_KEY);
     if(!raw)return new Map();
-    const rows=JSON.parse(raw);
-    if(!Array.isArray(rows))return new Map();
+    const payload=JSON.parse(raw);
+    // Continue to read the original array format from earlier dashboard releases.
+    const agents=Array.isArray(payload)?payload:(Array.isArray(payload?.agents)?payload.agents:[]);
     const result=new Map();
-    for(const row of rows.slice(0,250)){
+    for(const row of agents.slice(0,250)){
       const reference=String(row?.agent_ref||"").trim();
       const name=String(row?.display_name||"").trim().slice(0,100);
       if(/^Agent-[A-F0-9]{10}$/.test(reference)&&name)result.set(reference,name);
     }
+    const lookup=Array.isArray(payload)?null:payload?.email_lookup;
+    const snapshotId=String(lookup?.snapshot_generated_at_utc||"");
+    const currentSnapshotId=typeof state!=="undefined"&&state.importedSnapshot?String(state.importedSnapshot.generated_at_utc||""):"";
+    if(lookup&&Array.isArray(lookup.rows)&&snapshotId&&(!currentSnapshotId||snapshotId===currentSnapshotId)){
+      privateEmailLookup=lookup.rows.slice(0,5000).map(row=>({
+        ticket_ref:String(row?.ticket_ref||""),
+        order_number:String(row?.order_number||"").slice(0,100),
+        vin:String(row?.vin||"").toUpperCase().slice(0,100),
+        brand_code:String(row?.brand_code||""),
+        inbox_code:String(row?.inbox_code||""),
+        received_date:String(row?.received_date||""),
+        completion_date:String(row?.completion_date||""),
+        status:String(row?.status||""),
+        original_agent_ref:String(row?.original_agent_ref||""),
+        current_agent_ref:String(row?.current_agent_ref||"")
+      })).filter(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)&&
+        (row.order_number||row.vin)&&
+        ["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"].includes(row.brand_code)&&
+        ["agency","detags","transfers","unadopts"].includes(row.inbox_code));
+      privateEmailLookupSnapshotId=snapshotId;
+    }
     return result;
-  }catch(error){return new Map();}
+  }catch(error){
+    privateEmailLookup=[];
+    privateEmailLookupSnapshotId="";
+    return new Map();
+  }
 }
 function savePrivateAgentDirectory(directory){
   try{
     if(typeof localStorage==="undefined")return false;
     const rows=[...directory.entries()].slice(0,250).map(([agent_ref,display_name])=>({agent_ref,display_name}));
-    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(rows));
+    const emailLookup=privateEmailLookupSnapshotId?{
+      snapshot_generated_at_utc:privateEmailLookupSnapshotId,
+      rows:privateEmailLookup.slice(0,5000)
+    }:null;
+    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify({agents:rows,email_lookup:emailLookup}));
     return true;
   }catch(error){return false;}
 }
 function restorePrivateAgentDirectoryForSnapshot(){
   const known=knownSnapshotAgentRefs();
   const saved=readSavedPrivateAgentDirectory();
+  if(privateEmailLookupSnapshotId!==String(state.importedSnapshot?.generated_at_utc||"")){
+    privateEmailLookup=[];
+    privateEmailLookupSnapshotId="";
+  }
   privateAgentNames=new Map([...saved.entries()].filter(([reference])=>known.has(reference)));
   updatePrivateNameControls();
   return privateAgentNames.size;
 }
 function updatePrivateNameControls(){
   const clearButton=document.getElementById("clearAgentDirectoryButton");
-  if(clearButton)clearButton.hidden=!state.importedSnapshot||privateAgentNames.size===0;
+  if(clearButton)clearButton.hidden=!state.importedSnapshot||(!privateAgentNames.size&&!privateEmailLookup.length);
 }
 function clearSavedPrivateAgentDirectory(){
   try{if(typeof localStorage!=="undefined")localStorage.removeItem(PRIVATE_AGENT_DIRECTORY_KEY);}catch(error){}
   privateAgentNames=new Map();
+  privateEmailLookup=[];
+  privateEmailLookupSnapshotId="";
   updatePrivateNameControls();
   render();
-  showToast("Private colleague names cleared from this browser.");
+  showToast("Private colleague names and order/VIN lookup cleared from this browser.");
 }
+
 function memberInitials(name){
   const value=String(name||"").trim();
   if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
@@ -2041,6 +2082,15 @@ function agentOwnedResolutionMetrics(agentRef){
     resolutionRatePct:row.resolution_rate_pct
   };
 }
+function agentEmailHandlingMetrics(agentRef){
+  const row=(state.importedSnapshot?.email_metrics?.by_current_owner||[]).find(item=>item.agent_ref===agentRef);
+  if(!row)return {completedEmails:0,timedCompleted:0,averageMinutes:null};
+  return {
+    completedEmails:row.completed||0,
+    timedCompleted:row.timed_completed||0,
+    averageMinutes:row.average_handling_minutes??null
+  };
+}
 function agentActivityMetrics(agentRef){
   const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
     (state.folder==="all"||event.inbox_code===state.folder)&&
@@ -2064,11 +2114,13 @@ function agentPerformanceReviewPanel(profiles){
   const activityNeedsMapping=Boolean(workflowQuality&&workflowQuality.rows_read>0&&!hasActivity);
   const activityNotSupplied=!workflowQuality;
   const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
+  const hasEmailHandling=Boolean(importedSourceAvailable("Email Details")&&state.importedSnapshot.email_metrics);
   const rows=profiles.map(agent=>{
     const agentRef=agent.id.replace(/^snapshot-/,"");
     const metrics=agentActivityMetrics(agentRef);
     const resolvedBy=agentResolutionMetrics(agentRef);
     const owned=agentOwnedResolutionMetrics(agentRef);
+    const handling=agentEmailHandlingMetrics(agentRef);
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
@@ -2078,13 +2130,29 @@ function agentPerformanceReviewPanel(profiles){
       '<td>'+(hasActivity?fmt(metrics.handovers):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.recovery):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasResolvedBy?fmt(resolvedBy.resolvedTickets):"Not captured")+'</td>'+
+      '<td>'+(hasResolvedBy&&resolvedBy.averageMinutes!==null?formatDurationMinutes(resolvedBy.averageMinutes):"Not tracked")+'</td>'+
       '<td>'+(owned.averageMinutes!==null?formatDurationMinutes(owned.averageMinutes):"Not tracked")+'</td>'+
+      '<td>'+(owned.ownedTickets?fmt(owned.resolvedTickets)+" / "+fmt(owned.ownedTickets):"—")+'</td>'+
       '<td>'+(owned.ownedTickets?owned.resolutionRatePct.toFixed(1)+"%":"—")+'</td>'+
+      '<td>'+(hasEmailHandling?fmt(handling.timedCompleted):"Not supplied")+'</td>'+
+      '<td>'+(hasEmailHandling&&handling.averageMinutes!==null?formatDurationMinutes(handling.averageMinutes):"Not tracked")+'</td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, workflow involvement, resolver attribution and current-owner resolution outcomes. Average solve time and resolution rate use the current-owner portfolio; resolved-by counts use explicit resolver data or the associated owner on a Resolved / Closed Activity Log event. This is not an employee ranking."+(activityNeedsMapping?" The Activity Log was imported but no recognised rows were mapped; check Event Type B, Source Inbox D, Original Assignee E and Current Owner F.":""),dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time · owned cases","Resolution rate · owned cases"],rows,"No agent rows match the current global search.")+
-    '<p class="team-panel-note">Resolution rate = resolved tickets currently owned by the colleague ÷ all tickets currently owned by the colleague. Average solve time = received-to-resolved elapsed time for that same current-owner cohort. “Resolved by agent” is shown only where a resolver field or Activity Log owner association exists; it is not proof of the authenticated person who clicked Resolve. Missing timestamps are excluded, never estimated.</p>');
+  const table=dataTable([
+    "Colleague","First assigned","Automatic","Manual",
+    hasResolutionTracking()?"Open workload":"Current owner records",
+    "Handover records","Recovery / review records","Resolved by agent",
+    "Avg solve time · resolver","Avg solve time · current owner",
+    "Resolved / owned","Resolve rate · owned",
+    "Completed emails timed","Avg handling time · emails"
+  ],rows,"No agent rows match the current global search.")
+    .replace('<div class="table-wrap">','<div class="table-wrap team-performance-table-wrap">')
+    .replace('<table class="data-table">','<table class="data-table team-performance-table">');
+  return panel("Agent performance review","First assignments, workflow involvement, resolver attribution, ticket resolution and completed-email handling time. Resolver figures use the explicit Resolved By field or associated resolution event. Current-owner resolve rate and solve time use the current-owner ticket portfolio.",table+
+    '<p class="team-panel-note">Resolve rate = resolved tickets currently owned by the colleague ÷ all tickets currently owned by that colleague. The resolver average is received-to-resolved time attributed to the explicit resolver / associated resolution event. Current-owner solve time uses the same elapsed-time definition but attributes the whole portfolio to its current owner. Average handling time is sourced separately from completed Email Details rows with a valid Handling Time (minutes) value; the timed email count is shown beside it. Missing durations are excluded, never estimated.</p>'+
+    (activityNeedsMapping?'<p class="team-panel-note">The Activity Log was imported but no recognised rows were mapped; check Event Type B, Source Inbox D, Original Assignee E and Current Owner F.</p>':""));
 }
+
 function teamEvidencePanel(){
   const snapshot=state.importedSnapshot;
   const resolution=snapshot?.tickets.resolution_metrics;
@@ -2134,8 +2202,11 @@ function teamBrandPortfolioPanel(profiles){
     }).join("");
     return '<tr><td>'+memberCell(agent.name,agent.shift)+'</td>'+cells+'</tr>';
   });
-  return dataTable(["Current owner",...codes.map(code=>labels[code]+" · count / share")],body,
-    "No current owners match the selected team search.")+
+  const table=dataTable(["Current owner",...codes.map(code=>labels[code]+" · count / share")],body,
+    "No current owners match the selected team search.")
+    .replace('<div class="table-wrap">','<div class="table-wrap team-brand-share-table-wrap">')
+    .replace('<table class="data-table">','<table class="data-table team-brand-share-table">');
+  return table+
     '<p class="team-panel-note">Counts are tickets in each colleague’s current-owner portfolio. “% of agent” is that brand’s share of the colleague’s owned tickets; “% of brand” is the colleague’s share of all tickets classified to that brand. Unclassified records are shown separately and no brand is inferred from subject text.</p>';
 }
 function renderTeam(){
@@ -2182,6 +2253,26 @@ function renderTeam(){
       panel("Performance measures awaiting evidence","Timing, quality and capacity measures are deliberately withheld until validated sources exist",teamEvidencePanel(),'<span class="subtle-tag">NOT AVAILABLE</span>')+
     '</div>';
 }
+function agentBrandInsightMarkup(agentRef){
+  if(!state.importedSnapshot?.tickets.brand_field_mapped){
+    return '<div class="agent-brand-insight"><div class="activity-results-heading"><div><h3>Tickets by brand</h3><p>Brand data was not supplied or mapped in this ticket snapshot.</p></div></div><div class="activity-lookup-empty">No reliable brand counts are available for this colleague.</div></div>';
+  }
+  const codes=["volkswagen","audi","skoda","seat","cupra","vwcv","other"];
+  const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other / unclassified",unclassified:"Other / unclassified"};
+  const source=(state.importedSnapshot.brand_by_agent||[]).filter(row=>row.agent_ref===agentRef);
+  const totals=new Map(codes.map(code=>[code,0]));
+  for(const row of source){
+    const code=row.brand_code==="unclassified"?"other":row.brand_code;
+    totals.set(code,(totals.get(code)||0)+row.ticket_count);
+  }
+  const total=[...totals.values()].reduce((sum,value)=>sum+value,0);
+  const items=codes.map(code=>{
+    const count=totals.get(code)||0;
+    const share=total?count/total*100:0;
+    return '<div class="agent-brand-item"><span>'+esc(labels[code])+'</span><strong>'+fmt(count)+'</strong><small>'+share.toFixed(1)+'% of this colleague’s current-owner portfolio</small></div>';
+  }).join("");
+  return '<div class="agent-brand-insight"><div class="activity-results-heading"><div><h3>Tickets by brand</h3><p>'+fmt(total)+' current-owner tickets · counts and share of this colleague’s portfolio</p></div><span class="subtle-tag">BRAND MIX</span></div><div class="agent-brand-grid">'+items+'</div></div>';
+}
 function agentDetail(id){
   const agent=(state.importedSnapshot?teamProfileRows():AGENTS).find(item=>item.id===id);
   if(!agent)return "";
@@ -2191,6 +2282,7 @@ function agentDetail(id){
   const firstAssigned=folders.reduce((sum,folder)=>sum+(allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0);
   return '<section class="panel team-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED MEMBER BREAKDOWN</div><h2 class="panel-title">'+esc(agent.name)+' · '+(state.importedSnapshot?"pseudonymous reference":agent.shift+" shift group")+'</h2><p class="panel-subtitle">'+(state.importedSnapshot?"Imported aggregate only. No direct colleague identity or individual workflow history is included.":"Synthetic sample only. This is a workload and allocation breakdown, not an individual performance rating.")+'</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
     '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+(state.importedSnapshot&&!importedSourceAvailable("Assignment history")?"Not supplied":fmt(firstAssigned))+'</strong></div><div><span>'+(state.importedSnapshot&&!hasResolutionTracking()?"Records with current owner":"Current open workload")+'</span><strong>'+fmt(agent.open)+'</strong></div><div><span>'+(state.importedSnapshot?"Roster information":"Shift group")+'</span><strong>'+(state.importedSnapshot?(agent.shift==="Shift data not included"?"Not supplied":esc(agent.shift+" · "+agent.start+"–"+agent.end)):esc(agent.shift))+'</strong><small>'+(state.importedSnapshot?(agent.activeThisFortnight===null?"No roster match was supplied.":agent.activeThisFortnight?"Active this fortnight":"Inactive this fortnight"):"Indicative roster label; scheduled hours are not verified.")+'</small></div></div>'+
+    (state.importedSnapshot?agentBrandInsightMarkup(id.replace(/^snapshot-/,"")):"")+
     '<div class="grid-two"><div><h3 class="mini-heading">First assignments by inbox</h3>'+barRows(folders.map(folder=>({label:folder.name,value:allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],color:folder.color})))+'</div><div class="team-private-state"><strong>Individual workflow events · Not available</strong><p>Handover, reassignment, recovery and flag events are not attributed to individual profiles in the snapshot. The aggregate event ledger is shown separately and must not be distributed across members.</p></div></div>'+
     '</section>';
 }
@@ -2765,9 +2857,36 @@ function refreshAuditPanels(){
   if(detail)detail.innerHTML=auditDetailMarkup(selected);
   if(timeline)timeline.innerHTML=auditTimelineMarkup(selected);
 }
-function importedActivityRows(){
+function privateEmailLookupForCurrentSnapshot(){
+  return state.importedSnapshot&&privateEmailLookupSnapshotId===String(state.importedSnapshot.generated_at_utc||"")
+    ?privateEmailLookup:[];
+}
+function compactAuditToken(value){
+  return String(value||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g,"");
+}
+function privateEmailLookupMatches(){
+  const rawTerm=String(state.auditSearch||"").trim();
+  if(!rawTerm)return [];
+  const token=compactAuditToken(rawTerm);
+  if(!token)return [];
+  return privateEmailLookupForCurrentSnapshot().filter(row=>{
+    if(state.folder!=="all"&&row.inbox_code!==state.folder)return false;
+    if(state.auditAgent!=="all"&&row.original_agent_ref!==state.auditAgent&&row.current_agent_ref!==state.auditAgent)return false;
+    const date=row.received_date||row.completion_date||"";
+    if(state.auditFromDate&&(!date||date<state.auditFromDate))return false;
+    if(state.auditToDate&&(!date||date>state.auditToDate))return false;
+    return compactAuditToken(row.order_number).includes(token)||
+      compactAuditToken(row.vin).includes(token)||
+      compactAuditToken(row.ticket_ref).includes(token)||
+      compactAuditToken(row.brand_code).includes(token)||
+      compactAuditToken(row.status).includes(token);
+  });
+}
+function importedActivityRows(emailMatches){
   if(!state.importedSnapshot)return [];
   const term=String(state.auditSearch||"").trim().toLowerCase();
+  const token=compactAuditToken(term);
+  const linkedTicketRefs=new Set((Array.isArray(emailMatches)?emailMatches:privateEmailLookupMatches()).map(row=>row.ticket_ref));
   return (state.importedSnapshot.activity_log||[])
     .filter(event=>state.folder==="all"||event.inbox_code===state.folder)
     .filter(event=>state.auditEventType==="all"||event.event_type===state.auditEventType)
@@ -2778,12 +2897,87 @@ function importedActivityRows(){
       if(state.auditToDate&&(!date||date>state.auditToDate))return false;
       return true;
     })
-    .filter(event=>!term||[
+    .filter(event=>!term||linkedTicketRefs.has(event.ticket_ref)||[
       event.event_time_egypt,event.event_type,event.ticket_ref,event.inbox_code,
       displayAgentName(event.original_agent_ref||""),displayAgentName(event.current_agent_ref||""),
       event.assignment_flag,event.incident_count
-    ].join(" ").toLowerCase().includes(term))
+    ].join(" ").toLowerCase().includes(term)||[
+      event.ticket_ref,event.event_type,event.inbox_code
+    ].some(value=>compactAuditToken(value).includes(token)))
     .slice().sort((a,b)=>(b.event_time_utc||"").localeCompare(a.event_time_utc||""));
+}
+function importedActivityEventRows(visible){
+  return visible.map(event=>
+    '<tr>'+
+      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
+      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
+    '</tr>'
+  );
+}
+function privateEmailLookupTableRows(matches){
+  if(!matches.length){
+    const available=privateEmailLookupForCurrentSnapshot().length>0;
+    const message=!String(state.auditSearch||"").trim()
+      ?"Search by an order number or VIN to find the matching Email Details records."
+      :!available
+        ?"No private order/VIN lookup is available for this snapshot on this browser. Re-run Reporting Studio sanitisation in this browser to enable identifier search."
+        :"No Email Details records match this order number or VIN in the selected filters.";
+    return '<div class="activity-lookup-empty">'+esc(message)+'</div>';
+  }
+  const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other",unclassified:"Other / unclassified"};
+  return '<div class="table-wrap activity-email-table-wrap"><table class="data-table activity-email-table"><thead><tr><th>Order number / VIN</th><th>Brand</th><th>Inbox</th><th>Email status</th><th>Received</th><th>Current colleague</th><th>Ticket reference</th></tr></thead><tbody>'+
+    matches.map(row=>
+      '<tr>'+
+        '<td><strong>'+esc(row.order_number||"Order number not captured")+'</strong><small class="activity-ref-sub">'+esc(row.vin?"VIN · "+row.vin:"VIN not captured")+'</small></td>'+
+        '<td>'+esc(labels[row.brand_code]||row.brand_code)+'</td>'+
+        '<td>'+esc(FOLDERS.find(folder=>folder.id===row.inbox_code)?.name||row.inbox_code)+'</td>'+
+        '<td>'+esc(row.status.replaceAll("_"," "))+'</td>'+
+        '<td>'+esc(row.received_date||"Not recorded")+'</td>'+
+        '<td>'+esc(row.current_agent_ref?displayAgentName(row.current_agent_ref):"Not recorded")+'</td>'+
+        '<td class="mono">'+esc(row.ticket_ref)+'</td>'+
+      '</tr>'
+    ).join("")+
+  '</tbody></table></div>';
+}
+function refreshImportedActivityAuditPanels(){
+  const emailMatches=privateEmailLookupMatches();
+  const visible=importedActivityRows(emailMatches);
+  const all=state.importedSnapshot?.activity_log||[];
+  const ticketEvents=visible.filter(event=>!event.system_event);
+  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const count=document.getElementById("auditResultCount");
+  const emailCount=document.getElementById("auditEmailLookupCount");
+  const emailRows=document.getElementById("auditEmailLookupRows");
+  const activityRows=document.getElementById("auditActivityRows");
+  const lookupStatus=document.getElementById("auditLookupStatus");
+  if(count)count.textContent="Showing "+visible.length+" Activity Log events and "+emailMatches.length+" Email Details matches · "+all.length+" accepted Activity Log rows";
+  if(emailCount)emailCount.textContent=emailMatches.length+" matching Email Details records";
+  if(emailRows)emailRows.innerHTML=privateEmailLookupTableRows(emailMatches);
+  if(activityRows)activityRows.innerHTML=visible.length
+    ?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],importedActivityEventRows(visible))
+    :'<div class="empty-state">'+(emailMatches.length?"The Email Details record matched, but no associated Activity Log event matched the current event/date filters.":"No Activity Log events match the selected Inbox, event and colleague filters or search.")+'</div>';
+  if(lookupStatus){
+    lookupStatus.textContent=privateEmailLookupForCurrentSnapshot().length
+      ?"Private order/VIN lookup available on this device"
+      :"Order/VIN lookup not loaded on this device";
+    lookupStatus.classList.toggle("available",privateEmailLookupForCurrentSnapshot().length>0);
+  }
+  const values={
+    events:visible.length,tickets:totalTickets,allocation:automatic+" / "+manual,workflow:handovers+" / "+recoveries
+  };
+  for(const [key,value] of Object.entries(values)){
+    const node=document.querySelector('[data-audit-kpi="'+key+'"]');
+    if(node)node.textContent=typeof value==="number"?fmt(value):value;
+  }
 }
 function exportImportedActivityLog(){
   const rows=importedActivityRows();
@@ -2801,26 +2995,10 @@ function exportImportedActivityLog(){
 function renderImportedActivityAudit(){
   const all=state.importedSnapshot.activity_log||[];
   const visible=importedActivityRows();
-  const ticketEvents=visible.filter(event=>!event.system_event);
-  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
-  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
-  const automatic=visible.filter(event=>event.event_type==="assigned").length;
-  const handovers=visible.filter(event=>event.event_type==="handover").length;
-  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const emailMatches=privateEmailLookupMatches();
   const quality=state.importedSnapshot.data_quality.sources.find(row=>row.source==="Workflow history");
   const sourceSupplied=Boolean(quality);
   const rowsRead=quality?.rows_read||0,rowsAccepted=quality?.rows_accepted||0;
-  const rows=visible.map(event=>
-    '<tr>'+
-      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
-      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
-      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
-      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
-      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
-      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
-      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
-    '</tr>'
-  );
   const eventTypes=[...new Set(all.map(event=>event.event_type))].sort();
   const agentRefs=[...new Set(all.flatMap(event=>[event.original_agent_ref,event.current_agent_ref]).filter(Boolean))]
     .sort((a,b)=>displayAgentName(a).localeCompare(displayAgentName(b)));
@@ -2828,28 +3006,43 @@ function renderImportedActivityAudit(){
     ?"No Activity Log data was included in this snapshot. In Studio, select Activity Log for both assignment history and workflow history."
     :(rowsRead>0&&rowsAccepted===0
       ?"The Activity Log sheet was read, but no rows were accepted. Map Event Type to column B, Folder Path to column D, Original Assignee to E, Current Owner to F, Assignment Flag to G and Incident Count to H. Column G is TRUE / FALSE, not the event name."
-      :"No Activity Log entries match the selected Inbox and search.");
+      :"No Activity Log events match the current filters or search.");
   const sourceStatus=!sourceSupplied?"ACTIVITY SOURCE NOT SUPPLIED":rowsAccepted>0?rowsAccepted+" VALID EVENTS":"CHECK ACTIVITY MAPPING";
-  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen uses the imported workbook Activity Log. Event Type comes from column B; Folder Path comes from D. Assignment Flag (column G) is a separate TRUE / FALSE marker, never an event name.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+  const ticketEvents=visible.filter(event=>!event.system_event);
+  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const initialEventRows=visible.length
+    ?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],importedActivityEventRows(visible))
+    :'<div class="empty-state">'+esc(emailMatches.length?"Email Details matched, but no associated Activity Log event matched the current event/date filters.":emptyMessage)+'</div>';
+  const initialEmailRows=privateEmailLookupTableRows(emailMatches);
+  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","Find the email first. Then inspect its event trail.","Search the local Email Details index by Order Number or VIN, or search Activity Log events by ticket reference, event type or colleague. Identifier lookup stays on this browser and is never added to the shared JSON snapshot.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
     '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(rowsRead)+' · accepted '+fmt(rowsAccepted)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not authenticated by source</b></span></div>'+
-    kpiGrid([
-      kpi("Activity events",fmt(visible.length),"Rows in the selected Inbox / search","◷"),
-      kpi("Tickets affected",fmt(totalTickets),"Ticket-linked references; system events excluded","▤"),
-      kpi("Automatic / manual",fmt(automatic)+" / "+fmt(manual),"Recorded first-allocation event categories","↗"),
-      kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
-    ])+
-    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
-    '<div class="audit-filter-toolbar imported-audit-filters">'+
-      '<label class="live-queue-search"><span class="activity-search-label">SEARCH</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
-      '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
-      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
-      '<label class="filter-control"><span>FROM DATE · UTC</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
-      '<label class="filter-control"><span>TO DATE · UTC</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
-    '</div><div class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</div>'+
-    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+emptyMessage+'</div>')+
+    '<div class="kpi-grid audit-kpi-grid">'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Activity events</span></div><div class="kpi-value" data-audit-kpi="events">'+fmt(visible.length)+'</div><div class="kpi-foot">Events matching the current search and filters</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Tickets affected</span></div><div class="kpi-value" data-audit-kpi="tickets">'+fmt(totalTickets)+'</div><div class="kpi-foot">Ticket-linked references; system events excluded</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Automatic / manual</span></div><div class="kpi-value" data-audit-kpi="allocation">'+fmt(automatic)+" / "+fmt(manual)+'</div><div class="kpi-foot">Recorded first-allocation event categories</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Handovers / recovery</span></div><div class="kpi-value" data-audit-kpi="workflow">'+fmt(handovers)+" / "+fmt(recoveries)+'</div><div class="kpi-foot">Recorded workflow event counts</div></article>'+
+    '</div>'+
+    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Search and filter</h2><p class="panel-subtitle">Order Number and VIN search uses the Email Details worksheet saved locally by Reporting Studio. Matching emails are linked to sanitised Activity Log events using a pseudonymous ticket reference.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
+    '<div class="activity-audit-toolbar">'+
+      '<label class="activity-audit-search"><span class="activity-search-label">SEARCH EMAILS & ACTIVITY</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Enter an Order Number, VIN, ticket reference or event…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
+      '<div class="activity-audit-filters">'+
+        '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
+        '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
+        '<label class="filter-control"><span>FROM DATE</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
+        '<label class="filter-control"><span>TO DATE</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
+      '</div>'+
+      '<div class="activity-audit-toolbar-foot"><span id="auditLookupStatus" class="'+(privateEmailLookupForCurrentSnapshot().length?"available":"")+'">'+(privateEmailLookupForCurrentSnapshot().length?"Private order/VIN lookup available on this device":"Order/VIN lookup not loaded on this device")+'</span><span id="auditResultCount">Showing '+visible.length+' Activity Log events and '+emailMatches.length+' Email Details matches · '+all.length+' accepted Activity Log rows</span></div>'+
+    '</div>'+
+    '<section class="activity-email-matches"><div class="activity-results-heading"><div><h3>Email Details matches</h3><p>Local metadata only · message subjects and bodies are not retained</p></div><span id="auditEmailLookupCount">'+emailMatches.length+' matching Email Details records</span></div><div id="auditEmailLookupRows">'+initialEmailRows+'</div></section>'+
+    '<section class="activity-event-results"><div class="activity-results-heading"><div><h3>Related Activity Log events</h3><p>Events linked by the same pseudonymous ticket reference</p></div></div><div id="auditActivityRows">'+initialEventRows+'</div></section>'+
     '</section>'+
-    '<div class="prototype-warning"><strong>Source limitations.</strong> Free-text Details / Notes are deliberately excluded because they can contain subjects or personal data. This view reports only events preserved in the workbook and does not claim authenticated actors or tamper-evident audit integrity.</div>';
+    '<div class="prototype-warning"><strong>Source limitations.</strong> Order Number and VIN are stored only in the private, same-browser lookup index. They are not included in the sanitised JSON or sent to a server. Email matches show metadata only; Activity Log rows still reflect only events actually present in the workbook. This view does not claim authenticated actors or tamper-evident audit integrity.</div>';
 }
+
 function renderAudit(){
   if(state.importedSnapshot){renderImportedActivityAudit();return;}
   const base=auditBaseEvents();
@@ -3460,6 +3653,29 @@ function handleAction(action){
   if(action==="reset-reliability-filters"){state.reliabilitySearch="";state.reliabilityType="all";state.reliabilityStatus="all";state.reliabilitySeverity="all";state.selectedReliabilityEvent=null;renderReliability();return;}
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
+function applyPrivateEmailLookupRows(rows,snapshotGeneratedAtUtc){
+  if(!state.importedSnapshot||String(state.importedSnapshot.generated_at_utc||"")!==String(snapshotGeneratedAtUtc||""))return 0;
+  if(!Array.isArray(rows))return 0;
+  privateEmailLookup=rows.slice(0,5000).map(row=>({
+    ticket_ref:String(row?.ticket_ref||""),
+    order_number:String(row?.order_number||"").trim().slice(0,100),
+    vin:String(row?.vin||"").trim().toUpperCase().slice(0,100),
+    brand_code:String(row?.brand_code||""),
+    inbox_code:String(row?.inbox_code||""),
+    received_date:String(row?.received_date||""),
+    completion_date:String(row?.completion_date||""),
+    status:String(row?.status||""),
+    original_agent_ref:String(row?.original_agent_ref||""),
+    current_agent_ref:String(row?.current_agent_ref||"")
+  })).filter(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)&&
+    (row.order_number||row.vin)&&
+    ["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"].includes(row.brand_code)&&
+    ["agency","detags","transfers","unadopts"].includes(row.inbox_code));
+  privateEmailLookupSnapshotId=String(snapshotGeneratedAtUtc||"");
+  updatePrivateNameControls();
+  return privateEmailLookup.length;
+}
+
 function bindStudioSnapshotReceiver(){
   if(typeof URLSearchParams!=="function"||typeof window==="undefined"||!window.location)return;
   const token=new URLSearchParams(window.location.search||"").get("receiveSnapshot")||"";
@@ -3476,8 +3692,9 @@ function bindStudioSnapshotReceiver(){
       if(Array.isArray(message.privateAgentLookup)&&message.privateAgentLookup.length){
         namesLoaded=applyPrivateAgentLookupRows(message.privateAgentLookup,false);
       }
+      const emailLookupLoaded=applyPrivateEmailLookupRows(message.privateEmailLookup,message.snapshot?.generated_at_utc);
       channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:true});
-      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" and "+namesLoaded+" colleague names remembered on this device":"")+".");
+      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" · "+namesLoaded+" colleague names":"")+(emailLookupLoaded?" · private Order/VIN search ready":"")+".");
       const cleanUrl=new URL(window.location.href);
       cleanUrl.searchParams.delete("receiveSnapshot");
       window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
@@ -3548,10 +3765,7 @@ document.addEventListener("input",event=>{
   if(auditSearch){
     state.auditSearch=auditSearch.value;
     if(state.importedSnapshot){
-      const start=auditSearch.selectionStart,end=auditSearch.selectionEnd;
-      renderAudit();
-      const next=document.querySelector("[data-audit-search]");
-      if(next){next.focus();next.setSelectionRange(start,end);}
+      refreshImportedActivityAuditPanels();
     }else refreshAuditPanels();
     return;
   }
