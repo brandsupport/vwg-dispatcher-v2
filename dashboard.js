@@ -2202,8 +2202,11 @@ function teamBrandPortfolioPanel(profiles){
     }).join("");
     return '<tr><td>'+memberCell(agent.name,agent.shift)+'</td>'+cells+'</tr>';
   });
-  return dataTable(["Current owner",...codes.map(code=>labels[code]+" · count / share")],body,
-    "No current owners match the selected team search.")+
+  const table=dataTable(["Current owner",...codes.map(code=>labels[code]+" · count / share")],body,
+    "No current owners match the selected team search.")
+    .replace('<div class="table-wrap">','<div class="table-wrap team-brand-share-table-wrap">')
+    .replace('<table class="data-table">','<table class="data-table team-brand-share-table">');
+  return table+
     '<p class="team-panel-note">Counts are tickets in each colleague’s current-owner portfolio. “% of agent” is that brand’s share of the colleague’s owned tickets; “% of brand” is the colleague’s share of all tickets classified to that brand. Unclassified records are shown separately and no brand is inferred from subject text.</p>';
 }
 function renderTeam(){
