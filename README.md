@@ -10,6 +10,10 @@ The dashboard and standalone Reporting Studio share the Dispatcher **Cherry Glas
 
 The dashboard provides a persistent **Reporting Studio** entry in its workspace navigation. The Studio header provides a matching, always-visible **Dashboard** return button. Both pages remain independently loadable; the Studio retains its local-only processing boundary.
 
+## Implementation status
+
+See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for the verified list of implemented prototype capabilities, production boundaries and outstanding features as of 26 November 2026.
+
 ## Product direction
 
 Dispatcher 2.0 is being developed independently from the VWG Brand Support Knowledge Base. It will have its own repository, application deployment, authentication/authorisation model, data store and operational audit history.
