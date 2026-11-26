@@ -9,7 +9,7 @@
   "theme_color": "#0b070b",
   "icons": [
     {
-      "src": "./favicon.svg",
+      "src": "./favicon.svg?v=20261126-vwg-mark-rounded-v1",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
