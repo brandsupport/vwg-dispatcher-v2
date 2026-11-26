@@ -2842,7 +2842,7 @@ body { font-size:15.2px !important; line-height:1.52; }
   padding: 6px 10px;
   background: rgba(24, 89, 75, .19);
   color: #8fe9d5;
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: .09em;
 }
 .activity-history-panel .audit-filter-toolbar.imported-audit-filters {
@@ -2875,7 +2875,7 @@ body { font-size:15.2px !important; line-height:1.52; }
   display: block;
   width: 100%;
   color: #bd8b9e;
-  font-size: 10.5px !important;
+  font-size: 11px !important;
   font-weight: 800;
   letter-spacing: .105em;
 }
@@ -2966,7 +2966,7 @@ body { font-size:15.2px !important; line-height:1.52; }
   border-bottom: 1px solid rgba(255, 92, 145, .25);
   background: #24101b;
   color: #d9a4b6;
-  font-size: 10.5px !important;
+  font-size: 11px !important;
   line-height: 1.35;
   white-space: normal;
 }
@@ -3022,7 +3022,7 @@ body { font-size:15.2px !important; line-height:1.52; }
   display: block;
   margin-top: 5px;
   color: #a68b97;
-  font-size: 10.8px !important;
+  font-size: 11px !important;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -3034,7 +3034,7 @@ body { font-size:15.2px !important; line-height:1.52; }
   border: 1px solid rgba(255, 255, 255, .13);
   background: rgba(255, 255, 255, .045);
   color: #c4a9b4;
-  font-size: 10.8px !important;
+  font-size: 11px !important;
 }
 .activity-history-panel .activity-flag-cell .status-pill.good {
   border-color: rgba(118, 231, 206, .25);
