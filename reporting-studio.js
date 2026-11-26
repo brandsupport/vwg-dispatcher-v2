@@ -137,6 +137,14 @@ function parseCSV(text){
   return {headers,records};
 }
 function isSupportedWorkbookFilename(fileName){return /\.(?:xlsx|xls|xlsm)$/i.test(String(fileName||"").trim());}
+function openWorkbookPicker(input){
+  if(!input)return false;
+  if(typeof input.showPicker==="function"){
+    try{input.showPicker();return true;}catch(error){}
+  }
+  if(typeof input.click==="function"){input.click();return true;}
+  return false;
+}
 function isArrayBufferValue(value){return Object.prototype.toString.call(value)==="[object ArrayBuffer]";}
 async function readFileArrayBuffer(file){
   let primaryError=null;
@@ -1058,23 +1066,61 @@ function bindFile(kind){
     try{await readSource(kind,file);}catch(error){files[kind]=null;alert("Could not read the selected CSV: "+error.message);event.target.value="";renderMappings();}
   });
 }
-function bindWorkbook(){
-  $("workbookFile").addEventListener("change",async event=>{
-    const file=event.target.files?.[0];
-    if(!file){workbookData=null;sourceMode="";$("workbookFileMeta").textContent="No workbook selected";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};workbookSelections[kind]="";}renderWorkbookSelectors();renderMappings();return;}
-    $("workbookFileMeta").textContent="Reading "+(file.name||"selected workbook")+"…";
-    try{
-      for(const kind of Object.keys(files)){
-        files[kind]=null;mappings[kind]={};$(kind+"File").value="";$(kind+"FileMeta").textContent="No CSV selected";
-      }
-      await readWorkbook(file);
-    }catch(error){
-      workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};}
-      $("workbookFile").value="";$("workbookFileMeta").textContent="Could not read "+(file.name||"selected workbook")+" — "+error.message;
-      $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
-      alert("Could not read the selected Excel workbook: "+error.message);renderMappings();
+async function processWorkbookFile(file){
+  if(!file)return;
+  const input=$("workbookFile");
+  const zone=$("workbookDropZone");
+  $("workbookFileMeta").textContent="Reading "+(file.name||"selected workbook")+"…";
+  if(zone){zone.classList.add("is-reading");zone.classList.remove("is-ready","is-error");}
+  try{
+    for(const kind of Object.keys(files)){
+      files[kind]=null;mappings[kind]={};$(kind+"File").value="";$(kind+"FileMeta").textContent="No CSV selected";
     }
+    await readWorkbook(file);
+    $("workbookFileMeta").textContent=(file.name||"Selected workbook")+" · workbook selected and read locally";
+    if(zone){zone.classList.remove("is-reading","is-error");zone.classList.add("is-ready");}
+  }catch(error){
+    workbookData=null;sourceMode="";for(const kind of Object.keys(files)){files[kind]=null;mappings[kind]={};}
+    if(input)input.value="";
+    $("workbookFileMeta").textContent="Could not read "+(file.name||"selected workbook")+" — "+error.message;
+    $("workbookSheetSelectors").hidden=true;$("workbookSheetSelectors").innerHTML="";
+    if(zone){zone.classList.remove("is-reading","is-ready");zone.classList.add("is-error");}
+    alert("Could not read the selected Excel workbook: "+error.message);renderMappings();
+  }
+}
+function bindWorkbook(){
+  const input=$("workbookFile");
+  const browse=$("chooseWorkbookButton");
+  const zone=$("workbookDropZone");
+  if(browse)browse.addEventListener("click",()=>openWorkbookPicker(input));
+  input.addEventListener("change",async event=>{
+    const file=event.target.files?.[0]||null;
+    // Clear the picker immediately so the same file can be selected again after any outcome.
+    event.target.value="";
+    if(!file)return;
+    await processWorkbookFile(file);
   });
+  if(zone){
+    zone.addEventListener("click",event=>{
+      if(event.target.closest("button"))return;
+      openWorkbookPicker(input);
+    });
+    zone.addEventListener("keydown",event=>{
+      if(event.key==="Enter"||event.key===" "){event.preventDefault();openWorkbookPicker(input);}
+    });
+    zone.addEventListener("dragover",event=>{event.preventDefault();zone.classList.add("is-dragover");});
+    zone.addEventListener("dragleave",event=>{if(!zone.contains(event.relatedTarget))zone.classList.remove("is-dragover");});
+    zone.addEventListener("drop",async event=>{
+      event.preventDefault();zone.classList.remove("is-dragover");
+      const dropped=Array.from(event.dataTransfer?.files||[]);
+      const file=dropped.find(item=>isSupportedWorkbookFilename(item.name));
+      if(!file){
+        $("workbookFileMeta").textContent="Drop an Excel workbook (.xlsx, .xls or .xlsm).";
+        zone.classList.add("is-error");return;
+      }
+      await processWorkbookFile(file);
+    });
+  }
 }
 bindWorkbook();
 bindFile("tickets");bindFile("assignments");bindFile("workflow");bindFile("roster");bindFile("emailDetails");
