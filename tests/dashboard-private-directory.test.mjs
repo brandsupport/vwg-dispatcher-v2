@@ -29,7 +29,9 @@ function loadDirectory(seed = null, storageAvailable = true) {
     globalThis.__directoryHooks = {
       readSavedPrivateAgentDirectory,
       savePrivateAgentDirectory,
-      key: PRIVATE_AGENT_DIRECTORY_KEY
+      key: PRIVATE_AGENT_DIRECTORY_KEY,
+      emailLookup:()=>privateEmailLookup.slice(),
+      emailLookupSnapshotId:()=>privateEmailLookupSnapshotId
     };
   `, context);
   return { hooks: context.__directoryHooks, values };
@@ -66,12 +68,33 @@ test("private directory writes only pseudonymous reference and display-name pair
   ]);
   assert.equal(hooks.savePrivateAgentDirectory(directory), true);
   const stored = JSON.parse(values.get(hooks.key));
-  assert.deepEqual(stored, [
+  assert.deepEqual(stored.agents, [
     { agent_ref: "Agent-AAAAAAAAAA", display_name: "Belal" },
     { agent_ref: "Agent-BBBBBBBBBB", display_name: "Mariam" }
   ]);
+  assert.equal(stored.email_lookup, null);
   assert.equal(JSON.stringify(stored).includes("ticket"), false);
   assert.equal(JSON.stringify(stored).includes("subject"), false);
+});
+
+test("private Order Number and VIN lookup is restored only for the matching snapshot",()=>{
+  const seed={
+    agents:[{agent_ref:"Agent-AAAAAAAAAA",display_name:"Belal"}],
+    email_lookup:{
+      snapshot_generated_at_utc:"2026-11-26T12:00:00.000Z",
+      rows:[{
+        ticket_ref:"Ref-BBBBBBBBBB",order_number:"ORD-123456",vin:"WAUZZZ1JZXW000001",
+        brand_code:"audi",inbox_code:"detags",received_date:"2026-11-24",completion_date:"2026-11-24",
+        status:"completed",original_agent_ref:"Agent-AAAAAAAAAA",current_agent_ref:"Agent-AAAAAAAAAA"
+      }]
+    }
+  };
+  const {hooks}=loadDirectory(seed);
+  assert.equal(hooks.readSavedPrivateAgentDirectory().get("Agent-AAAAAAAAAA"),"Belal");
+  assert.equal(hooks.emailLookupSnapshotId(),"2026-11-26T12:00:00.000Z");
+  assert.equal(hooks.emailLookup().length,1);
+  assert.equal(hooks.emailLookup()[0].order_number,"ORD-123456");
+  assert.equal(hooks.emailLookup()[0].vin,"WAUZZZ1JZXW000001");
 });
 
 test("private directory fails safely when browser storage is unavailable or full", () => {
@@ -101,9 +124,11 @@ test("private directory fails safely when browser storage is unavailable or full
 
 
 test("Studio automatically saves private colleague names for the normal JSON import workflow", () => {
-  assert.ok(studio.includes("function persistPrivateAgentDirectoryForDashboard(rows)"));
-  assert.ok(studio.includes("localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(safeRows))"));
-  assert.ok(studio.includes("privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup)"));
+  assert.ok(studio.includes("function persistPrivateAgentDirectoryForDashboard(rows,emailRows,snapshotGeneratedAtUtc)"));
+  assert.ok(studio.includes("localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(payload))"));
+  assert.ok(studio.includes("privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup,privateEmailLookupForDashboard,generatedAtUtc)"));
+  assert.ok(studio.includes("privateEmailLookupForDashboard.push({"));
+  assert.ok(studio.includes("snapshot_generated_at_utc:String(snapshotGeneratedAtUtc||\"\")"));
   assert.ok(dashboard.includes("function restorePrivateAgentDirectoryForSnapshot()"));
   assert.ok(dashboard.includes("restorePrivateAgentDirectoryForSnapshot();"));
   assert.ok(dashboard.includes("applyPrivateAgentLookupRows(message.privateAgentLookup,false)"));
