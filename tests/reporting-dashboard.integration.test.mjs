@@ -96,10 +96,10 @@ function validateWithDashboard(snapshot){
   return JSON.parse(JSON.stringify(validate(snapshot)));
 }
 
-function filterImportedActivityRows(snapshot,filters={}){
+function filterImportedActivityRows(snapshot,filters={},emailMatches=[]){
   const dashboard=fs.readFileSync(new URL("../dashboard.js",import.meta.url),"utf8");
-  const start=dashboard.indexOf("function importedActivityRows(){");
-  const end=dashboard.indexOf("\nfunction exportImportedActivityLog(",start);
+  const start=dashboard.indexOf("function importedActivityRows(");
+  const end=dashboard.indexOf("\nfunction importedActivityEventRows(",start);
   assert.ok(start>=0&&end>start,"Imported activity filtering must be extractable");
   const state={
     importedSnapshot:snapshot,folder:"all",auditSearch:"",
@@ -110,7 +110,7 @@ function filterImportedActivityRows(snapshot,filters={}){
     "Agent-AAAAAAAAAA":"Belal","Agent-BBBBBBBBBB":"Mariam"
   }[reference]||reference)};
   vm.createContext(context);
-  return vm.runInContext(dashboard.slice(start,end)+"\nimportedActivityRows",context)();
+  return vm.runInContext(dashboard.slice(start,end)+"\nimportedActivityRows",context)(emailMatches);
 }
 
 function calculateDashboardViews(snapshot,folder="all"){
@@ -580,6 +580,22 @@ test("imported audit history filters by event, colleague and UTC date range",()=
   assert.equal(rows.length,2);
   assert.ok(rows.every(row=>row.event_type==="handover"));
   assert.ok(rows.every(row=>row.event_time_utc.startsWith("2026-11-22")));
+});
+
+test("Order Number matches reveal their linked Activity Log events by pseudonymous ticket reference",()=>{
+  const snapshot={activity_log:[
+    {event_time_utc:"2026-11-22T10:00:00.000Z",event_time_egypt:"2026-11-22 12:00:00",event_type:"assigned",inbox_code:"detags",ticket_ref:"Ref-AAAAAAAAAA",original_agent_ref:"Agent-AAAAAAAAAA",current_agent_ref:"Agent-AAAAAAAAAA",assignment_flag:true,incident_count:0,system_event:false},
+    {event_time_utc:"2026-11-23T10:00:00.000Z",event_time_egypt:"2026-11-23 12:00:00",event_type:"resolved",inbox_code:"detags",ticket_ref:"Ref-BBBBBBBBBB",original_agent_ref:"Agent-BBBBBBBBBB",current_agent_ref:"Agent-BBBBBBBBBB",assignment_flag:true,incident_count:0,system_event:false}
+  ]};
+  const matches=[{
+    ticket_ref:"Ref-AAAAAAAAAA",order_number:"ORD-123456",vin:"WAUZZZ1JZXW000001",
+    brand_code:"audi",inbox_code:"detags",received_date:"2026-11-22",completion_date:"",
+    status:"open",original_agent_ref:"Agent-AAAAAAAAAA",current_agent_ref:"Agent-AAAAAAAAAA"
+  }];
+  const rows=filterImportedActivityRows(snapshot,{auditSearch:"ORD-123456"},matches);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].ticket_ref,"Ref-AAAAAAAAAA");
+  assert.equal(rows[0].event_type,"assigned");
 });
 
 test("Reports & Exports cards route to distinct local CSV builders",()=>{
