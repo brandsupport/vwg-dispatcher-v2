@@ -55,3 +55,27 @@ test("imported owner counts are not labelled as open workload without resolution
   assert.match(folderView,/const workloadLabel=resolutionTracked\?"Open workload":"Current owner records"/);
   assert.match(folderView,/resolutionTracked\?folder\.open:currentOwnerRecordCount\(folder\)/);
 });
+
+
+test("imported Activity Log has a dedicated light investigation layout and responsive filters",()=>{
+  assert.match(dashboard,/class="audit-demo-strip local-snapshot-strip"/);
+  assert.match(dashboard,/class="activity-search-label">SEARCH/);
+  assert.match(dashboard,/class="activity-search-input"/);
+  assert.match(dashboard,/class="activity-time-cell"/);
+  assert.match(dashboard,/class="activity-event-type"/);
+  assert.match(css,/\.activity-history-panel \.audit-filter-toolbar\.imported-audit-filters\s*\{/);
+  assert.match(css,/\.activity-history-panel \.data-table thead th\s*\{[^}]*position:\s*sticky/s);
+  assert.match(css,/\.page-content\[data-view="audit"\] \.audit-demo-strip\.local-snapshot-strip/);
+  assert.match(css,/@media\s*\(max-width:\s*560px\)/);
+});
+
+test("dashboard exposes a device-local private name directory without placing names in snapshots",()=>{
+  assert.match(dashboard,/const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher\.private-agent-directory\.v1"/);
+  assert.match(dashboard,/function readSavedPrivateAgentDirectory\(\)/);
+  assert.match(dashboard,/function savePrivateAgentDirectory\(directory\)/);
+  assert.match(dashboard,/function restorePrivateAgentDirectoryForSnapshot\(\)/);
+  assert.match(dashboard,/function clearSavedPrivateAgentDirectory\(\)/);
+  assert.match(dashboard,/applyPrivateAgentLookupRows\(message\.privateAgentLookup,false\)/);
+  assert.match(dashboard,/restorePrivateAgentDirectoryForSnapshot\(\);/);
+  assert.match(dashboard,/localStorage\.removeItem\(PRIVATE_AGENT_DIRECTORY_KEY\)/);
+});
