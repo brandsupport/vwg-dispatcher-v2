@@ -81,5 +81,5 @@ test("imported Activity Log keeps the dark Cherry Glass palette with responsive 
   assert.ok(css.includes(".activity-history-panel .data-table thead th {\n  position: sticky"));
   assert.ok(css.includes("background: linear-gradient(145deg, rgba(30, 12, 21, .96), rgba(17, 10, 17, .98))"));
   assert.ok(css.includes("background: rgba(8, 6, 11, .78)"));
-  assert.match(css,/@media\\s*\\(max-width:\\s*560px\\)/);
+  assert.ok(css.includes("@media (max-width: 560px)"));
 });
