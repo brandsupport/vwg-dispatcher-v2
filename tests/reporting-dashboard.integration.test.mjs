@@ -309,7 +309,7 @@ test("Activity Log Source Inbox header maps in the same way as Folder Path",()=>
     "Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox",
     "Original Assignee","Current Owner","Assignment Flag","Incident Count","Details / Notes"
   ];
-  const sheet={rows:[["ACTIVITY LOG"],[],[],[],headers,["2026-11-25T10:00:00+02:00","AUTO_ASSIGNMENT","SAFE-KEY","\\\\VWGUK R: Milton Keynes, AgencyDetags\\Inbox","Synthetic Agent","Synthetic Agent","TRUE","0","PRIVATE NOTE"]]};
+  const sheet=[["ACTIVITY LOG"],[],[],[],headers,["2026-11-25T10:00:00+02:00","AUTO_ASSIGNMENT","SAFE-KEY","\\\\VWGUK R: Milton Keynes, AgencyDetags\\Inbox","Synthetic Agent","Synthetic Agent","TRUE","0","PRIVATE NOTE"]];
   const assignments=hooks.worksheetToTable(sheet,"assignments");
   const workflow=hooks.worksheetToTable(sheet,"workflow");
   const assignmentInbox=hooks.autoMap(assignments.headers,["source inbox","folder path","source folder","inbox"]);
