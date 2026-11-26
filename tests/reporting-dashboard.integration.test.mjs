@@ -82,7 +82,7 @@ function createWorkbookTestHooks(fileReaderClass=null){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer,openWorkbookPicker};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer,openWorkbookPicker,withWorkbookInputLocked};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -347,20 +347,16 @@ test("the selected workbook input is not cleared until its asynchronous read has
   const hooks=createWorkbookTestHooks();
   const input={value:"C:\\fakepath\\tracker.xlsx"};
   let valueDuringRead=null;
-  const selectedFile={name:"tracker.xlsx"};
-  // This mirrors the UI handler's required lifetime: capture File, await read, then clear.
-  await (async()=>{
-    const file=selectedFile;
-    try{
-      await Promise.resolve().then(()=>{valueDuringRead=input.value;});
-    }finally{
-      input.value="";
-    }
-  })();
+  const result=await hooks.withWorkbookInputLocked(input,async()=>{
+    await Promise.resolve();
+    valueDuringRead=input.value;
+    return "read-complete";
+  });
   assert.equal(valueDuringRead,"C:\\fakepath\\tracker.xlsx");
+  assert.equal(result,"read-complete");
   assert.equal(input.value,"");
-  assert.equal(hooks.isSupportedWorkbookFilename(selectedFile.name),true);
 });
+
 
 test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{
   const hooks=createWorkbookTestHooks();
