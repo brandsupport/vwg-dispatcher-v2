@@ -2082,6 +2082,15 @@ function agentOwnedResolutionMetrics(agentRef){
     resolutionRatePct:row.resolution_rate_pct
   };
 }
+function agentEmailHandlingMetrics(agentRef){
+  const row=(state.importedSnapshot?.email_metrics?.by_current_owner||[]).find(item=>item.agent_ref===agentRef);
+  if(!row)return {completedEmails:0,timedCompleted:0,averageMinutes:null};
+  return {
+    completedEmails:row.completed||0,
+    timedCompleted:row.timed_completed||0,
+    averageMinutes:row.average_handling_minutes??null
+  };
+}
 function agentActivityMetrics(agentRef){
   const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
     (state.folder==="all"||event.inbox_code===state.folder)&&
@@ -2105,11 +2114,13 @@ function agentPerformanceReviewPanel(profiles){
   const activityNeedsMapping=Boolean(workflowQuality&&workflowQuality.rows_read>0&&!hasActivity);
   const activityNotSupplied=!workflowQuality;
   const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
+  const hasEmailHandling=Boolean(importedSourceAvailable("Email Details")&&state.importedSnapshot.email_metrics);
   const rows=profiles.map(agent=>{
     const agentRef=agent.id.replace(/^snapshot-/,"");
     const metrics=agentActivityMetrics(agentRef);
     const resolvedBy=agentResolutionMetrics(agentRef);
     const owned=agentOwnedResolutionMetrics(agentRef);
+    const handling=agentEmailHandlingMetrics(agentRef);
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
@@ -2119,13 +2130,29 @@ function agentPerformanceReviewPanel(profiles){
       '<td>'+(hasActivity?fmt(metrics.handovers):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.recovery):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasResolvedBy?fmt(resolvedBy.resolvedTickets):"Not captured")+'</td>'+
+      '<td>'+(hasResolvedBy&&resolvedBy.averageMinutes!==null?formatDurationMinutes(resolvedBy.averageMinutes):"Not tracked")+'</td>'+
       '<td>'+(owned.averageMinutes!==null?formatDurationMinutes(owned.averageMinutes):"Not tracked")+'</td>'+
+      '<td>'+(owned.ownedTickets?fmt(owned.resolvedTickets)+" / "+fmt(owned.ownedTickets):"—")+'</td>'+
       '<td>'+(owned.ownedTickets?owned.resolutionRatePct.toFixed(1)+"%":"—")+'</td>'+
+      '<td>'+(hasEmailHandling?fmt(handling.timedCompleted):"Not supplied")+'</td>'+
+      '<td>'+(hasEmailHandling&&handling.averageMinutes!==null?formatDurationMinutes(handling.averageMinutes):"Not tracked")+'</td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, workflow involvement, resolver attribution and current-owner resolution outcomes. Average solve time and resolution rate use the current-owner portfolio; resolved-by counts use explicit resolver data or the associated owner on a Resolved / Closed Activity Log event. This is not an employee ranking."+(activityNeedsMapping?" The Activity Log was imported but no recognised rows were mapped; check Event Type B, Source Inbox D, Original Assignee E and Current Owner F.":""),dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time · owned cases","Resolution rate · owned cases"],rows,"No agent rows match the current global search.")+
-    '<p class="team-panel-note">Resolution rate = resolved tickets currently owned by the colleague ÷ all tickets currently owned by the colleague. Average solve time = received-to-resolved elapsed time for that same current-owner cohort. “Resolved by agent” is shown only where a resolver field or Activity Log owner association exists; it is not proof of the authenticated person who clicked Resolve. Missing timestamps are excluded, never estimated.</p>');
+  const table=dataTable([
+    "Colleague","First assigned","Automatic","Manual",
+    hasResolutionTracking()?"Open workload":"Current owner records",
+    "Handover records","Recovery / review records","Resolved by agent",
+    "Avg solve time · resolver","Avg solve time · current owner",
+    "Resolved / owned","Resolve rate · owned",
+    "Completed emails timed","Avg handling time · emails"
+  ],rows,"No agent rows match the current global search.")
+    .replace('<div class="table-wrap">','<div class="table-wrap team-performance-table-wrap">')
+    .replace('<table class="data-table">','<table class="data-table team-performance-table">');
+  return panel("Agent performance review","First assignments, workflow involvement, resolver attribution, ticket resolution and completed-email handling time. Resolver figures use the explicit Resolved By field or associated resolution event. Current-owner resolve rate and solve time use the current-owner ticket portfolio.",table+
+    '<p class="team-panel-note">Resolve rate = resolved tickets currently owned by the colleague ÷ all tickets currently owned by that colleague. The resolver average is received-to-resolved time attributed to the explicit resolver / associated resolution event. Current-owner solve time uses the same elapsed-time definition but attributes the whole portfolio to its current owner. Average handling time is sourced separately from completed Email Details rows with a valid Handling Time (minutes) value; the timed email count is shown beside it. Missing durations are excluded, never estimated.</p>'+
+    (activityNeedsMapping?'<p class="team-panel-note">The Activity Log was imported but no recognised rows were mapped; check Event Type B, Source Inbox D, Original Assignee E and Current Owner F.</p>':""));
 }
+
 function teamEvidencePanel(){
   const snapshot=state.importedSnapshot;
   const resolution=snapshot?.tickets.resolution_metrics;
@@ -2223,6 +2250,26 @@ function renderTeam(){
       panel("Performance measures awaiting evidence","Timing, quality and capacity measures are deliberately withheld until validated sources exist",teamEvidencePanel(),'<span class="subtle-tag">NOT AVAILABLE</span>')+
     '</div>';
 }
+function agentBrandInsightMarkup(agentRef){
+  if(!state.importedSnapshot?.tickets.brand_field_mapped){
+    return '<div class="agent-brand-insight"><div class="activity-results-heading"><div><h3>Tickets by brand</h3><p>Brand data was not supplied or mapped in this ticket snapshot.</p></div></div><div class="activity-lookup-empty">No reliable brand counts are available for this colleague.</div></div>';
+  }
+  const codes=["volkswagen","audi","skoda","seat","cupra","vwcv","other"];
+  const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other / unclassified",unclassified:"Other / unclassified"};
+  const source=(state.importedSnapshot.brand_by_agent||[]).filter(row=>row.agent_ref===agentRef);
+  const totals=new Map(codes.map(code=>[code,0]));
+  for(const row of source){
+    const code=row.brand_code==="unclassified"?"other":row.brand_code;
+    totals.set(code,(totals.get(code)||0)+row.ticket_count);
+  }
+  const total=[...totals.values()].reduce((sum,value)=>sum+value,0);
+  const items=codes.map(code=>{
+    const count=totals.get(code)||0;
+    const share=total?count/total*100:0;
+    return '<div class="agent-brand-item"><span>'+esc(labels[code])+'</span><strong>'+fmt(count)+'</strong><small>'+share.toFixed(1)+'% of this colleague’s current-owner portfolio</small></div>';
+  }).join("");
+  return '<div class="agent-brand-insight"><div class="activity-results-heading"><div><h3>Tickets by brand</h3><p>'+fmt(total)+' current-owner tickets · counts and share of this colleague’s portfolio</p></div><span class="subtle-tag">BRAND MIX</span></div><div class="agent-brand-grid">'+items+'</div></div>';
+}
 function agentDetail(id){
   const agent=(state.importedSnapshot?teamProfileRows():AGENTS).find(item=>item.id===id);
   if(!agent)return "";
@@ -2232,6 +2279,7 @@ function agentDetail(id){
   const firstAssigned=folders.reduce((sum,folder)=>sum+(allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)]||0),0);
   return '<section class="panel team-agent-detail"><div class="panel-heading"><div><div class="eyebrow">ANONYMISED MEMBER BREAKDOWN</div><h2 class="panel-title">'+esc(agent.name)+' · '+(state.importedSnapshot?"pseudonymous reference":agent.shift+" shift group")+'</h2><p class="panel-subtitle">'+(state.importedSnapshot?"Imported aggregate only. No direct colleague identity or individual workflow history is included.":"Synthetic sample only. This is a workload and allocation breakdown, not an individual performance rating.")+'</p></div><button class="panel-action" data-action="close-agent">Close profile</button></div>'+
     '<div class="team-detail-metrics"><div><span>First assignments · selected scope</span><strong>'+(state.importedSnapshot&&!importedSourceAvailable("Assignment history")?"Not supplied":fmt(firstAssigned))+'</strong></div><div><span>'+(state.importedSnapshot&&!hasResolutionTracking()?"Records with current owner":"Current open workload")+'</span><strong>'+fmt(agent.open)+'</strong></div><div><span>'+(state.importedSnapshot?"Roster information":"Shift group")+'</span><strong>'+(state.importedSnapshot?(agent.shift==="Shift data not included"?"Not supplied":esc(agent.shift+" · "+agent.start+"–"+agent.end)):esc(agent.shift))+'</strong><small>'+(state.importedSnapshot?(agent.activeThisFortnight===null?"No roster match was supplied.":agent.activeThisFortnight?"Active this fortnight":"Inactive this fortnight"):"Indicative roster label; scheduled hours are not verified.")+'</small></div></div>'+
+    (state.importedSnapshot?agentBrandInsightMarkup(id.replace(/^snapshot-/,"")):"")+
     '<div class="grid-two"><div><h3 class="mini-heading">First assignments by inbox</h3>'+barRows(folders.map(folder=>({label:folder.name,value:allocation.cells[FOLDERS.findIndex(item=>item.id===folder.id)],color:folder.color})))+'</div><div class="team-private-state"><strong>Individual workflow events · Not available</strong><p>Handover, reassignment, recovery and flag events are not attributed to individual profiles in the snapshot. The aggregate event ledger is shown separately and must not be distributed across members.</p></div></div>'+
     '</section>';
 }
