@@ -3729,7 +3729,8 @@ document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click"
 document.getElementById("periodSelect").addEventListener("change",e=>{state.period=e.target.value;render();});
 document.getElementById("folderSelect").addEventListener("change",e=>{state.folder=e.target.value;render();});
 document.getElementById("globalSearch").addEventListener("input",e=>{state.search=e.target.value;render();});
-document.getElementById("profileButton").addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
+// Future sign-in entry point; the placeholder profile button is omitted from this reporting release.
+document.getElementById("profileButton")?.addEventListener("click",()=>showToast("Profile and sign-in will be added with the authentication stage."));
 document.addEventListener("change",event=>{
   const ticketFilter=event.target.closest("[data-ticket-filter]");
   if(ticketFilter){
