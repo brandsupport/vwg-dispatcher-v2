@@ -433,7 +433,7 @@ function normaliseBrand(value){
 }
 function normaliseBrandFromSubject(subject){
   const raw=String(subject??"").trim();
-  const match=raw.match(/^form\\s+submission\\s+from\\s+(.+?)\\s+customer\\s+de[- ]?tag\\s+request\\s+form\\s+on\\s+hub$/i);
+  const match=raw.match(/^form\s+submission\s+from\s+(.+?)\s+customer\s+de[- ]?tag\s+request\s+form\s+on\s+hub$/i);
   return match?normaliseBrand(match[1]):"unclassified";
 }
 function isUnassigned(value){
