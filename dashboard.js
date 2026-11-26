@@ -1046,6 +1046,7 @@ function clearLocalSnapshot(){
   document.getElementById("importAgentLookupButton").hidden=true;
   document.getElementById("agentLookupFileInput").value="";
   privateAgentNames=new Map();
+  updatePrivateNameControls();
   state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
   state.selectedAgent=null;
   state.memberSearch="";
