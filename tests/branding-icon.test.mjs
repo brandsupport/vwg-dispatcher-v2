@@ -11,10 +11,10 @@ const pagesWorkflow = fs.readFileSync(".github/workflows/pages.yml", "utf8");
 
 test("Dashboard and Studio share favicon, touch icon and web-app manifest", () => {
   for (const [name, html] of [["Dashboard", dashboard], ["Studio", studio]]) {
-    assert.match(html, /rel="icon" type="image\/svg\+xml" href="\.\/favicon\.svg\?v=20261126-vwg-mark"/, name+" favicon missing");
-    assert.match(html, /rel="apple-touch-icon" href="\.\/favicon\.svg\?v=20261126-vwg-mark"/, name+" touch icon missing");
-    assert.match(html, /rel="mask-icon" href="\.\/favicon\.svg\?v=20261126-vwg-mark" color="#ff174f"/, name+" pinned-tab icon missing");
-    assert.match(html, /rel="manifest" href="\.\/site\.webmanifest\?v=20261126-vwg-mark"/, name+" web-app manifest missing");
+    assert.match(html, /rel="icon" type="image\/svg\+xml" href="\.\/favicon\.svg\?v=20261126-vwg-mark-v2"/, name+" favicon missing");
+    assert.match(html, /rel="apple-touch-icon" href="\.\/favicon\.svg\?v=20261126-vwg-mark-v2"/, name+" touch icon missing");
+    assert.match(html, /rel="mask-icon" href="\.\/favicon\.svg\?v=20261126-vwg-mark-v2" color="#ff174f"/, name+" pinned-tab icon missing");
+    assert.match(html, /rel="manifest" href="\.\/site\.webmanifest\?v=20261126-vwg-mark-v2"/, name+" web-app manifest missing");
     assert.match(html, /name="apple-mobile-web-app-title" content="VWG Dispatcher"/, name+" home-screen title missing");
   }
 });
