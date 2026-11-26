@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1019">
   <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
-  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-premium-studio-ui-1">
+  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-dark-brand-directory-v2">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261126-subject-brand-detection-1" defer></script>
+  <script src="./reporting-studio.js?v=20261126-auto-colleague-directory-brand-v2" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -132,8 +132,8 @@
       <section class="result-panel quality-panel"><h3>Data quality checks</h3><div id="qualityResults"></div></section>
       <div class="download-bar">
         <div><strong>Export safe reporting files</strong><span>Only aggregate counts, approved categories, pseudonymous agent references and approved shift metadata are included.</span></div>
-        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button><button id="downloadPrivateLookup" class="button button-muted" type="button">Download private agent-name lookup</button></div>
-        <p class="table-note private-lookup-note"><strong>Keep this private file separate.</strong> It contains colleague display names and pseudonymous IDs. Do not upload it to GitHub, share it with the JSON snapshot, or send it outside approved recipients. Import it separately into the dashboard on your approved device to show colleague names locally.</p>
+        <div class="download-actions"><button id="downloadSnapshot" class="button button-primary" type="button">Download JSON snapshot</button><button id="downloadAllCsv" class="button button-secondary" type="button">Download report CSVs</button></div>
+        <p class="table-note private-lookup-note"><strong>Colleague names are handled automatically.</strong> The Studio saves only pseudonymous agent references and display names in this browser's private directory. The JSON snapshot and report CSVs never contain colleague names.</p>
       </div>
       <details class="schema-details"><summary>View snapshot structure</summary><pre id="snapshotPreview"></pre></details>
     </section>
