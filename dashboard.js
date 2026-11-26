@@ -1914,7 +1914,11 @@ function renderWorkflow(){
       allocationMethodPanel+
       panel("Workflow events",imported?"Event counts and distinct ticket references affected by event type and original Inbox.":"Recorded event volume in the sample",imported?(actualRows.length?dataTable(["Event type","Inbox","Events","Tickets affected"],actualRows):'<div class="empty-state">'+(!workflowSupplied?"No Activity Log source was supplied.":acceptedRows===0?"No recognised events were accepted. Check the Studio mappings and data-quality panel.":"No mapped workflow events in this Inbox scope.")+'</div>'):barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color}))),'<span class="subtle-tag">TEAM-LEVEL AGGREGATES</span>')+
     '</div>'+
-    panel("Metric definitions","Unique ticket-linked events and total event volume are separate measures",dataTable(["Metric","Unique tickets affected","Events recorded","Rate / interpretation"],summaries.map(event=>'<tr><td>'+event.label+'</td><td>'+(imported?"Not aggregated across Inboxes":fmt(event.uniqueTickets))+'</td><td>'+(sourceAvailable?fmt(event.events):"Not available")+'</td><td>'+(imported?"Distinct-ticket deduplication across Inboxes is not inferred":event.rate+' of assigned / handled tickets')+'</td></tr>')))+
+    panel("Event volume and ticket reach","Counts and percentages use distinct ticket references across the selected Inbox scope. System events are excluded from ticket reach.",'<div class="workflow-visual-grid">'+
+      '<div class="workflow-visual-card"><h3>Events recorded</h3>'+barRows(summaries.map(event=>({label:event.label,value:event.events,color:event.color})))+'</div>'+
+      '<div class="workflow-visual-card"><h3>Distinct tickets affected</h3>'+barRows(summaries.map(event=>({label:event.label,value:event.uniqueTickets,color:event.color})))+'</div>'+
+    '</div>','<span class="subtle-tag">SOURCE ACTIVITY LOG</span>')+
+    panel("Workflow ratios","Ticket penetration = distinct ticket references affected ÷ ticket records in the selected scope.",dataTable(["Workflow category","Events recorded","Distinct tickets affected","Ticket penetration"],summaries.map(event=>'<tr><td>'+event.label+'</td><td class="total-cell">'+fmt(event.events)+'</td><td>'+fmt(event.uniqueTickets)+'</td><td><strong>'+event.rate+'</strong></td></tr>')))+
     '<div class="prototype-warning"><strong>Counting rule.</strong> A ticket with three handovers counts once in an Inbox-level distinct-ticket measure and three times in the event count. System events without a ticket key are included in event volume but excluded from ticket counts. Free-text Details / Notes are not imported.</div>';
 }
 function donutChart(items){
@@ -2005,6 +2009,15 @@ function agentResolutionMetrics(agentRef){
     averageMinutes:row.timed_tickets?row.total_resolution_minutes/row.timed_tickets:null
   };
 }
+function agentOwnedResolutionMetrics(agentRef){
+  const row=(state.importedSnapshot?.tickets.resolution_by_current_owner||[]).find(item=>item.agent_ref===agentRef);
+  if(!row)return {ownedTickets:0,resolvedTickets:0,timedTickets:0,averageMinutes:null,resolutionRatePct:null};
+  return {
+    ownedTickets:row.owned_tickets,resolvedTickets:row.resolved_tickets,timedTickets:row.timed_tickets,
+    averageMinutes:row.timed_tickets?row.total_resolution_minutes/row.timed_tickets:null,
+    resolutionRatePct:row.resolution_rate_pct
+  };
+}
 function agentActivityMetrics(agentRef){
   const events=(state.importedSnapshot?.activity_log||[]).filter(event=>
     (state.folder==="all"||event.inbox_code===state.folder)&&
@@ -2028,11 +2041,11 @@ function agentPerformanceReviewPanel(profiles){
   const activityNeedsMapping=Boolean(workflowQuality&&workflowQuality.rows_read>0&&!hasActivity);
   const activityNotSupplied=!workflowQuality;
   const hasResolvedBy=state.importedSnapshot.tickets.resolution_metrics?.resolved_by_field_mapped===true;
-  const hasResolvedAt=state.importedSnapshot.tickets.resolution_metrics?.resolved_at_field_mapped===true;
   const rows=profiles.map(agent=>{
     const agentRef=agent.id.replace(/^snapshot-/,"");
     const metrics=agentActivityMetrics(agentRef);
-    const resolution=agentResolutionMetrics(agentRef);
+    const resolvedBy=agentResolutionMetrics(agentRef);
+    const owned=agentOwnedResolutionMetrics(agentRef);
     return '<tr>'+
       '<td>'+memberCell(agent.name,agent.shift)+'</td>'+
       '<td class="total-cell">'+fmt(agent.firstAssigned||0)+'</td>'+
@@ -2041,25 +2054,48 @@ function agentPerformanceReviewPanel(profiles){
       '<td class="total-cell">'+fmt(agent.open||0)+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.handovers):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
       '<td>'+(hasActivity?fmt(metrics.recovery):activityNeedsMapping?"Check mapping":activityNotSupplied?"Not supplied":"No recognised events")+'</td>'+
-      '<td>'+(hasResolvedBy?fmt(resolution.resolvedTickets):"Not supplied")+'</td>'+
-      '<td>'+(hasResolvedAt?formatDurationMinutes(resolution.averageMinutes):"Not tracked")+'</td>'+
-      '<td><span class="not-tracked-value">Not tracked</span></td>'+
+      '<td>'+(hasResolvedBy?fmt(resolvedBy.resolvedTickets):"Not captured")+'</td>'+
+      '<td>'+(owned.averageMinutes!==null?formatDurationMinutes(owned.averageMinutes):"Not tracked")+'</td>'+
+      '<td>'+(owned.ownedTickets?owned.resolutionRatePct.toFixed(1)+"%":"—")+'</td>'+
     '</tr>';
   });
-  return panel("Agent performance review","First assignments, automatic/manual method, owner records and workflow involvement. Resolution counts and solve time appear only when the tracker supplies explicit resolver and timestamp fields. This is not an employee ranking."+(activityNeedsMapping?" The Activity Log was imported but no recognised rows were mapped; check Event Type B, Folder Path D, Original Assignee E, Current Owner F, Assignment Flag G and Incident Count H.":""),dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time","Resolution rate"],rows,"No agent rows match the current global search.")+
-    '<p class="team-panel-note">Automatic / manual assignment totals are distinct tickets. Handover and recovery figures count event records involving the colleague&#39;s original/current owner reference, not authenticated action attribution. Resolved-by counts require the new explicit Resolved By field; elapsed solve time requires Received At (UK) and Resolved At (UK). A formal resolution rate still needs an agreed case denominator and complete ownership history.</p>');
+  return panel("Agent performance review","First assignments, workflow involvement, resolver attribution and current-owner resolution outcomes. Average solve time and resolution rate use the current-owner portfolio; resolved-by counts use explicit resolver data or the associated owner on a Resolved / Closed Activity Log event. This is not an employee ranking."+(activityNeedsMapping?" The Activity Log was imported but no recognised rows were mapped; check Event Type B, Source Inbox D, Original Assignee E and Current Owner F.":""),dataTable(["Colleague","First assigned","Automatic","Manual",hasResolutionTracking()?"Open workload":"Current owner records","Handover records","Recovery / review records","Resolved by agent","Avg solve time · owned cases","Resolution rate · owned cases"],rows,"No agent rows match the current global search.")+
+    '<p class="team-panel-note">Resolution rate = resolved tickets currently owned by the colleague ÷ all tickets currently owned by the colleague. Average solve time = received-to-resolved elapsed time for that same current-owner cohort. “Resolved by agent” is shown only where a resolver field or Activity Log owner association exists; it is not proof of the authenticated person who clicked Resolve. Missing timestamps are excluded, never estimated.</p>');
 }
 function teamEvidencePanel(){
+  const snapshot=state.importedSnapshot;
+  const resolution=snapshot?.tickets.resolution_metrics;
   const items=[
-    ["First response","Not available","Requires a validated first-response timestamp."],
-    ["Elapsed resolution","Not available","Requires received and resolved timestamps."],
+    ["First response","Not tracked","No validated first-response timestamp is supplied."],
+    ["Resolution rate",snapshot?.tickets.resolution_tracking==="source_status_present"?"Tracked":"Not tracked","Uses current Status values; see per-agent current-owner cohort."],
+    ["Average solve time",resolution?.overall?.timed_tickets?formatDurationMinutes(resolution.overall.average_minutes):"Not available","Only tickets with both a received and resolved timestamp are included."],
+    ["Resolver attribution",resolution?.resolved_by_field_mapped?"Available":"Not captured","Explicit Resolved By or associated owner from a resolution Activity Log event."],
     ["Active handling time","Not available","Requires explicit start, pause, resume and stop events."],
-    ["Reopened rate","Not available","Requires a validated reopen field or event history."],
     ["Hours-adjusted comparison","Not available","Requires approved scheduled hours, shift coverage and eligibility history."]
   ];
   return '<div class="team-evidence-list">'+items.map(item=>
     '<div><span>'+item[0]+'</span><strong>'+item[1]+'</strong><small>'+item[2]+'</small></div>'
   ).join("")+'</div>';
+}
+function teamBrandPortfolioPanel(profiles){
+  const rows=state.importedSnapshot?.brand_by_agent||[];
+  if(!state.importedSnapshot)return '<div class="empty-state">Import a sanitised snapshot to review brand distribution by colleague.</div>';
+  if(!state.importedSnapshot.tickets.brand_field_mapped||!rows.length)return '<div class="empty-state">No ticket brand-by-owner records are available. Map a Brand field on the Assignments sheet or join Email Details by Email Key / ID. Unmatched records remain Other / unclassified.</div>';
+  const codes=["volkswagen","audi","skoda","seat","cupra","vwcv","other"];
+  const labels={volkswagen:"Volkswagen",audi:"Audi",skoda:"Škoda",seat:"SEAT",cupra:"CUPRA",vwcv:"VW Commercial Vehicles",other:"Other / unclassified"};
+  const byKey=new Map(rows.map(row=>[row.agent_ref+"|"+(row.brand_code==="unclassified"?"other":row.brand_code),row]));
+  const body=profiles.map(agent=>{
+    const ref=agent.id.replace(/^snapshot-/,"");
+    const cells=codes.map(code=>{
+      const row=byKey.get(ref+"|"+code);
+      if(!row)return '<td class="brand-share-zero">0 <small>0.0% mix</small></td>';
+      return '<td><strong>'+fmt(row.ticket_count)+'</strong><small>'+row.agent_portfolio_share_pct.toFixed(1)+'% of agent · '+row.brand_owner_share_pct.toFixed(1)+'% of brand</small></td>';
+    }).join("");
+    return '<tr><td>'+memberCell(agent.name,agent.shift)+'</td>'+cells+'</tr>';
+  });
+  return dataTable(["Current owner",...codes.map(code=>labels[code]+" · count / share")],body,
+    "No current owners match the selected team search.")+
+    '<p class="team-panel-note">Counts are tickets in each colleague’s current-owner portfolio. “% of agent” is that brand’s share of the colleague’s owned tickets; “% of brand” is the colleague’s share of all tickets classified to that brand. Unclassified records are shown separately and no brand is inferred from subject text.</p>';
 }
 function renderTeam(){
   const matrix=allocationMatrix(),allProfiles=teamProfileRows();
@@ -2097,6 +2133,7 @@ function renderTeam(){
       panel("First assignments by inbox","Distinct tickets first assigned in the selected scope",assignmentsAvailable?barRows(folders.map(folder=>({label:folder.name,value:folder.assigned,color:folder.color}))):'<div class="empty-state">Assignment history was not supplied.</div>','<span class="subtle-tag">FIRST ASSIGNMENT ONLY</span>')+
     '</div>'+
     panel("Member allocation matrix","Count and first-assignment share by inbox",'<p class="team-panel-note">Each share uses all first-assigned tickets in that inbox as its denominator. Searching for members filters visible rows but does not change the denominator. Open work remains a separate snapshot.</p>'+shareMatrix(matrix,true,matrix),'<span class="subtle-tag">INITIAL ASSIGNMENT ONLY</span>')+
+    panel("Brand share by colleague","Current-owner portfolio mix by brand, with the agent’s mix and the agent’s share of total brand volume",teamBrandPortfolioPanel(profiles),'<span class="subtle-tag">CURRENT OWNER · BRAND MIX</span>')+
     '<div class="grid-two team-secondary-grid">'+
       panel("Team-level workflow event ledger","Events and unique tickets affected · separate from initial allocation",teamEventLedger(),'<span class="subtle-tag">NOT MEMBER-ATTRIBUTED</span>')+
       panel("Performance measures awaiting evidence","Timing, quality and capacity measures are deliberately withheld until validated sources exist",teamEvidencePanel(),'<span class="subtle-tag">NOT AVAILABLE</span>')+
