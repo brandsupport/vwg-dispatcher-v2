@@ -137,12 +137,13 @@ function parseCSV(text){
   return {headers,records};
 }
 function isSupportedWorkbookFilename(fileName){return /\.(?:xlsx|xls|xlsm)$/i.test(String(fileName||"").trim());}
+function isArrayBufferValue(value){return Object.prototype.toString.call(value)==="[object ArrayBuffer]";}
 async function readFileArrayBuffer(file){
   let primaryError=null;
   if(file&&typeof file.arrayBuffer==="function"){
     try{
       const result=await file.arrayBuffer();
-      if(result instanceof ArrayBuffer)return result;
+      if(isArrayBufferValue(result))return result;
       throw new Error("The browser returned an invalid file buffer.");
     }catch(error){primaryError=error;}
   }
@@ -150,7 +151,7 @@ async function readFileArrayBuffer(file){
     try{
       return await new Promise((resolve,reject)=>{
         const reader=new FileReader();
-        reader.onload=()=>reader.result instanceof ArrayBuffer
+        reader.onload=()=>isArrayBufferValue(reader.result)
           ?resolve(reader.result)
           :reject(new Error("The browser returned no workbook bytes."));
         reader.onerror=()=>reject(reader.error||new Error("The browser could not access the selected file."));
