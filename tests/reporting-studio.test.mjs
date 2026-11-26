@@ -68,7 +68,7 @@ function loadStudio(extraContext={}){
         mappings.emailDetails=emailData?{email_key:"Email Key / ID",brand:"Brand",subject:emailData.headers.includes("Subject")?"Subject":"",order_number:"Order Number",vin:"VIN",received_at:"Received At (UK)",first_inbox:"First Source Inbox",original_assignee:"Original Assignee",current_owner:"Current Owner",completion_status:"Completion Status",first_missing_at:"First Missing At (UK)",completion_at:"Completion Time (UK)",handling_minutes:"Handling Time (Minutes)"}:{};
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         await sanitise();
-        return {snapshot:currentSnapshot,privateLookup:privateAgentLookup,privateDirectorySaved};
+        return {snapshot:currentSnapshot,privateLookup:privateAgentLookup,privateEmailLookup:privateEmailLookupForDashboard,privateDirectorySaved};
       }
     };
   `;
@@ -76,6 +76,47 @@ function loadStudio(extraContext={}){
   return context.__reportingTestHooks;
 }
 
+
+test("saves a device-local Order Number and VIN index without putting identifiers in the shared snapshot",async()=>{
+  const saved=new Map();
+  const localStorage={setItem(key,value){saved.set(key,String(value));}};
+  const hooks=loadStudio({localStorage});
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner,Resolution Status,Resolved At (UK),Resolved By",
+    "MAIL-LOOKUP-101,Detags,Resolved,Audi,2026-11-24 08:30:00,Belal,Resolved,2026-11-24 10:30:00,Belal"
+  ].join("\r\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    "2026-11-24 12:30:00,RESOLVED,MAIL-LOOKUP-101,Detags,Belal,Belal,TRUE,0,"
+  ].join("\r\n");
+  const emailDetails=[
+    "Email Key / ID,Brand,Order Number,VIN,Received At (UK),First Source Inbox,Original Assignee,Current Owner,Completion Status,First Missing At (UK),Completion Time (UK),Handling Time (Minutes)",
+    "MAIL-LOOKUP-101,Audi,ORD-123456,WAUZZZ1JZXW000001,2026-11-24 08:30:00,Detags,Belal,Belal,Completed,2026-11-24 10:30:00,2026-11-24 10:30:00,45"
+  ].join("\r\n");
+  const {snapshot,privateEmailLookup,privateDirectorySaved}=await hooks.processVwg(tickets,activity,"",emailDetails);
+  assert.equal(privateDirectorySaved,true);
+  assert.equal(privateEmailLookup.length,1);
+  assert.match(privateEmailLookup[0].ticket_ref,/^Ref-[A-F0-9]{10}$/);
+  assert.equal(privateEmailLookup[0].order_number,"ORD-123456");
+  assert.equal(privateEmailLookup[0].vin,"WAUZZZ1JZXW000001");
+  assert.equal(privateEmailLookup[0].brand_code,"audi");
+  assert.equal(privateEmailLookup[0].inbox_code,"detags");
+  assert.equal("email_lookup" in snapshot,false);
+  const snapshotJson=JSON.stringify(snapshot);
+  for(const raw of ["ORD-123456","WAUZZZ1JZXW000001","MAIL-LOOKUP-101","Belal"]){
+    assert.equal(snapshotJson.includes(raw),false,"private email lookup value leaked into shared snapshot: "+raw);
+  }
+  const savedPayload=JSON.parse(saved.get("vwg-dispatcher.private-agent-directory.v1"));
+  assert.ok(Array.isArray(savedPayload.agents));
+  assert.equal(savedPayload.email_lookup.snapshot_generated_at_utc,snapshot.generated_at_utc);
+  assert.equal(savedPayload.email_lookup.rows.length,1);
+  assert.equal(savedPayload.email_lookup.rows[0].order_number,"ORD-123456");
+  assert.equal(savedPayload.email_lookup.rows[0].vin,"WAUZZZ1JZXW000001");
+  assert.equal(JSON.stringify(savedPayload).includes("MAIL-LOOKUP-101"),false,"raw Email Key / ID must never be stored in the private lookup");
+  const owner=snapshot.email_metrics.by_current_owner[0];
+  assert.equal(owner.timed_completed,1);
+  assert.equal(owner.average_handling_minutes,45);
+});
 
 test("reads workbook bytes from the Blob stream before using fallback readers",async()=>{
   const hooks=loadStudio();
