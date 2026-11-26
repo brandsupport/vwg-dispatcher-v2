@@ -463,6 +463,8 @@ function downloadBlob(name,content,type){
 }
 function renderSnapshot(snapshot){
   $("resultsSection").hidden=false;
+  const handoffButton=$("openDashboardWithDataButton");
+  if(handoffButton){handoffButton.disabled=false;handoffButton.textContent="Open dashboard with this data →";handoffButton.title="Opens the dashboard in a new tab and transfers only the sanitised aggregate snapshot through this browser."}
   const overall=snapshot.tickets.overall;
   const resolutionTracked=snapshot.tickets.resolution_tracking==="source_status_present";
   const brandTracked=snapshot.tickets.brand_field_mapped===true;
@@ -519,6 +521,19 @@ async function sanitise(){
       emailDetails:files.emailDetails?newQuality("Email Details",files.emailDetails.rowCount):null
     };
     const rosterMap=new Map();const teamRoster=[];const privateNames=new Map();
+    // The operational Assignments sheet has no Brand column. Enrich ticket
+    // brand in memory by joining Email Details on the stable Email Key / ID.
+    // Neither the key nor any source row leaves this browser tab.
+    const emailBrandByKey=new Map();
+    if(files.emailDetails){
+      for(const row of files.emailDetails.records){
+        const emailKey=selectedValue(row,"emailDetails","email_key");
+        const brandRaw=selectedValue(row,"emailDetails","brand");
+        if(!emailKey||!norm(brandRaw))continue;
+        emailBrandByKey.set(norm(emailKey),normaliseBrand(brandRaw));
+      }
+    }
+    let brandEnrichedTicketCount=0;
     const rememberAgent=async(rawName,preferredName="")=>{
       const name=String(rawName??"").trim();
       if(!name||isUnassigned(name))return null;
@@ -556,8 +571,13 @@ async function sanitise(){
       if(!ref||!inbox){quality.tickets.rows_skipped++;if(ref&&!inbox)quality.tickets.unknown_inbox++;continue;}
       const id=norm(ref);
       if(ticketMap.has(id)){quality.tickets.rows_skipped++;quality.tickets.duplicate_rows++;continue;}
-      const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;const brandRaw=selectedValue(row,"tickets","brand");const brand=normaliseBrand(brandRaw);
-      if(mappings.tickets.brand&&(!norm(brandRaw)||!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw))&&brand==="unclassified"))quality.tickets.unknown_brand++;
+      const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;
+      const directBrandRaw=selectedValue(row,"tickets","brand");
+      const joinedBrand=emailBrandByKey.get(id)||"";
+      const brandRaw=directBrandRaw||joinedBrand;
+      const brand=normaliseBrand(brandRaw);
+      if(!directBrandRaw&&joinedBrand)brandEnrichedTicketCount++;
+      if(brandRaw&&brand==="unclassified"&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
       const receivedRaw=selectedValue(row,"tickets","received_at");
       const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
       const receivedAtUtc=parseExplicitTimestamp(receivedRaw,"Europe/London");
@@ -882,7 +902,11 @@ async function sanitise(){
     if(quality.workflow?.unknown_inbox)warnings.push(quality.workflow.unknown_inbox+" workflow row(s) had an unknown inbox and were excluded.");
     if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
     if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
-    if(!mappings.tickets.brand)warnings.push("No Brand field exists in the mapped ticket source. Brand totals are not captured; the dashboard will not guess a brand from the email subject.");
+    if(!mappings.tickets.brand&&brandEnrichedTicketCount){
+      warnings.push(brandEnrichedTicketCount+" ticket record(s) received a Brand from the matching Email Details Email Key / ID. Unmatched tickets remain Other / unclassified.");
+    }else if(!mappings.tickets.brand&&!brandEnrichedTicketCount){
+      warnings.push("No ticket Brand field or matching Email Details Brand records were found. Ticket brand totals remain Other / unclassified.");
+    }
     if(!mappings.tickets.resolution_status&&!mappings.tickets.resolved_at)warnings.push("No explicit Resolution Status or Resolved At field is mapped. Resolved and outstanding totals, resolution rate and solve-time metrics are not tracked by this workbook.");
     if(!files.roster)warnings.push("No Team & Shifts roster was supplied. Imported agents will not have shift-group or active-fortnight metadata.");
     if(files.roster){
@@ -906,7 +930,7 @@ async function sanitise(){
         resolution_tracking:(mappings.tickets.resolution_status||mappings.tickets.resolved_at)?"source_status_present":"not_captured",
         resolution_metrics:resolutionMetrics,
         resolution_by_agent:resolutionByAgent,
-        brand_field_mapped:Boolean(mappings.tickets.brand)},
+        brand_field_mapped:Boolean(mappings.tickets.brand)||brandEnrichedTicketCount>0},
       allocations,assignment_methods:assignmentMethods,
       team_roster:teamRoster.sort((a,b)=>a.shift_group.localeCompare(b.shift_group)||a.agent_ref.localeCompare(b.agent_ref)),
       workflow,activity_log:activityLog.sort((a,b)=>(a.event_time_utc||"").localeCompare(b.event_time_utc||"")),
@@ -933,6 +957,38 @@ async function sanitise(){
   }finally{updateReadyState();}
 }
 function downloadSnapshot(){if(!currentSnapshot)return;downloadBlob("dispatcher-reporting-snapshot.json",JSON.stringify(currentSnapshot,null,2),"application/json");}
+function openDashboardWithSnapshot(){
+  if(!currentSnapshot)return;
+  if(typeof BroadcastChannel!=="function"){
+    alert("Direct dashboard hand-off is not supported in this browser. Use Download JSON snapshot, then Import snapshot on the Dashboard.");
+    return;
+  }
+  const button=$("openDashboardWithDataButton");
+  const bytes=crypto.getRandomValues(new Uint8Array(16));
+  const token=Array.from(bytes,value=>value.toString(16).padStart(2,"0")).join("");
+  const channel=new BroadcastChannel("vwg-dispatcher-snapshot-transfer-v1");
+  let finished=false;
+  const finish=(success,message)=>{
+    if(finished)return;finished=true;clearTimeout(timeout);channel.close();
+    if(success){button.textContent="Dashboard opened with your data ✓";button.disabled=true;button.title="The dashboard confirmed the snapshot import.";}
+    else{button.disabled=false;button.textContent="Retry: open dashboard with this data →";alert(message||"The dashboard did not confirm the import. Download the JSON snapshot and use Import snapshot as a fallback.");}
+  };
+  channel.addEventListener("message",event=>{
+    const message=event.data||{};
+    if(message.token!==token)return;
+    if(message.type==="VWG_DASHBOARD_READY"){
+      channel.postMessage({type:"VWG_IMPORT_SNAPSHOT",token,snapshot:currentSnapshot});
+    }else if(message.type==="VWG_SNAPSHOT_IMPORTED"){
+      finish(Boolean(message.success),message.success?"":"Dashboard rejected the snapshot: "+String(message.error||"Unknown import error"));
+    }
+  });
+  const timeout=setTimeout(()=>finish(false,"The dashboard did not confirm the import. Keep this Studio tab open and use Download JSON snapshot → Import snapshot as a fallback."),15000);
+  const target=new URL("./",window.location.href);
+  target.searchParams.set("receiveSnapshot",token);
+  const dashboardTab=window.open(target.href,"_blank");
+  if(!dashboardTab)finish(false,"Your browser blocked the dashboard tab. Allow pop-ups for this site, then retry, or use the JSON download/import fallback.");
+  else{button.disabled=true;button.textContent="Waiting for dashboard…";}
+}
 function downloadPrivateAgentLookup(){
   if(!privateAgentLookup.length){alert("No colleague display names were available for a private lookup.");return;}
   const csv=makeCSV(["agent_ref","display_name"],privateAgentLookup.map(row=>[row.agent_ref,row.display_name]));
@@ -1006,6 +1062,7 @@ $("downloadKey").addEventListener("click",saveKey);
 $("toggleKey").addEventListener("click",()=>{const field=$("workspaceKey");field.type=field.type==="password"?"text":"password";$("toggleKey").textContent=field.type==="password"?"Show":"Hide";});
 $("sanitiseButton").addEventListener("click",sanitise);
 $("downloadSnapshot").addEventListener("click",downloadSnapshot);
+$("openDashboardWithDataButton").addEventListener("click",openDashboardWithSnapshot);
 $("downloadPrivateLookup").addEventListener("click",downloadPrivateAgentLookup);
 $("downloadAllCsv").addEventListener("click",downloadCSVs);
 updateReadyState();
