@@ -137,6 +137,35 @@ function parseCSV(text){
   return {headers,records};
 }
 function isSupportedWorkbookFilename(fileName){return /\.(?:xlsx|xls|xlsm)$/i.test(String(fileName||"").trim());}
+async function readFileArrayBuffer(file){
+  let primaryError=null;
+  if(file&&typeof file.arrayBuffer==="function"){
+    try{
+      const result=await file.arrayBuffer();
+      if(result instanceof ArrayBuffer)return result;
+      throw new Error("The browser returned an invalid file buffer.");
+    }catch(error){primaryError=error;}
+  }
+  if(typeof FileReader==="function"){
+    try{
+      return await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onload=()=>reader.result instanceof ArrayBuffer
+          ?resolve(reader.result)
+          :reject(new Error("The browser returned no workbook bytes."));
+        reader.onerror=()=>reject(reader.error||new Error("The browser could not access the selected file."));
+        reader.onabort=()=>reject(new Error("The workbook read was cancelled."));
+        reader.readAsArrayBuffer(file);
+      });
+    }catch(fallbackError){
+      const first=primaryError?((primaryError.name||"Read error")+": "+(primaryError.message||String(primaryError))):"File.arrayBuffer() is unavailable";
+      const second=(fallbackError.name||"Read error")+": "+(fallbackError.message||String(fallbackError));
+      throw new Error("Chrome could not read the selected file through either browser reader. First attempt: "+first+". Second attempt: "+second+". This usually means Windows or a sync/preview process is blocking access to the local file. Close the workbook in Excel and any preview window, then save or copy a fresh copy into your local Downloads folder (not OneDrive, SharePoint, a network drive, or a USB location) and select that copy.");
+    }
+  }
+  const detail=primaryError?((primaryError.name||"Read error")+": "+(primaryError.message||String(primaryError))):"This browser does not provide a supported file reader.";
+  throw new Error("Chrome could not read the selected file ("+detail+"). Close the workbook in Excel and any preview window, then save or copy a fresh copy into your local Downloads folder and select that copy.");
+}
 function autoMap(headers,aliases){
   const indexed=headers.map(header=>({header,key:norm(header)}));
   for(const alias of aliases){const target=norm(alias);const exact=indexed.find(item=>item.key===target);if(exact)return exact.header;}
@@ -306,7 +335,7 @@ function renderWorkbookSelectors(){
 async function readWorkbook(file){
   if(!isSupportedWorkbookFilename(file?.name))throw new Error("Select the original Excel workbook (.xlsx, .xls or .xlsm).");
   if(typeof XLSX==="undefined"||typeof XLSX.read!=="function")throw new Error("The Excel workbook parser did not load. Refresh the page while connected to the internet, or use the CSV alternative.");
-  const workbook=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:false});
+  const workbook=XLSX.read(await readFileArrayBuffer(file),{type:"array",cellDates:false});
   if(!Array.isArray(workbook.SheetNames)||!workbook.SheetNames.length)throw new Error("No worksheets were found in the selected workbook.");
   sourceMode="workbook";
   workbookData={workbook,sheetNames:workbook.SheetNames.slice()};
