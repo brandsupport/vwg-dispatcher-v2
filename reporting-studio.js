@@ -1066,6 +1066,10 @@ function bindFile(kind){
     try{await readSource(kind,file);}catch(error){files[kind]=null;alert("Could not read the selected CSV: "+error.message);event.target.value="";renderMappings();}
   });
 }
+async function withWorkbookInputLocked(input,process){
+  try{return await process();}
+  finally{if(input)input.value="";}
+}
 async function processWorkbookFile(file){
   if(!file)return;
   const input=$("workbookFile");
@@ -1094,11 +1098,12 @@ function bindWorkbook(){
   const zone=$("workbookDropZone");
   if(browse)browse.addEventListener("click",()=>openWorkbookPicker(input));
   input.addEventListener("change",async event=>{
-    const file=event.target.files?.[0]||null;
-    // Clear the picker immediately so the same file can be selected again after any outcome.
-    event.target.value="";
+    const selectedInput=event.target;
+    const file=selectedInput.files?.[0]||null;
     if(!file)return;
-    await processWorkbookFile(file);
+    // Keep the browser's file handle intact throughout the asynchronous read.
+    // Clear only after processing so the same file can be selected again next time.
+    await withWorkbookInputLocked(selectedInput,()=>processWorkbookFile(file));
   });
   if(zone){
     zone.addEventListener("click",event=>{

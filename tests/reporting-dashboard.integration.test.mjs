@@ -82,7 +82,7 @@ function createWorkbookTestHooks(fileReaderClass=null){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer,openWorkbookPicker};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap,readFileArrayBuffer,openWorkbookPicker,withWorkbookInputLocked};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -342,6 +342,21 @@ test("the Choose workbook button falls back to click when showPicker is unavaila
   assert.equal(clicked,2);
   assert.equal(hooks.openWorkbookPicker({}),false);
 });
+
+test("the selected workbook input is not cleared until its asynchronous read has completed",async()=>{
+  const hooks=createWorkbookTestHooks();
+  const input={value:"C:\\fakepath\\tracker.xlsx"};
+  let valueDuringRead=null;
+  const result=await hooks.withWorkbookInputLocked(input,async()=>{
+    await Promise.resolve();
+    valueDuringRead=input.value;
+    return "read-complete";
+  });
+  assert.equal(valueDuringRead,"C:\\fakepath\\tracker.xlsx");
+  assert.equal(result,"read-complete");
+  assert.equal(input.value,"");
+});
+
 
 test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{
   const hooks=createWorkbookTestHooks();
