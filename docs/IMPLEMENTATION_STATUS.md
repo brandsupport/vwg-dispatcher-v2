@@ -19,7 +19,7 @@ This document distinguishes working prototype/reporting capabilities from produc
 | Imported Activity Log | Read-only view of accepted source events with search, event-type/colleague/date filters and local CSV export | No trusted actor identity, persistent audit store or tamper-evident guarantee |
 | Roster & Coverage | Pseudonymised roster directory, Early/Late shifts, Egypt-local scheduled hours and scheduled headcount overlaps | Scheduled headcount only; not live availability or capacity |
 | Reports & Exports | Separate local CSV builders for daily, weekly, management, individual, brand and reliability report formats | Downloads are generated from the snapshot in the current browser tab |
-| Private colleague names | Direct Studio handoff transfers names to the dashboard; the dashboard remembers only `agent_ref` / `display_name` pairs in a separate browser-local directory and restores them on later imports on that device | Not included in public source or shared JSON; not an identity/authentication control; clear with **Clear saved names** |
+| Private colleague names | Studio automatically saves only `agent_ref` / `display_name` pairs in the same-origin browser-local directory; Dashboard resolves names on both direct handoff and ordinary downloaded-JSON imports | No separate names file or manual import; device-local only, not included in public source or shared JSON, and not an identity/authentication control; clear with **Clear saved names** |
 | Backend foundation | Staging D1 foundation schema and separate Cloudflare Worker with Access-oriented role checks and read-only endpoints for liveness, identity/permissions, inbox catalogue, readiness and audit reads | Staging foundation, not an operational backend; protected routes fail closed while Access role configuration is incomplete |
 
 ## Not implemented or not production-ready
@@ -73,7 +73,7 @@ This document distinguishes working prototype/reporting capabilities from produc
 - There is no in-dashboard unclassified-brand review queue with saved per-ticket corrections that can be reused on later imports.
 - The Hub form subject rule improves classification for the known de-tag subject format; other email templates or non-form messages need their own validated mapping rules.
 - Imports are manual and point-in-time. There is no scheduled refresh, source-change detection or multi-user shared reporting workspace.
-- Private name mappings do not sync across different browsers/devices and must be re-imported on each new device.
+- Private name mappings do not sync across different browsers/devices; each approved browser/device must run the local sanitisation workflow to populate its own directory.
 
 ## Recommended implementation order
 

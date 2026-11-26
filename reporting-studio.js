@@ -98,8 +98,22 @@ let workbookData=null;
 let sourceMode="";
 let currentSnapshot=null;
 let privateAgentLookup=[];
+let privateDirectorySaved=false;
+const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1";
 let savedWorkspaceKey="";
 const $=id=>document.getElementById(id);
+
+function persistPrivateAgentDirectoryForDashboard(rows){
+  try{
+    if(typeof localStorage==="undefined")return false;
+    const safeRows=(Array.isArray(rows)?rows:[]).slice(0,250).map(row=>({
+      agent_ref:String(row?.agent_ref||"").trim(),
+      display_name:String(row?.display_name||"").trim().slice(0,100)
+    })).filter(row=>/^Agent-[A-F0-9]{10}$/.test(row.agent_ref)&&row.display_name);
+    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(safeRows));
+    return true;
+  }catch(error){return false;}
+}
 
 function cleanHeader(value){return String(value??"").replace(/^\uFEFF/,"").trim();}
 function norm(value){return String(value??"").normalize("NFKC").trim().toLowerCase().replace(/[’']/g,"").replace(/[^a-z0-9]+/g," ").trim();}
@@ -630,27 +644,42 @@ async function sanitise(){
       emailDetails:files.emailDetails?newQuality("Email Details",files.emailDetails.rowCount):null
     };
     const rosterMap=new Map();const teamRoster=[];const privateNames=new Map();
-    // Brand enrichment stays in memory: prefer structured Brand fields, then
-    // use the known Hub form subject pattern as a controlled fallback.
-    // Neither email keys, subjects nor source rows leave this browser tab.
+    const rosterAgentRefByAlias=new Map();
+    const rosterDisplayByRef=new Map();
+    // Brand enrichment stays local: structured fields first, then the exact Hub subject pattern.
     const emailBrandByKey=new Map();
     const emailSubjectByKey=new Map();
     if(files.emailDetails){
       for(const row of files.emailDetails.records){
         const emailKey=selectedValue(row,"emailDetails","email_key");
         if(!emailKey)continue;
+        const mapKey=norm(emailKey);
         const brandRaw=selectedValue(row,"emailDetails","brand");
         const subjectRaw=selectedValue(row,"emailDetails","subject");
-        if(norm(brandRaw))emailBrandByKey.set(norm(emailKey),brandRaw);
-        if(subjectRaw)emailSubjectByKey.set(norm(emailKey),subjectRaw);
+        if(normaliseBrand(brandRaw)!=="unclassified")emailBrandByKey.set(mapKey,brandRaw);
+        if(subjectRaw)emailSubjectByKey.set(mapKey,subjectRaw);
+      }
+    }
+    // Assignments can contain the only subject/Brand evidence for the same email.
+    if(files.tickets){
+      for(const row of files.tickets.records){
+        const ticketKey=selectedValue(row,"tickets","ticket_ref");
+        if(!ticketKey)continue;
+        const mapKey=norm(ticketKey);
+        const brandRaw=selectedValue(row,"tickets","brand");
+        const subjectRaw=selectedValue(row,"tickets","subject");
+        if(normaliseBrand(brandRaw)!=="unclassified"&&!emailBrandByKey.has(mapKey))emailBrandByKey.set(mapKey,brandRaw);
+        if(subjectRaw&&!emailSubjectByKey.has(mapKey))emailSubjectByKey.set(mapKey,subjectRaw);
       }
     }
     let brandEnrichedTicketCount=0;
     const rememberAgent=async(rawName,preferredName="")=>{
       const name=String(rawName??"").trim();
       if(!name||isUnassigned(name))return null;
-      const ref=await pseudonym(key,"agent",name);
-      if(preferredName||!privateNames.has(ref))privateNames.set(ref,String(preferredName||name).trim());
+      const aliasKey=norm(name);
+      const ref=rosterAgentRefByAlias.get(aliasKey)||await pseudonym(key,"agent",name);
+      const display=String(preferredName||rosterDisplayByRef.get(ref)||name).trim();
+      if(display&&(preferredName||!privateNames.has(ref)))privateNames.set(ref,display);
       return ref;
     };
     if(files.roster){
@@ -668,6 +697,16 @@ async function sanitise(){
           quality.roster.rows_skipped++;quality.roster.duplicate_rows++;continue;
         }
         const agentRef=await rememberAgent(identity,displayName);
+        const canonicalDisplay=String(displayName||identity).trim();
+        for(const alias of [identity,canonicalDisplay]){
+          const aliasKey=norm(alias);
+          if(!aliasKey)continue;
+          const existing=rosterAgentRefByAlias.get(aliasKey);
+          if(existing&&existing!==agentRef)throw new Error("Team & Shifts maps one colleague/category name to more than one person. Correct the duplicate Colleague or Outlook Category (exact) values before sanitising.");
+          rosterAgentRefByAlias.set(aliasKey,agentRef);
+        }
+        rosterDisplayByRef.set(agentRef,canonicalDisplay);
+        privateNames.set(agentRef,canonicalDisplay);
         const entry={
           agent_ref:agentRef,shift_group:shiftGroup,
           shift_start_egypt:shiftStart,shift_end_egypt:shiftEnd,
@@ -1021,11 +1060,13 @@ async function sanitise(){
         const inbox=normaliseInbox(selectedValue(row,"emailDetails","first_inbox"));
         if(!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         const brandRaw=selectedValue(row,"emailDetails","brand");
-        const subjectRaw=selectedValue(row,"emailDetails","subject");
+        const subjectRaw=selectedValue(row,"emailDetails","subject")||emailSubjectByKey.get(norm(emailKey))||"";
+        const joinedBrandRaw=emailBrandByKey.get(norm(emailKey))||"";
         const directBrand=normaliseBrand(brandRaw);
+        const joinedBrand=normaliseBrand(joinedBrandRaw);
         const subjectBrand=normaliseBrandFromSubject(subjectRaw);
-        const brand=directBrand!=="unclassified"?directBrand:subjectBrand;
-        if((norm(brandRaw)||norm(subjectRaw))&&brand==="unclassified")q.unknown_brand++;
+        const brand=directBrand!=="unclassified"?directBrand:joinedBrand!=="unclassified"?joinedBrand:subjectBrand;
+        if((norm(brandRaw)||norm(joinedBrandRaw)||norm(subjectRaw))&&brand==="unclassified")q.unknown_brand++;
         const statusNorm=norm(selectedValue(row,"emailDetails","completion_status"));
         let status="unknown";
         if(statusNorm==="open")status="open";
@@ -1136,6 +1177,10 @@ async function sanitise(){
     else if(validInitial.size===0)warnings.push("No validated first-assignment events were found. Allocation shares cannot be interpreted as complete.");
     if(!files.workflow)warnings.push("No workflow-history file was supplied. Workflow event metrics are unavailable.");
     privateAgentLookup=[...privateNames.entries()].map(([agent_ref,display_name])=>({agent_ref,display_name})).sort((a,b)=>a.display_name.localeCompare(b.display_name));
+    privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup);
+    if(privateAgentLookup.length&&!privateDirectorySaved){
+      warnings.push("The browser could not save the private colleague directory. Dashboard names will not resolve automatically until browser storage is available; no separate names file is generated.");
+    }
     const snapshot={
       schema_version:"dispatcher-reporting-snapshot-1",
       generated_at_utc:new Date().toISOString(),
@@ -1209,11 +1254,7 @@ function openDashboardWithSnapshot(){
   if(!dashboardTab)finish(false,"Your browser blocked the dashboard tab. Allow pop-ups for this site, then retry, or use the JSON download/import fallback.");
   else{button.disabled=true;button.textContent="Waiting for dashboard…";}
 }
-function downloadPrivateAgentLookup(){
-  if(!privateAgentLookup.length){alert("No colleague display names were available for a private lookup.");return;}
-  const csv=makeCSV(["agent_ref","display_name"],privateAgentLookup.map(row=>[row.agent_ref,row.display_name]));
-  downloadBlob("dispatcher-private-agent-name-lookup.csv","\\uFEFF"+csv,"text/csv;charset=utf-8");
-}
+
 function downloadCSVs(){
   if(!currentSnapshot)return;
   const s=currentSnapshot;
@@ -1328,6 +1369,5 @@ $("toggleKey").addEventListener("click",()=>{const field=$("workspaceKey");field
 $("sanitiseButton").addEventListener("click",sanitise);
 $("downloadSnapshot").addEventListener("click",downloadSnapshot);
 $("openDashboardWithDataButton").addEventListener("click",openDashboardWithSnapshot);
-$("downloadPrivateLookup").addEventListener("click",downloadPrivateAgentLookup);
 $("downloadAllCsv").addEventListener("click",downloadCSVs);
 updateReadyState();
