@@ -27,6 +27,9 @@ test("The favicon uses the exact logo mask already used by the Dashboard", () =>
   assert.equal(svgLogo[1], cssLogo[1], "Favicon must use the exact same underlying VW logo artwork");
   assert.match(icon, /linearGradient id="logo"/);
   assert.match(icon, /mask-type="alpha"/);
+  assert.match(icon, /clipPath id="rounded-icon"/, "App icon must clip to rounded outer corners");
+  assert.match(icon, /<rect width="256" height="256" rx="58"\/>/, "Rounded icon corner radius must be applied to the full canvas");
+  assert.match(icon, /<g clip-path="url\(#rounded-icon\)">/, "All icon layers must respect the rounded outer shape");
 });
 
 test("Web-app manifest is valid and points to the shared icon", () => {
