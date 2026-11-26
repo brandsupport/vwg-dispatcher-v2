@@ -1038,7 +1038,7 @@ async function sanitise(){
         const completionRaw=selectedValue(row,"emailDetails","completion_at")||selectedValue(row,"emailDetails","first_missing_at");
         const completionDate=parseExplicitDate(completionRaw,"Europe/London");
         if(completionRaw&&!completionDate)q.ambiguous_time++;
-        const missingBrand=brand==="unclassified";
+        const missingBrand=!norm(brandRaw)&&brand==="unclassified";
         const missingOrderVin=!norm(selectedValue(row,"emailDetails","order_number"))&&!norm(selectedValue(row,"emailDetails","vin"));
         const handlingRaw=selectedValue(row,"emailDetails","handling_minutes");
         const handlingNumber=handlingRaw.trim()===""?NaN:Number(handlingRaw);
@@ -1110,7 +1110,7 @@ async function sanitise(){
     if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
     if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
     if(!mappings.tickets.brand&&brandEnrichedTicketCount){
-      warnings.push(brandEnrichedTicketCount+" ticket record(s) received a Brand from a matching Email Details row or the recognised Hub form subject. Unmatched tickets remain Other / unclassified.");
+      warnings.push(brandEnrichedTicketCount+" ticket record(s) received a Brand from the matching Email Details Email Key / ID or recognised Hub form subject. Unmatched tickets remain Other / unclassified.");
     }else if(!mappings.tickets.brand&&!brandEnrichedTicketCount){
       warnings.push("No ticket Brand field, matching Email Details Brand or recognised Hub form subject was found. Ticket brand totals remain Other / unclassified.");
     }
