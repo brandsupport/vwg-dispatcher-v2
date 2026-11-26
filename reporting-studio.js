@@ -30,6 +30,7 @@ const SOURCE_CONFIG={
       {id:"inbox",label:"Inbox / folder",required:true,aliases:["source inbox","first source inbox","folder path","source folder","inbox","folder","mailbox folder","queue","folder name"]},
       {id:"status",label:"Current status",required:true,aliases:["status","ticket status","current state","state","work status"]},
       {id:"brand",label:"Brand",aliases:["brand","brand name","make","marque"]},
+      {id:"subject",label:"Email subject (Hub form brand detection fallback)",aliases:["subject","email subject","message subject"]},
       {id:"received_at",label:"Received timestamp",aliases:["received at uk","received at","received date","received","date received","created at","created date","received timestamp"]},
       {id:"current_owner",label:"Current owner",required:true,aliases:["current owner","owner","assigned to","assignee","colleague","agent","allocated to","owner name"]},
       {id:"resolution_status",label:"Resolution status (future tracker field)",aliases:["resolution status","resolution state","closure status"]},
@@ -76,6 +77,7 @@ const SOURCE_CONFIG={
     fields:[
       {id:"email_key",label:"Email key (used only for local duplicate removal)",required:true,aliases:["email key / id"]},
       {id:"brand",label:"Brand",required:true,aliases:["brand","brand name"]},
+      {id:"subject",label:"Email subject (Hub form brand detection fallback)",aliases:["subject","email subject","message subject"]},
       {id:"order_number",label:"Order number (counts blank values only)",required:true,aliases:["order number"]},
       {id:"vin",label:"VIN (counts blank values only)",required:true,aliases:["vin"]},
       {id:"received_at",label:"Received timestamp (UK)",required:true,aliases:["received at uk","received at"]},
@@ -283,7 +285,7 @@ function suggestWorkbookSheet(kind,sheetNames,sheets){
   // Email Details is a dedicated schema. Never silently substitute Assignments,
   // Activity Log or another worksheet merely because a few generic columns match.
   if(kind==="emailDetails"){
-    const requiredHeaderCount=SOURCE_CONFIG.emailDetails.fields.length;
+    const requiredHeaderCount=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required).length;
     for(const name of sheetNames){
       try{
         const rows=worksheetRows(sheets[name]);
@@ -368,8 +370,8 @@ function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
   try{
     const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
     if(kind==="emailDetails"){
-      const matched=SOURCE_CONFIG.emailDetails.fields.filter(field=>autoMap(parsed.headers,field.aliases)).length;
-      const required=SOURCE_CONFIG.emailDetails.fields.length;
+      const matched=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required&&autoMap(parsed.headers,field.aliases)).length;
+      const required=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required).length;
       if(matched!==required){
         const missing=SOURCE_CONFIG.emailDetails.fields.filter(field=>!autoMap(parsed.headers,field.aliases)).map(field=>field.label);
         throw new Error("This worksheet is not the Email Details schema ("+matched+"/"+required+" required headers found). Missing: "+missing.join(", ")+". Select the actual Email Details tab. Do not map the Assignments or Activity Log sheet as Email Details.");
@@ -428,6 +430,11 @@ function normaliseBrand(value){
   const key=norm(value);
   for(const [code,aliases] of Object.entries(BRANDS))if(aliases.some(alias=>norm(alias)===key))return code;
   return "unclassified";
+}
+function normaliseBrandFromSubject(subject){
+  const raw=String(subject??"").trim();
+  const match=raw.match(/^form\s+submission\s+from\s+(.+?)\s+customer\s+de[- ]?tag\s+request\s+form\s+on\s+hub$/i);
+  return match?normaliseBrand(match[1]):"unclassified";
 }
 function isUnassigned(value){
   const key=norm(value);
@@ -623,16 +630,19 @@ async function sanitise(){
       emailDetails:files.emailDetails?newQuality("Email Details",files.emailDetails.rowCount):null
     };
     const rosterMap=new Map();const teamRoster=[];const privateNames=new Map();
-    // The operational Assignments sheet has no Brand column. Enrich ticket
-    // brand in memory by joining Email Details on the stable Email Key / ID.
-    // Neither the key nor any source row leaves this browser tab.
+    // Brand enrichment stays in memory: prefer structured Brand fields, then
+    // use the known Hub form subject pattern as a controlled fallback.
+    // Neither email keys, subjects nor source rows leave this browser tab.
     const emailBrandByKey=new Map();
+    const emailSubjectByKey=new Map();
     if(files.emailDetails){
       for(const row of files.emailDetails.records){
         const emailKey=selectedValue(row,"emailDetails","email_key");
+        if(!emailKey)continue;
         const brandRaw=selectedValue(row,"emailDetails","brand");
-        if(!emailKey||!norm(brandRaw))continue;
-        emailBrandByKey.set(norm(emailKey),normaliseBrand(brandRaw));
+        const subjectRaw=selectedValue(row,"emailDetails","subject");
+        if(norm(brandRaw))emailBrandByKey.set(norm(emailKey),brandRaw);
+        if(subjectRaw)emailSubjectByKey.set(norm(emailKey),subjectRaw);
       }
     }
     let brandEnrichedTicketCount=0;
@@ -675,11 +685,16 @@ async function sanitise(){
       if(ticketMap.has(id)){quality.tickets.rows_skipped++;quality.tickets.duplicate_rows++;continue;}
       const status=selectedValue(row,"tickets","status");const statusKey=norm(status);const knownStatuses=["resolved","closed","complete","completed","received","queued","assigned","in progress","waiting","pending","flagged","reassigned","unassigned","exception","open","in review","on hold"];if(!knownStatuses.includes(statusKey))quality.tickets.unknown_status++;
       const directBrandRaw=selectedValue(row,"tickets","brand");
-      const joinedBrand=emailBrandByKey.get(id)||"";
-      const brandRaw=directBrandRaw||joinedBrand;
-      const brand=normaliseBrand(brandRaw);
-      if(!directBrandRaw&&joinedBrand)brandEnrichedTicketCount++;
-      if(brandRaw&&brand==="unclassified"&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))quality.tickets.unknown_brand++;
+      const joinedBrandRaw=emailBrandByKey.get(id)||"";
+      const subjectRaw=selectedValue(row,"tickets","subject")||emailSubjectByKey.get(id)||"";
+      const directBrand=normaliseBrand(directBrandRaw);
+      const joinedBrand=normaliseBrand(joinedBrandRaw);
+      const subjectBrand=normaliseBrandFromSubject(subjectRaw);
+      const brand=directBrand!=="unclassified"?directBrand:joinedBrand!=="unclassified"?joinedBrand:subjectBrand;
+      const brandSourceRaw=directBrand!=="unclassified"?directBrandRaw:joinedBrand!=="unclassified"?joinedBrandRaw:subjectRaw;
+      if(!directBrandRaw&&joinedBrand!=="unclassified")brandEnrichedTicketCount++;
+      else if(directBrand==="unclassified"&&joinedBrand==="unclassified"&&subjectBrand!=="unclassified")brandEnrichedTicketCount++;
+      if(brandSourceRaw&&brand==="unclassified")quality.tickets.unknown_brand++;
       const receivedRaw=selectedValue(row,"tickets","received_at");
       const receivedDate=parseExplicitDate(receivedRaw,"Europe/London");
       const receivedAtUtc=parseExplicitTimestamp(receivedRaw,"Europe/London");
@@ -1006,8 +1021,11 @@ async function sanitise(){
         const inbox=normaliseInbox(selectedValue(row,"emailDetails","first_inbox"));
         if(!inbox){q.rows_skipped++;q.unknown_inbox++;continue;}
         const brandRaw=selectedValue(row,"emailDetails","brand");
-        const brand=normaliseBrand(brandRaw);
-        if(norm(brandRaw)&&brand==="unclassified"&&!BRANDS.unclassified.some(value=>norm(value)===norm(brandRaw)))q.unknown_brand++;
+        const subjectRaw=selectedValue(row,"emailDetails","subject");
+        const directBrand=normaliseBrand(brandRaw);
+        const subjectBrand=normaliseBrandFromSubject(subjectRaw);
+        const brand=directBrand!=="unclassified"?directBrand:subjectBrand;
+        if((norm(brandRaw)||norm(subjectRaw))&&brand==="unclassified")q.unknown_brand++;
         const statusNorm=norm(selectedValue(row,"emailDetails","completion_status"));
         let status="unknown";
         if(statusNorm==="open")status="open";
@@ -1020,7 +1038,7 @@ async function sanitise(){
         const completionRaw=selectedValue(row,"emailDetails","completion_at")||selectedValue(row,"emailDetails","first_missing_at");
         const completionDate=parseExplicitDate(completionRaw,"Europe/London");
         if(completionRaw&&!completionDate)q.ambiguous_time++;
-        const missingBrand=!norm(brandRaw);
+        const missingBrand=!norm(brandRaw)&&brand==="unclassified";
         const missingOrderVin=!norm(selectedValue(row,"emailDetails","order_number"))&&!norm(selectedValue(row,"emailDetails","vin"));
         const handlingRaw=selectedValue(row,"emailDetails","handling_minutes");
         const handlingNumber=handlingRaw.trim()===""?NaN:Number(handlingRaw);
@@ -1092,14 +1110,14 @@ async function sanitise(){
     if(quality.roster?.duplicate_rows)warnings.push(quality.roster.duplicate_rows+" duplicate roster identity row(s) were skipped.");
     if(quality.roster?.rows_skipped)warnings.push(quality.roster.rows_skipped+" invalid or incomplete roster row(s) were skipped.");
     if(!mappings.tickets.brand&&brandEnrichedTicketCount){
-      warnings.push(brandEnrichedTicketCount+" ticket record(s) received a Brand from the matching Email Details Email Key / ID. Unmatched tickets remain Other / unclassified.");
+      warnings.push(brandEnrichedTicketCount+" ticket record(s) received a Brand from the matching Email Details Email Key / ID or recognised Hub form subject. Unmatched tickets remain Other / unclassified.");
     }else if(!mappings.tickets.brand&&!brandEnrichedTicketCount){
-      warnings.push("No ticket Brand field or matching Email Details Brand records were found. Ticket brand totals remain Other / unclassified.");
+      warnings.push("No ticket Brand field, matching Email Details Brand or recognised Hub form subject was found. Ticket brand totals remain Other / unclassified.");
     }
     if(mappings.tickets.brand||brandEnrichedTicketCount){
       const absentPortfolioBrands=["cupra","seat","skoda","vwcv"].filter(code=>(brandStats[code]||0)===0);
       if(absentPortfolioBrands.length){
-        warnings.push("No ticket rows were present for these brands in the selected Brand field / Email Details join: "+absentPortfolioBrands.map(code=>BRAND_LABELS[code]).join(", ")+". The dashboard will show zero for them until source records include those brand values; no brand is inferred from subject or message text.");
+        warnings.push("No ticket rows were classified for these brands from the mapped Brand field, Hub form subject or Email Details join: "+absentPortfolioBrands.map(code=>BRAND_LABELS[code]).join(", ")+". The dashboard will show zero until matching source records are present.");
       }
     }
     if(!mappings.tickets.status&&!mappings.tickets.resolution_status)warnings.push("No current-status field is mapped. Resolved and outstanding totals cannot be classified.");

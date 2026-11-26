@@ -510,7 +510,7 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   const snapshot=run.snapshot;
 
   assert.deepEqual(run.mappings.tickets,{
-    ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"",
+    ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"",subject:"Email Subject",
     received_at:"Received At (UK)",current_owner:"Current Owner",
     resolution_status:"",resolved_at:"",resolved_by:""
   });

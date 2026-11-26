@@ -29,6 +29,7 @@ function loadStudio(extraContext={}){
       normaliseInbox,
       normaliseWorkflowEvent,
       normaliseBrand,
+      normaliseBrandFromSubject,
       isResolved,
       parseExplicitDate,
       parseExplicitTimestamp,
@@ -56,7 +57,7 @@ function loadStudio(extraContext={}){
         files.tickets={...ticketData,rowCount:ticketData.records.length};
         files.assignments={...activityData,rowCount:activityData.records.length};
         files.workflow={...activityData,rowCount:activityData.records.length};
-        mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",received_at:"Received At (UK)",current_owner:"Current Owner",resolution_status:ticketData.headers.includes("Resolution Status")?"Resolution Status":"",resolved_at:ticketData.headers.includes("Resolved At (UK)")?"Resolved At (UK)":"",resolved_by:ticketData.headers.includes("Resolved By")?"Resolved By":""};
+        mappings.tickets={ticket_ref:"Email Key / ID",inbox:"Source Inbox",status:"Status",brand:"Brand",subject:ticketData.headers.includes("Subject")?"Subject":"",received_at:"Received At (UK)",current_owner:"Current Owner",resolution_status:ticketData.headers.includes("Resolution Status")?"Resolution Status":"",resolved_at:ticketData.headers.includes("Resolved At (UK)")?"Resolved At (UK)":"",resolved_by:ticketData.headers.includes("Resolved By")?"Resolved By":""};
         mappings.assignments={ticket_ref:"Email Key / ID",agent:"Original Assignee",kind:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)"};
         mappings.workflow={ticket_ref:"Email Key / ID",event_type:"Event Type",inbox:"Source Inbox",occurred_at:"Event Time (Egypt)",original_assignee:"Original Assignee",current_owner:"Current Owner",assignment_flag:"Assignment Flag",incident_count:"Incident Count"};
         document.getElementById("workspaceKey").value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -370,6 +371,42 @@ test("maps resolved and closed ticket statuses and calculates brand share by cur
   for(const raw of ["KEY-CLOSED-01","KEY-RESOLVED-02","KEY-OPEN-03","KEY-CLOSED-04","Agent One","Agent Two","Agent Three"]){
     assert.equal(json.includes(raw),false,"raw identifier or colleague name leaked into aggregate: "+raw);
   }
+});
+
+test("classifies missing Brand values from the standard Hub de-tag email subject",async()=>{
+  const hooks=loadStudio();
+  const subjects=[
+    ["KEY-SUBJECT-AUDI","Form submission from Audi customer de-tag request form on Hub","audi"],
+    ["KEY-SUBJECT-VW","Form submission from Volkswagen customer de-tag request form on Hub","volkswagen"],
+    ["KEY-SUBJECT-SEAT","Form submission from SEAT customer de-tag request form on Hub","seat"],
+    ["KEY-SUBJECT-SKODA","Form submission from Škoda customer de-tag request form on Hub","skoda"],
+    ["KEY-SUBJECT-CUPRA","Form submission from CUPRA customer de-tag request form on Hub","cupra"],
+    ["KEY-SUBJECT-VWCV","Form submission from Volkswagen Commercial Vehicles customer de-tag request form on Hub","vwcv"]
+  ];
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Subject,Received At (UK),Current Owner",
+    ...subjects.map(([key,subject])=>key+",Detags,Assigned,,"+subject+",2026-11-24 08:30:00,Agent "+key.slice(-4))
+  ].join("\r\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    ...subjects.map(([key,,],index)=>"2026-11-24 "+String(10+index).padStart(2,"0")+":30:00,AUTO_ASSIGNMENT,"+key+",Detags,Agent "+key.slice(-4)+",Agent "+key.slice(-4)+",TRUE,0,")
+  ].join("\r\n");
+  const {snapshot}=await hooks.processVwg(tickets,activity);
+  const counts=Object.fromEntries(snapshot.tickets.by_brand.map(row=>[row.brand_code,row.count]));
+  for(const [,subject,code] of subjects){
+    assert.equal(hooks.normaliseBrandFromSubject(subject),code,"subject should classify "+code);
+    assert.equal(counts[code],1,"ticket should be counted under "+code);
+  }
+  assert.equal(snapshot.tickets.total,subjects.length);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="unclassified")?.count||0,0);
+  assert.equal(snapshot.tickets.brand_field_mapped,true);
+  const serialised=JSON.stringify(snapshot);
+  for(const [key,subject] of subjects){
+    assert.equal(serialised.includes(key),false,"ticket key must remain private");
+    assert.equal(serialised.includes(subject),false,"raw subject must remain private");
+  }
+  assert.equal(hooks.normaliseBrandFromSubject("Customer asks about an Audi vehicle"),"unclassified",
+    "free text must not be treated as a trusted Hub form subject");
 });
 
 test("the same local workspace key keeps agent references stable between runs",async()=>{
