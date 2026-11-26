@@ -3600,6 +3600,29 @@ function handleAction(action){
   if(action==="reset-reliability-filters"){state.reliabilitySearch="";state.reliabilityType="all";state.reliabilityStatus="all";state.reliabilitySeverity="all";state.selectedReliabilityEvent=null;renderReliability();return;}
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
+function applyPrivateEmailLookupRows(rows,snapshotGeneratedAtUtc){
+  if(!state.importedSnapshot||String(state.importedSnapshot.generated_at_utc||"")!==String(snapshotGeneratedAtUtc||""))return 0;
+  if(!Array.isArray(rows))return 0;
+  privateEmailLookup=rows.slice(0,5000).map(row=>({
+    ticket_ref:String(row?.ticket_ref||""),
+    order_number:String(row?.order_number||"").trim().slice(0,100),
+    vin:String(row?.vin||"").trim().toUpperCase().slice(0,100),
+    brand_code:String(row?.brand_code||""),
+    inbox_code:String(row?.inbox_code||""),
+    received_date:String(row?.received_date||""),
+    completion_date:String(row?.completion_date||""),
+    status:String(row?.status||""),
+    original_agent_ref:String(row?.original_agent_ref||""),
+    current_agent_ref:String(row?.current_agent_ref||"")
+  })).filter(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)&&
+    (row.order_number||row.vin)&&
+    ["volkswagen","audi","skoda","seat","cupra","vwcv","other","unclassified"].includes(row.brand_code)&&
+    ["agency","detags","transfers","unadopts"].includes(row.inbox_code));
+  privateEmailLookupSnapshotId=String(snapshotGeneratedAtUtc||"");
+  updatePrivateNameControls();
+  return privateEmailLookup.length;
+}
+
 function bindStudioSnapshotReceiver(){
   if(typeof URLSearchParams!=="function"||typeof window==="undefined"||!window.location)return;
   const token=new URLSearchParams(window.location.search||"").get("receiveSnapshot")||"";
@@ -3616,8 +3639,9 @@ function bindStudioSnapshotReceiver(){
       if(Array.isArray(message.privateAgentLookup)&&message.privateAgentLookup.length){
         namesLoaded=applyPrivateAgentLookupRows(message.privateAgentLookup,false);
       }
+      const emailLookupLoaded=applyPrivateEmailLookupRows(message.privateEmailLookup,message.snapshot?.generated_at_utc);
       channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:true});
-      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" and "+namesLoaded+" colleague names remembered on this device":"")+".");
+      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" · "+namesLoaded+" colleague names":"")+(emailLookupLoaded?" · private Order/VIN search ready":"")+".");
       const cleanUrl=new URL(window.location.href);
       cleanUrl.searchParams.delete("receiveSnapshot");
       window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
@@ -3688,10 +3712,7 @@ document.addEventListener("input",event=>{
   if(auditSearch){
     state.auditSearch=auditSearch.value;
     if(state.importedSnapshot){
-      const start=auditSearch.selectionStart,end=auditSearch.selectionEnd;
-      renderAudit();
-      const next=document.querySelector("[data-audit-search]");
-      if(next){next.focus();next.setSelectionRange(start,end);}
+      refreshImportedActivityAuditPanels();
     }else refreshAuditPanels();
     return;
   }
