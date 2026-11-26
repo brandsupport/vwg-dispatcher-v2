@@ -2097,8 +2097,12 @@ function teamBrandPortfolioPanel(profiles){
     grouped.set(key,prior);
   }
   const byKey=grouped;
-  const brandTotals=new Map();
-  for(const row of byKey.values())brandTotals.set(row.brand_code,(brandTotals.get(row.brand_code)||0)+row.ticket_count);
+  const sourceBrandTotals=new Map((state.importedSnapshot.tickets.by_brand||[]).map(row=>[row.brand_code,row.count]));
+  const brandTotals=new Map(codes.map(code=>[
+    code,code==="other"
+      ?(sourceBrandTotals.get("other")||0)+(sourceBrandTotals.get("unclassified")||0)
+      :(sourceBrandTotals.get(code)||0)
+  ]));
   const body=profiles.map(agent=>{
     const ref=agent.id.replace(/^snapshot-/,"");
     const cells=codes.map(code=>{
@@ -2818,8 +2822,8 @@ function renderImportedActivityAudit(){
       '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
       '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
       '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
-      '<label class="filter-control"><span>FROM DATE</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
-      '<label class="filter-control"><span>TO DATE</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
+      '<label class="filter-control"><span>FROM DATE · UTC</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
+      '<label class="filter-control"><span>TO DATE · UTC</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
     '</div><div class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</div>'+
     (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+emptyMessage+'</div>')+
     '</section>'+
