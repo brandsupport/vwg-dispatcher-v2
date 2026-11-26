@@ -3157,7 +3157,8 @@ function handleAction(action){
   if(action==="config-preview"){showToast("Administration is not configured. No settings were changed.");return;}
 }
 function bindStudioSnapshotReceiver(){
-  const token=new URLSearchParams(window.location.search).get("receiveSnapshot")||"";
+  if(typeof URLSearchParams!=="function"||typeof window==="undefined"||!window.location)return;
+  const token=new URLSearchParams(window.location.search||"").get("receiveSnapshot")||"";
   if(!token||typeof BroadcastChannel!=="function")return;
   const channel=new BroadcastChannel("vwg-dispatcher-snapshot-transfer-v1");
   let handled=false;
