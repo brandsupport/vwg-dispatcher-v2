@@ -1079,7 +1079,7 @@ async function sanitise(){
         const completionRaw=selectedValue(row,"emailDetails","completion_at")||selectedValue(row,"emailDetails","first_missing_at");
         const completionDate=parseExplicitDate(completionRaw,"Europe/London");
         if(completionRaw&&!completionDate)q.ambiguous_time++;
-        const missingBrand=brand==="unclassified";
+        const missingBrand=!norm(brandRaw)&&brand==="unclassified";
         const missingOrderVin=!norm(selectedValue(row,"emailDetails","order_number"))&&!norm(selectedValue(row,"emailDetails","vin"));
         const handlingRaw=selectedValue(row,"emailDetails","handling_minutes");
         const handlingNumber=handlingRaw.trim()===""?NaN:Number(handlingRaw);
