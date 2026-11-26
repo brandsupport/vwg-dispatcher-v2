@@ -594,7 +594,7 @@ select:focus-visible, textarea:focus-visible {
   box-shadow: 0 8px 24px rgba(216, 75, 118, .16);
 }
 .brand-lockup strong { letter-spacing: .14em; font-size: 13px; }
-.brand-lockup small { color: #94a2b6; font-size: 10.8px; letter-spacing: .16em; }
+.brand-lockup small { color: #94a2b6; font-size: 11px; letter-spacing: .16em; }
 .back-link {
   padding: 9px 12px;
   border: 1px solid #334256;
@@ -630,7 +630,7 @@ select:focus-visible, textarea:focus-visible {
   font-size: 15px;
   line-height: 1.72;
 }
-.eyebrow { color: #ff88aa; font-size: 10.8px; letter-spacing: .17em; }
+.eyebrow { color: #ff88aa; font-size: 11px; letter-spacing: .17em; }
 .privacy-banner {
   border-color: rgba(87, 184, 158, .34);
   border-radius: 13px;
@@ -752,7 +752,7 @@ select:focus-visible, textarea:focus-visible {
 }
 .result-panel h3 { color: #e2ebf5; font-size: 14px; }
 .result-panel table { font-size: 12.5px; }
-.result-panel th { color: #93a6bd; font-size: 10.8px; }
+.result-panel th { color: #93a6bd; font-size: 11px; }
 .result-panel td { color: #d0dbe8; }
 .result-panel td, .result-panel th { padding: 9px 8px; border-bottom-color: rgba(151, 174, 201, .13); }
 .result-panel tbody tr:nth-child(even) { background: rgba(255,255,255,.018); }
