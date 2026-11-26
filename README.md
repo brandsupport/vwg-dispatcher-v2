@@ -43,7 +43,7 @@ The v2.0 reporting release exposes ten navigable workspaces:
 
 The source code deliberately retains the hidden My Performance, Folder Share, Dispatch Configuration, Reliability Centre and Administration views, including their renderers, data models, styles and export logic. They are not exposed in this reporting release and can be reactivated or completed in a later authenticated/operational milestone. Folder Share analysis is already available within Team Performance.
 
-Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal and CSV exports work with synthetic data. The Dispatch Configuration scenario preview recalculates a local illustrative priority order only; it does not persist settings, create assignments or contact an operational service.
+Global reporting-period, inbox and search controls are available across the dashboard. Sample ticket details open in a modal and CSV exports work with synthetic data. The retained Dispatch Configuration scenario-preview code calculates an illustrative priority order only; it does not persist settings, create assignments or contact an operational service. Its view is hidden from the current reporting release navigation.
 
 The shared JSON and public code continue to use anonymised agent references only. Studio automatically saves the matching colleague display names in the same-origin browser-local directory; the dashboard reads that directory on the same browser/device. This is a display convenience, not authentication, proof of identity or an access-control boundary. Do not publish colleague names in source code or shared snapshots.
 
@@ -184,23 +184,34 @@ Timezone governance is explicit: persist canonical timezone-aware UTC instants, 
 
 The shared dashboard typography has been increased slightly for easier scanning of headings, KPI labels, panel descriptions, tables, filters and status labels. The Reliability Centre, Audit History, Reports & Exports and Administration screens use a larger scoped type scale for their dense investigation details, permission matrices, review evidence and metadata. Responsive rules preserve horizontal scrolling for wide tables and stack the denser panels on narrow screens.
 
-## Planned application areas
+## v2.0 reporting release navigation
+
+The final reporting release presents ten dashboard workspaces:
 
 1. Overview
 2. Current Operations
 3. Ticket Analytics
-4. Brand Insights
-5. Workflow Analytics
-6. Folder Share
-7. Team Performance
-8. My Performance
-9. Roster & Coverage
-10. Dispatch Configuration
-11. Reliability Centre
-12. Audit History
-13. Reports & Exports
-14. Administration
+4. Email Performance
+5. Brand Insights
+6. Workflow Analytics
+7. Team Performance (including the per-inbox allocation matrix previously shown under Folder Share)
+8. Roster & Coverage
+9. Audit History
+10. Reports & Exports
 
+Reporting Studio remains a separate local workbook-processing utility.
+
+## Retained future modules
+
+The following screen implementations are intentionally hidden from the current navigation, not deleted. Their renderers, data models, styles and export logic remain in the source for later authenticated/operational work:
+
+- My Performance — awaiting authenticated, server-enforced personal access.
+- Dispatch Configuration — proposal and scenario-preview code; no live rules are applied.
+- Reliability Centre — sample incident-investigation code; no live telemetry is connected.
+- Administration — proposed roles, security and governance catalogue; no identity administration is active.
+- Folder Share — its useful per-inbox allocation matrix is included in Team Performance.
+
+The dashboard navigation guard prevents ordinary menu and shortcut navigation into these dormant workspaces.
 Access model under design:
 
 - **System Administrator:** application settings, identities, permissions and critical configuration.
