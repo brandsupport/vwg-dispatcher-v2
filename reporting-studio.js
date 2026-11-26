@@ -285,7 +285,7 @@ function suggestWorkbookSheet(kind,sheetNames,sheets){
   // Email Details is a dedicated schema. Never silently substitute Assignments,
   // Activity Log or another worksheet merely because a few generic columns match.
   if(kind==="emailDetails"){
-    const requiredHeaderCount=SOURCE_CONFIG.emailDetails.fields.length;
+    const requiredHeaderCount=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required).length;
     for(const name of sheetNames){
       try{
         const rows=worksheetRows(sheets[name]);
@@ -370,8 +370,8 @@ function loadWorkbookSheet(kind,sheetName,showError=true,rerender=true){
   try{
     const parsed=worksheetToTable(workbookData.workbook.Sheets[sheetName],kind);
     if(kind==="emailDetails"){
-      const matched=SOURCE_CONFIG.emailDetails.fields.filter(field=>autoMap(parsed.headers,field.aliases)).length;
-      const required=SOURCE_CONFIG.emailDetails.fields.length;
+      const matched=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required&&autoMap(parsed.headers,field.aliases)).length;
+      const required=SOURCE_CONFIG.emailDetails.fields.filter(field=>field.required).length;
       if(matched!==required){
         const missing=SOURCE_CONFIG.emailDetails.fields.filter(field=>!autoMap(parsed.headers,field.aliases)).map(field=>field.label);
         throw new Error("This worksheet is not the Email Details schema ("+matched+"/"+required+" required headers found). Missing: "+missing.join(", ")+". Select the actual Email Details tab. Do not map the Assignments or Activity Log sheet as Email Details.");
