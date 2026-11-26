@@ -4,6 +4,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const dashboard = fs.readFileSync(new URL("../dashboard.js", import.meta.url), "utf8");
+const studio = fs.readFileSync(new URL("../reporting-studio.js", import.meta.url), "utf8");
+const dashboardHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const start = dashboard.indexOf("const PRIVATE_AGENT_DIRECTORY_KEY=");
 const end = dashboard.indexOf("\nfunction restorePrivateAgentDirectoryForSnapshot", start);
 assert.ok(start >= 0 && end > start, "private directory helpers must be present");
@@ -97,14 +99,26 @@ test("private directory fails safely when browser storage is unavailable or full
   assert.equal(throwingContext.__directoryHooks.savePrivateAgentDirectory(new Map([["Agent-AAAAAAAAAA", "Belal"]])), false);
 });
 
-test("Studio handoff restores saved names and manual lookup remains a one-time fallback", () => {
-  assert.match(dashboard, /function restorePrivateAgentDirectoryForSnapshot\(\)/);
-  assert.match(dashboard, /restorePrivateAgentDirectoryForSnapshot\(\);/);
-  assert.match(dashboard, /applyPrivateAgentLookupRows\(message\.privateAgentLookup,false\)/);
-  assert.match(dashboard, /function displayAgentName\(reference\)/);
-  assert.match(dashboard, /function clearSavedPrivateAgentDirectory\(\)/);
-  assert.match(dashboard, /data-action="clear-agent-names"/);
-  assert.match(dashboard, /localStorage\.removeItem\(PRIVATE_AGENT_DIRECTORY_KEY\)/);
+
+test("Studio automatically saves private colleague names for the normal JSON import workflow", () => {
+  assert.ok(studio.includes("function persistPrivateAgentDirectoryForDashboard(rows)"));
+  assert.ok(studio.includes("localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(safeRows))"));
+  assert.ok(studio.includes("privateDirectorySaved=persistPrivateAgentDirectoryForDashboard(privateAgentLookup)"));
+  assert.ok(dashboard.includes("function restorePrivateAgentDirectoryForSnapshot()"));
+  assert.ok(dashboard.includes("restorePrivateAgentDirectoryForSnapshot();"));
+  assert.ok(dashboard.includes("applyPrivateAgentLookupRows(message.privateAgentLookup,false)"));
+  assert.ok(dashboard.includes("function displayAgentName(reference)"));
+  assert.ok(dashboard.includes("function clearSavedPrivateAgentDirectory()"));
+  assert.ok(dashboard.includes("localStorage.removeItem(PRIVATE_AGENT_DIRECTORY_KEY)"));
+  for(const marker of ["loadPrivateAgentLookup","load-agent-names","agentLookupFileInput","importAgentLookupButton"])
+    assert.equal(dashboard.includes(marker),false,"manual CSV importer should be removed: "+marker);
+  assert.doesNotMatch(dashboardHtml,/importAgentLookupButton|agentLookupFileInput|Import names once/);
+});
+
+test("Studio maps both Outlook category and Colleague label to the same agent reference",()=>{
+  assert.ok(studio.includes("const rosterAgentRefByAlias=new Map()"));
+  assert.ok(studio.includes("rosterAgentRefByAlias.set(aliasKey,agentRef)"));
+  assert.ok(studio.includes("rosterDisplayByRef.set(agentRef,canonicalDisplay)"));
 });
 
 test("imported snapshot itself is never written to browser storage", () => {
