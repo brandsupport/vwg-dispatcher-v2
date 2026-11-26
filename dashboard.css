@@ -3298,3 +3298,65 @@ select:focus-visible, textarea:focus-visible {
   .kpi-card, .btn, .panel-action, .dataset-actions button { transition: none; }
   .kpi-card:hover { transform: none; }
 }
+
+/* Imported Activity Log strip is a light data-quality banner, not the dark synthetic audit banner. */
+.page-content[data-view="audit"] .audit-demo-strip.local-snapshot-strip {
+  border-color: #dce9e5;
+  background: linear-gradient(105deg, #f0faf6, #f6f9fd);
+  color: #667d79;
+  box-shadow: none;
+}
+.page-content[data-view="audit"] .audit-demo-strip.local-snapshot-strip > span:first-child {
+  color: #267b68;
+}
+.page-content[data-view="audit"] .audit-demo-strip.local-snapshot-strip i {
+  background: #24a584;
+  box-shadow: 0 0 8px rgba(36,165,132,.35);
+}
+.page-content[data-view="audit"] .audit-demo-strip.local-snapshot-strip b {
+  color: #345f56;
+}
+.activity-history-panel .audit-filter-toolbar .activity-search-label {
+  display: block;
+  color: #7c899d;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .095em;
+}
+.activity-history-panel .activity-search-input {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  height: 41px;
+  padding: 0 10px;
+  border: 1px solid #dfe6ef;
+  border-radius: 9px;
+  background: #fff;
+  color: #8290a3;
+}
+.activity-history-panel .activity-search-input:focus-within {
+  border-color: #91add0;
+  box-shadow: 0 0 0 3px rgba(56,111,183,.11);
+}
+.activity-history-panel .activity-search-input > span {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+}
+.activity-history-panel .activity-search-input input {
+  height: 39px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #34445c;
+}
+.activity-history-panel .activity-search-input input:focus {
+  border: 0;
+  box-shadow: none;
+}
+@media (max-width: 560px) {
+  .activity-history-panel .activity-search-input { height: 42px; }
+}
