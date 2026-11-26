@@ -143,7 +143,7 @@ test("uses Chrome's direct file picker and reads the returned file handle locall
   assert.equal(streamRead,true);
   assert.equal(pickerOptions.multiple,false);
   assert.ok(pickerOptions.types[0].accept["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(".xlsx"));
-  assert.match(hooks.getNode("workbookFileMeta").textContent,/worksheets found/);
+  assert.match(hooks.getNode("workbookFileMeta").textContent,/workbook selected and read locally/);
 });
 
 test("CSV parser handles quoted commas, escaped quotes and embedded newlines",()=>{
