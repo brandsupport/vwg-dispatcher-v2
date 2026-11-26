@@ -2942,26 +2942,10 @@ function exportImportedActivityLog(){
 function renderImportedActivityAudit(){
   const all=state.importedSnapshot.activity_log||[];
   const visible=importedActivityRows();
-  const ticketEvents=visible.filter(event=>!event.system_event);
-  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
-  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
-  const automatic=visible.filter(event=>event.event_type==="assigned").length;
-  const handovers=visible.filter(event=>event.event_type==="handover").length;
-  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const emailMatches=privateEmailLookupMatches();
   const quality=state.importedSnapshot.data_quality.sources.find(row=>row.source==="Workflow history");
   const sourceSupplied=Boolean(quality);
   const rowsRead=quality?.rows_read||0,rowsAccepted=quality?.rows_accepted||0;
-  const rows=visible.map(event=>
-    '<tr>'+
-      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
-      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
-      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
-      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
-      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
-      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
-      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
-    '</tr>'
-  );
   const eventTypes=[...new Set(all.map(event=>event.event_type))].sort();
   const agentRefs=[...new Set(all.flatMap(event=>[event.original_agent_ref,event.current_agent_ref]).filter(Boolean))]
     .sort((a,b)=>displayAgentName(a).localeCompare(displayAgentName(b)));
@@ -2969,28 +2953,43 @@ function renderImportedActivityAudit(){
     ?"No Activity Log data was included in this snapshot. In Studio, select Activity Log for both assignment history and workflow history."
     :(rowsRead>0&&rowsAccepted===0
       ?"The Activity Log sheet was read, but no rows were accepted. Map Event Type to column B, Folder Path to column D, Original Assignee to E, Current Owner to F, Assignment Flag to G and Incident Count to H. Column G is TRUE / FALSE, not the event name."
-      :"No Activity Log entries match the selected Inbox and search.");
+      :"No Activity Log events match the current filters or search.");
   const sourceStatus=!sourceSupplied?"ACTIVITY SOURCE NOT SUPPLIED":rowsAccepted>0?rowsAccepted+" VALID EVENTS":"CHECK ACTIVITY MAPPING";
-  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","The dispatcher’s recorded event history","This screen uses the imported workbook Activity Log. Event Type comes from column B; Folder Path comes from D. Assignment Flag (column G) is a separate TRUE / FALSE marker, never an event name.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
+  const ticketEvents=visible.filter(event=>!event.system_event);
+  const totalTickets=new Set(ticketEvents.map(event=>event.ticket_ref)).size;
+  const manual=visible.filter(event=>event.event_type==="manual_assignment").length;
+  const automatic=visible.filter(event=>event.event_type==="assigned").length;
+  const handovers=visible.filter(event=>event.event_type==="handover").length;
+  const recoveries=visible.filter(event=>["recovery_requested","recovery_held","recovery_restored","reconciled","recovery_preview"].includes(event.event_type)).length;
+  const initialEventRows=visible.length
+    ?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],importedActivityEventRows(visible))
+    :'<div class="empty-state">'+esc(emailMatches.length?"Email Details matched, but no associated Activity Log event matched the current event/date filters.":emptyMessage)+'</div>';
+  const initialEmailRows=privateEmailLookupTableRows(emailMatches);
+  pageContent.innerHTML=heading("ACTIVITY LOG HISTORY","Find the email first. Then inspect its event trail.","Search the local Email Details index by Order Number or VIN, or search Activity Log events by ticket reference, event type or colleague. Identifier lookup stays on this browser and is never added to the shared JSON snapshot.",'<button class="btn btn-secondary" data-action="reset-audit-filters">Reset search</button><button class="btn btn-primary" data-action="export-audit">↓ Export Activity Log</button>')+
     '<div class="audit-demo-strip local-snapshot-strip"><span><i></i> SANITISED ACTIVITY LOG · READ ONLY</span><span>Source rows '+fmt(rowsRead)+' · accepted '+fmt(rowsAccepted)+'</span><span>Time basis <b>Egypt local</b></span><span>Actor identity <b>Not authenticated by source</b></span></div>'+
-    kpiGrid([
-      kpi("Activity events",fmt(visible.length),"Rows in the selected Inbox / search","◷"),
-      kpi("Tickets affected",fmt(totalTickets),"Ticket-linked references; system events excluded","▤"),
-      kpi("Automatic / manual",fmt(automatic)+" / "+fmt(manual),"Recorded first-allocation event categories","↗"),
-      kpi("Handovers / recovery",fmt(handovers)+" / "+fmt(recoveries),"Recorded event counts; not actor-attributed","⇄")
-    ])+
-    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
-    '<div class="audit-filter-toolbar imported-audit-filters">'+
-      '<label class="live-queue-search"><span class="activity-search-label">SEARCH</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
-      '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
-      '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
-      '<label class="filter-control"><span>FROM DATE · UTC</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
-      '<label class="filter-control"><span>TO DATE · UTC</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
-    '</div><div class="audit-result-count">Showing '+visible.length+' of '+all.length+' accepted Activity Log rows</div>'+
-    (visible.length?dataTable(["Event time · Egypt","Event / ticket reference","Inbox","Original assignee","Current owner","Assignment flag","Incident count"],rows):'<div class="empty-state">'+emptyMessage+'</div>')+
+    '<div class="kpi-grid audit-kpi-grid">'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Activity events</span></div><div class="kpi-value" data-audit-kpi="events">'+fmt(visible.length)+'</div><div class="kpi-foot">Events matching the current search and filters</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Tickets affected</span></div><div class="kpi-value" data-audit-kpi="tickets">'+fmt(totalTickets)+'</div><div class="kpi-foot">Ticket-linked references; system events excluded</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Automatic / manual</span></div><div class="kpi-value" data-audit-kpi="allocation">'+fmt(automatic)+" / "+fmt(manual)+'</div><div class="kpi-foot">Recorded first-allocation event categories</div></article>'+
+      '<article class="kpi-card"><div class="kpi-top"><span>Handovers / recovery</span></div><div class="kpi-value" data-audit-kpi="workflow">'+fmt(handovers)+" / "+fmt(recoveries)+'</div><div class="kpi-foot">Recorded workflow event counts</div></article>'+
+    '</div>'+
+    '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Search and filter</h2><p class="panel-subtitle">Order Number and VIN search uses the Email Details worksheet saved locally by Reporting Studio. Matching emails are linked to sanitised Activity Log events using a pseudonymous ticket reference.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
+    '<div class="activity-audit-toolbar">'+
+      '<label class="activity-audit-search"><span>SEARCH EMAILS & ACTIVITY</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Enter an Order Number, VIN, ticket reference or event…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
+      '<div class="activity-audit-filters">'+
+        '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
+        '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
+        '<label class="filter-control"><span>FROM DATE</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
+        '<label class="filter-control"><span>TO DATE</span><input type="date" data-audit-filter="auditToDate" value="'+esc(state.auditToDate)+'"></label>'+
+      '</div>'+
+      '<div class="activity-audit-toolbar-foot"><span id="auditLookupStatus" class="'+(privateEmailLookupForCurrentSnapshot().length?"available":"")+'">'+(privateEmailLookupForCurrentSnapshot().length?"Private order/VIN lookup available on this device":"Order/VIN lookup not loaded on this device")+'</span><span id="auditResultCount">Showing '+visible.length+' Activity Log events and '+emailMatches.length+' Email Details matches · '+all.length+' accepted Activity Log rows</span></div>'+
+    '</div>'+
+    '<section class="activity-email-matches"><div class="activity-results-heading"><div><h3>Email Details matches</h3><p>Local metadata only · message subjects and bodies are not retained</p></div><span id="auditEmailLookupCount">'+emailMatches.length+' matching Email Details records</span></div><div id="auditEmailLookupRows">'+initialEmailRows+'</div></section>'+
+    '<section class="activity-event-results"><div class="activity-results-heading"><div><h3>Related Activity Log events</h3><p>Events linked by the same pseudonymous ticket reference</p></div></div><div id="auditActivityRows">'+initialEventRows+'</div></section>'+
     '</section>'+
-    '<div class="prototype-warning"><strong>Source limitations.</strong> Free-text Details / Notes are deliberately excluded because they can contain subjects or personal data. This view reports only events preserved in the workbook and does not claim authenticated actors or tamper-evident audit integrity.</div>';
+    '<div class="prototype-warning"><strong>Source limitations.</strong> Order Number and VIN are stored only in the private, same-browser lookup index. They are not included in the sanitised JSON or sent to a server. Email matches show metadata only; Activity Log rows still reflect only events actually present in the workbook. This view does not claim authenticated actors or tamper-evident audit integrity.</div>';
 }
+
 function renderAudit(){
   if(state.importedSnapshot){renderImportedActivityAudit();return;}
   const base=auditBaseEvents();
