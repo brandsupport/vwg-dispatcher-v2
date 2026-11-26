@@ -26,7 +26,7 @@ The module uses only intrinsic VBA features: Environ$, GetAttr, MkDir, Open, Pri
 3. Use **File → Import File…** and import the .bas module.
 4. Run VWG_Bridge_CheckOneDriveRoot.
 5. If a local sync root is detected, run VWG_Bridge_WriteSmokeTest.
-6. The macro creates a file similar to ODSMO​​KE-20261126-173100-123456-654321.json under VWGDispatcherBridge\smoke-test.
+6. The macro creates a file similar to ODSmoke-20261126-173100-123456-654321.json under VWGDispatcherBridge\smoke-test.
 7. Verify that the **same file** appears in OneDrive on the web, or on another synchronised device. Do not treat a file visible only in the local Citrix folder as a successful cloud sync.
 8. Report the detected folder path, whether the JSON appeared in OneDrive web, and any exact VBA error.
 
@@ -76,7 +76,7 @@ There are two different options:
 
 The implementation must state clearly which mode is active. A local file picker must never be described as automatic background sync.
 
-### Safety invariants
+## Safety invariants
 
 - This module is a connectivity probe only. Do not import it into the live signed Outlook dispatcher yet.
 - Do not change the existing VWG_Dispatch_Tracker_V5.xlsx workbook, dispatcher timer, assignment fairness, shift eligibility or mailbox categories.
