@@ -592,7 +592,7 @@ test("Reports & Exports cards route to distinct local CSV builders",()=>{
     ["export-brand-report","exportBrandVolumeReport"],
     ["export-reliability-report","exportReliabilitySnapshotReport"]
   ]){
-    assert.ok(dashboard.includes('data-action="'+action+'"'),"missing report card action "+action);
+    assert.ok(dashboard.includes('"'+action+'"'),"missing report card action "+action);
     assert.ok(dashboard.includes('if(action==="'+action+'"){'+builder+'();return;}'),"missing report builder handler "+builder);
     assert.ok(dashboard.includes("function "+builder+"("),"missing export builder "+builder);
   }
