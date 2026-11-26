@@ -34,7 +34,7 @@ Use this checklist before tagging and sharing the Final Reporting Edition.
 ## Privacy and presentation checks
 
 - [ ] Confirm the shared JSON contains no raw Email Key / ID, Internet Message ID, colleague names, Order Numbers, VINs, email subjects or message bodies.
-- [ ] Confirm the private Order Number / VIN lookup is not placed in the shared JSON or exported aggregate CSVs.
+- [ ] Confirm the private Order Number / VIN lookup is not placed in the shared sanitised JSON snapshot or exported aggregate CSVs.
 - [ ] Confirm the dashboard identifies synthetic demo data when no snapshot is loaded.
 - [ ] Confirm Current Operations identifies its individual queue as demonstration-only.
 - [ ] Confirm no control implies live assignment, mailbox connection, authentication or production reliability that is not configured.
