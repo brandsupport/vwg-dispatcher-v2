@@ -2648,7 +2648,7 @@ body { font-size:15.2px !important; line-height:1.52; }
 }
 .imported-audit-filters .filter-control span {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .09em;
   white-space: nowrap;
 }
