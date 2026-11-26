@@ -76,7 +76,7 @@ Select the **Team & Shifts** worksheet from the same six-tab workbook in the ros
 | Active this fortnight | Yes | `Active This Fortnight` | Accepts Yes/No (or equivalent Boolean values) |
 | Private display name | No | `Colleague` | Used only for the separate private agent-name lookup; never included in the shared JSON |
 
-`Colleague` is not required as a second identity field; the exact Outlook category is the join key. The roster may include inactive colleagues so the snapshot can distinguish the whole roster from the active-fortnight headcount. Shift metadata is included only as pseudonymous agent reference, shift group, start/end time and active-fortnight Boolean. Colleague names and Outlook category values are not written to the JSON snapshot or public repository. After processing, the Studio offers a separate `dispatcher-private-agent-name-lookup.csv` download. Keep it private. Import the sanitised JSON into the dashboard first, then use **Import private names** to load this CSV locally in the same browser tab. The name lookup is not embedded in the JSON.
+`Colleague` is not required as a second identity field; the exact Outlook category is the join key. The roster may include inactive colleagues so the snapshot can distinguish the whole roster from the active-fortnight headcount. Shift metadata is included only as pseudonymous agent reference, shift group, start/end time and active-fortnight Boolean. Colleague names and Outlook category values are not written to the JSON snapshot or public repository. After processing, the Studio automatically stores the `{agent_ref, display_name}` mapping in the same-origin browser-local private directory; no separate colleague-name CSV import is required. The same directory also holds the separately allow-listed Order Number / VIN lookup derived from Email Details. Use the same workspace key and browser profile/device for Studio and Dashboard. The **Clear local names & lookup** control removes both the name mapping and private lookup.
 
 **Use the same private workspace key** for the Assignments, Activity Log and Team & Shifts inputs in every reporting run. Otherwise the pseudonymous agent references will not join, and the Dashboard will flag roster entries that do not match the ticket or assignment data.
 
@@ -90,8 +90,8 @@ Select the **Email Details** worksheet from the same tracker workbook, or a sepa
 |---|---|---|
 | Email key | `Email Key / ID` (A) | Used only in browser memory to de-duplicate rows; never exported |
 | Brand | `Brand` (C) | Aggregated into email brand counts; blank/unknown values remain missing or unclassified |
-| Order number | `Order Number` (D) | Raw value never exported; used only to count rows where both Order Number and VIN are blank |
-| VIN | `VIN` (E) | Raw value never exported; used only to count rows where both Order Number and VIN are blank |
+| Order number | `Order Number` (D) | Never included in the shared JSON or aggregate CSVs; used for missing-metadata checks and a separate allow-listed browser-local Audit History lookup |
+| VIN | `VIN` (E) | Never included in the shared JSON or aggregate CSVs; used for missing-metadata checks and a separate allow-listed browser-local Audit History lookup |
 | Received timestamp | `Received At (UK)` (F) | Parsed in Europe/London and grouped by UTC receipt date |
 | First source Inbox | `First Source Inbox` (G) | Used for the four-Inbox breakdown; remains the original Inbox when a message moves |
 | Original assignee | `Original Assignee` (I) | HMAC-pseudonymised using the same private workspace key |
@@ -101,7 +101,7 @@ Select the **Email Details** worksheet from the same tracker workbook, or a sepa
 | Completion timestamp | `Completion Time (UK)` (M) | First-missing full-scan detection time; not business resolution or first response |
 | Handling duration | `Handling Time (Minutes)` (N) | Existing tracker measure; included in duration summaries for Completed rows only |
 
-The Studio does not map Internet Message ID (B), Last Monitored Inbox (H) or Metadata Captured At (O). It never exports Email Key / ID, Internet Message ID, Order Number, VIN, email subjects, message content, individual source rows or direct colleague names. The order and VIN columns are used only as blank/nonblank flags in memory.
+The Studio does not map Internet Message ID (B), Last Monitored Inbox (H) or Metadata Captured At (O). The shared JSON and aggregate CSVs never contain Email Key / ID, Internet Message ID, Order Number, VIN, email subjects, message content, individual source rows or direct colleague names. Order Number and VIN values are used in memory to create a separate allow-listed browser-local lookup for Audit History. That private lookup is stored in the same-origin browser's local directory and is not part of the shared snapshot or report CSVs.
 
 **Completion semantics:** the dispatcher first records `Missing - Confirmation Pending` when a successful full scan no longer sees the email in any of the four monitored Inboxes. A second successful full scan at least 120 seconds later must confirm the absence before the state becomes `Completed`. A move between monitored Inboxes should still be seen by the next full scan and should not be treated as completion. The saved Completion Time is the first-missing detection time. Handling Time is therefore receipt-to-first-missing detection for confirmed exits, not first-response time, active handling time or business solve time.
 
@@ -109,7 +109,7 @@ Only completed rows with a valid non-negative stored handling duration contribut
 
 ## 6. Columns that must remain unmapped
 
-Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. Email Key / ID, Internet Message ID, Order Number and VIN may be selected only for the narrowly defined local duplicate-removal / blank-count operations in the Email Details mapping; their values must never appear in the JSON, CSVs, dashboard or this public repository.
+Do not map or export `Email Subject`, `Handover Notes`, `Details / Notes`, `LoginUserEmail (optional)`, email/message content, customer names, customer email addresses, telephone numbers, postal addresses, vehicle registration marks, finance/contract numbers, attachment names, `Outlook Entry ID` or `Outlook Store ID`. Email Key / ID and Internet Message ID are used only for local join/de-duplication and are never retained in the export. Order Number and VIN may be retained only in the restricted same-browser private lookup directory described above; they must never appear in the shared JSON, aggregate CSVs, public source code or repository. The lookup is visible only as a same-browser Audit History search result and is cleared with **Clear local names & lookup**.
 
 Other fields such as Incident Count, Last Incident At, Last Verified At, Record Updated At, Allocated At (Egypt), Roster Period Start, Pending Since (Egypt), Last Category State and Handover Count are not part of the current report mapping. They should remain unmapped until a separate, approved metric is defined.
 
