@@ -544,7 +544,7 @@ jobs:
           if (!js.includes('if(action==="export-audit"){if(state.importedSnapshot)exportImportedActivityLog();else exportAuditHistory();return;}')) {
             throw new Error('Audit History must export the imported Activity Log when a sanitised snapshot is loaded.');
           }
-          for (const helper of ['function importedActivityRows(){','function exportImportedActivityLog(){','function renderImportedActivityAudit(){','state.importedSnapshot.activity_log']) {
+          for (const helper of ['function importedActivityRows(','function exportImportedActivityLog(){','function renderImportedActivityAudit(){','state.importedSnapshot.activity_log']) {
             if (!js.includes(helper)) throw new Error('Imported Activity Log viewer/export helper missing: ' + helper);
           }
           const auditDataStart = js.indexOf('const AUDIT_LEDGER = [');
