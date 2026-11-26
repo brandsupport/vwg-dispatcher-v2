@@ -271,7 +271,7 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
   for(const raw of ["KEY-001","KEY-002","Belal","Balqees","Mariam","Details / Notes"])assert.equal(json.includes(raw),false,"raw source value leaked: "+raw);
   assert.ok(result.privateLookup.some(row=>row.display_name==="Belal"));
   assert.ok(result.privateLookup.some(row=>row.display_name==="Balqees"));
-  assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
+  assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
 });
 
 test("uses the earliest timestamped first-allocation event and de-duplicates repeats",async()=>{
