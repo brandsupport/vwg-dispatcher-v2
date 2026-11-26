@@ -81,7 +81,7 @@ function createWorkbookTestHooks(){
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   vm.runInContext(source+`
-    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename};
+    globalThis.__workbookTestHooks={worksheetToTable,suggestWorkbookSheet,isSupportedWorkbookFilename,autoMap};
   `,context,{filename:"reporting-studio.js"});
   return context.__workbookTestHooks;
 }
@@ -303,6 +303,23 @@ test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers"
   assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.csv"),false);
 });
 
+test("Activity Log Source Inbox header maps in the same way as Folder Path",()=>{
+  const hooks=createWorkbookTestHooks();
+  const headers=[
+    "Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox",
+    "Original Assignee","Current Owner","Assignment Flag","Incident Count","Details / Notes"
+  ];
+  const sheet=[["ACTIVITY LOG"],[],[],[],headers,["2026-11-25T10:00:00+02:00","AUTO_ASSIGNMENT","SAFE-KEY","\\\\VWGUK R: Milton Keynes, AgencyDetags\\Inbox","Synthetic Agent","Synthetic Agent","TRUE","0","PRIVATE NOTE"]];
+  const assignments=hooks.worksheetToTable(sheet,"assignments");
+  const workflow=hooks.worksheetToTable(sheet,"workflow");
+  const assignmentInbox=hooks.autoMap(assignments.headers,["source inbox","folder path","source folder","inbox"]);
+  const workflowInbox=hooks.autoMap(workflow.headers,["source inbox","folder path","source folder","inbox"]);
+  assert.equal(assignmentInbox,"Source Inbox");
+  assert.equal(workflowInbox,"Source Inbox");
+  assert.equal(assignments.records.length,1);
+  assert.equal(workflow.records.length,1);
+});
+
 test("the full six-tab workbook selects Email Details and reuses Activity Log twice",()=>{
   const hooks=createWorkbookTestHooks();
   const sheets={
@@ -496,6 +513,64 @@ test("Email Details workbook selection never falls back to an Assignments-like w
   });
   assert.equal(validRun.emailDetailsSheetSuggestion,"Email Metrics Export",
     "A worksheet with the complete 15-column Email Details schema may be selected even if the tab has a different name.");
+});
+
+test("Email Details Brand enriches ticket Brand Insights when Assignments has no Brand column",async()=>{
+  const emailDetailsHeaders=[
+    "Email Key / ID","Internet Message ID","Brand","Order Number","VIN","Received At (UK)",
+    "First Source Inbox","Last Monitored Inbox","Original Assignee","Current Owner",
+    "Completion Status","First Missing At (UK)","Completion Time (UK)",
+    "Handling Time (Minutes)","Metadata Captured At (UK)"
+  ];
+  const csv=(headers,rows)=>[
+    headers.join(","),
+    ...rows.map(row=>headers.map(header=>String(row[header]??"")).map(value=>/[",\n]/.test(value)?'"'+value.replace(/"/g,'""')+'"':value).join(","))
+  ].join("\n");
+  const run=JSON.parse(JSON.stringify(await createStudioSnapshot({
+    tickets:csv(
+      ["Email Key / ID","Source Inbox","Status","Current Owner"],
+      [
+        {"Email Key / ID":"MATCH-BRAND-001","Source Inbox":"Agency Detags","Status":"Assigned","Current Owner":"Agent Alpha"},
+        {"Email Key / ID":"MATCH-BRAND-002","Source Inbox":"Detags","Status":"Assigned","Current Owner":"Agent Beta"}
+      ]
+    ),
+    assignments:csv(
+      ["Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner","Assignment Flag","Incident Count","Details / Notes"],
+      [
+        {"Event Time (Egypt)":"2026-11-25T10:00:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"MATCH-BRAND-001","Source Inbox":"Agency Detags","Original Assignee":"Agent Alpha","Current Owner":"Agent Alpha","Assignment Flag":"TRUE","Incident Count":"0"},
+        {"Event Time (Egypt)":"2026-11-25T10:01:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"MATCH-BRAND-002","Source Inbox":"Detags","Original Assignee":"Agent Beta","Current Owner":"Agent Beta","Assignment Flag":"TRUE","Incident Count":"0"}
+      ]
+    ),
+    workflow:csv(
+      ["Event Time (Egypt)","Event Type","Email Key / ID","Source Inbox","Original Assignee","Current Owner","Assignment Flag","Incident Count"],
+      [
+        {"Event Time (Egypt)":"2026-11-25T10:00:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"MATCH-BRAND-001","Source Inbox":"Agency Detags","Original Assignee":"Agent Alpha","Current Owner":"Agent Alpha","Assignment Flag":"TRUE","Incident Count":"0"},
+        {"Event Time (Egypt)":"2026-11-25T10:01:00+02:00","Event Type":"AUTO_ASSIGNMENT","Email Key / ID":"MATCH-BRAND-002","Source Inbox":"Detags","Original Assignee":"Agent Beta","Current Owner":"Agent Beta","Assignment Flag":"TRUE","Incident Count":"0"}
+      ]
+    ),
+    emailDetails:csv(emailDetailsHeaders,[
+      {"Email Key / ID":"MATCH-BRAND-001","Internet Message ID":"<private-1@example.invalid>","Brand":"Audi","Order Number":"PRIVATE-ORDER-1","VIN":"PRIVATE-VIN-1","Received At (UK)":"2026-11-25T08:00:00+00:00","First Source Inbox":"Agency Detags","Last Monitored Inbox":"Agency Detags","Original Assignee":"Agent Alpha","Current Owner":"Agent Alpha","Completion Status":"Open","Metadata Captured At (UK)":"2026-11-25T08:00:01+00:00"},
+      {"Email Key / ID":"MATCH-BRAND-002","Internet Message ID":"<private-2@example.invalid>","Brand":"Volkswagen","Order Number":"PRIVATE-ORDER-2","VIN":"PRIVATE-VIN-2","Received At (UK)":"2026-11-25T08:01:00+00:00","First Source Inbox":"Detags","Last Monitored Inbox":"Detags","Original Assignee":"Agent Beta","Current Owner":"Agent Beta","Completion Status":"Open","Metadata Captured At (UK)":"2026-11-25T08:01:01+00:00"}
+    ])
+  })));
+  const snapshot=run.snapshot;
+  assert.ok(snapshot,"Studio sanitisation failed: "+(run.alerts||[]).join(" | "));
+  assert.equal(snapshot.tickets.brand_field_mapped,true,
+    "Brand Insights must be considered populated when Email Details Brands join to ticket Email Keys.");
+  assert.deepEqual(Object.fromEntries(snapshot.tickets.by_brand.map(row=>[row.brand_code,row.count]).filter(([,count])=>count)),{
+    audi:1,volkswagen:1
+  });
+  assert.equal(snapshot.tickets.overall.ticket_records,2);
+  assert.ok(snapshot.data_quality.warnings.some(message=>message.includes("2 ticket record(s) received a Brand from the matching Email Details")));
+  const imported=validateWithDashboard(snapshot);
+  const views=calculateDashboardViews(imported);
+  const brandCounts=Object.fromEntries(views.brands.map(row=>[row.id,row.value]));
+  assert.equal(brandCounts.audi,1);
+  assert.equal(brandCounts.vw,1);
+  const serialised=JSON.stringify(snapshot);
+  for(const raw of ["MATCH-BRAND-001","MATCH-BRAND-002","PRIVATE-ORDER-1","PRIVATE-ORDER-2","PRIVATE-VIN-1","PRIVATE-VIN-2","Agent Alpha","Agent Beta"]){
+    assert.equal(serialised.includes(raw),false,"Private Email Details join value leaked into the aggregate: "+raw);
+  }
 });
 
 test("the Team & Shifts roster is pseudonymised and drives actual imported shift groups",async()=>{

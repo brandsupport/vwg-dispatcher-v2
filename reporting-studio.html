@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#0b1019">
   <title>Offline Reporting Studio | VWG Dispatcher 2.0</title>
   <meta name="description" content="Browser-local Excel workbook and CSV sanitisation and reporting workspace for VWG Dispatcher 2.0">
-  <link rel="stylesheet" href="./reporting-studio.css?v=20261125-email-sheet-select-fix-1">
+  <link rel="stylesheet" href="./reporting-studio.css?v=20261126-workbook-to-dashboard-fix-1">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
-  <script src="./reporting-studio.js?v=20261125-xlsm-upload-fix-1" defer></script>
+  <script src="./reporting-studio.js?v=20261126-workbook-to-dashboard-fix-1" defer></script>
 </head>
 <body>
   <header class="studio-topbar">
@@ -104,6 +104,10 @@
         <section class="result-panel"><h3>Initial allocation by agent</h3><div id="agentResults"></div><p class="table-note">Shares use first assignments only. Handovers, reassignments and recoveries do not increase allocation share.</p></section>
         <section class="result-panel"><h3>Team & shifts roster</h3><div id="rosterResults"></div><p class="table-note">The snapshot contains only keyed agent references, shift groups, Egypt-local shift times and active-fortnight status. Names and Outlook category values are removed.</p></section>
         <section class="result-panel"><h3>Workflow events</h3><div id="workflowResults"></div><p class="table-note">Event counts and distinct tickets affected are shown separately. Counts can overlap across event types.</p></section>
+      </div>
+      <div class="dashboard-handoff">
+        <div><strong>Your report is ready</strong><span>Send this sanitised snapshot straight to Dispatcher 2.0. The dashboard opens in a new tab and imports the data automatically; no JSON download or second file-picker step is needed.</span></div>
+        <button id="openDashboardWithDataButton" class="button button-primary" type="button">Open dashboard with this data →</button>
       </div>
       <section id="emailMetricPanel" class="result-panel quality-panel" hidden>
         <h3>Email lifecycle & handling</h3>
