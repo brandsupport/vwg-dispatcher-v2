@@ -88,8 +88,11 @@ jobs:
           const privateDirectoryCalls = [...js.matchAll(/localStorage\s*\.\s*(getItem|setItem|removeItem)\s*\(/g)].map(match => match[1]);
           if (privateDirectoryCalls.length !== 1 ||
               !js.includes('const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1"') ||
-              !js.includes('localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(safeRows))')) {
-            throw new Error('The only permitted Reporting Studio storage is the separately keyed, sanitised colleague display-name directory.');
+              !js.includes('localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(payload))') ||
+              !js.includes('const safeEmailRows=') ||
+              !js.includes('privateEmailLookupForDashboard.push({') ||
+              !js.includes('snapshot_generated_at_utc:String(snapshotGeneratedAtUtc||"")')) {
+            throw new Error('Reporting Studio may persist only validated colleague display names and a separately keyed private Order/VIN lookup index.');
           }
           for (const text of ['HMAC', 'SHA-256', 'normaliseWorkflowEvent', 'initial_assignments', 'current_open_workload']) {
             if (!js.includes(text)) throw new Error('Reporting Studio capability or safety guard missing: ' + text);
@@ -125,16 +128,19 @@ jobs:
               !js.includes('function savePrivateAgentDirectory(') ||
               !js.includes('function restorePrivateAgentDirectoryForSnapshot(') ||
               localDirectoryCalls.length !== 3) {
-            throw new Error('The only permitted dashboard persistence is the separately keyed private colleague-name directory.');
+            throw new Error('The only permitted dashboard persistence is the separately keyed private colleague and Order/VIN lookup directory.');
           }
           // Names are populated automatically by Reporting Studio; the old manual CSV importer is intentionally removed.
           if (html.includes('id="importAgentLookupButton"') || html.includes('id="agentLookupFileInput"')) {
             throw new Error('The obsolete manual colleague-name CSV importer must not return.');
           }
-          if (!html.includes('id="clearAgentDirectoryButton"')) {
-            throw new Error('Private colleague directory clear control is missing.');
+          if (!html.includes('id="clearAgentDirectoryButton"') || !html.includes('Clear local names & lookup')) {
+            throw new Error('Private colleague and Order/VIN directory clear control is missing.');
           }
-          for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button','.activity-history-panel','.activity-search-input']) {
+          for (const helper of ['function privateEmailLookupMatches()','function refreshImportedActivityAuditPanels()','function applyPrivateEmailLookupRows(','function agentEmailHandlingMetrics(','function agentBrandInsightMarkup(']) {
+            if (!js.includes(helper)) throw new Error('Dashboard reporting or local lookup helper is missing: ' + helper);
+          }
+          for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button','.activity-history-panel','.activity-search-input','.activity-audit-toolbar','.activity-audit-filters','.team-performance-table','.agent-brand-grid']) {
             if (!css.includes(selector)) throw new Error('Dashboard snapshot / Activity Log styling is missing: ' + selector);
           }
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
