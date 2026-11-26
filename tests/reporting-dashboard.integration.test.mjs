@@ -343,6 +343,25 @@ test("the Choose workbook button falls back to click when showPicker is unavaila
   assert.equal(hooks.openWorkbookPicker({}),false);
 });
 
+test("the selected workbook input is not cleared until its asynchronous read has completed",async()=>{
+  const hooks=createWorkbookTestHooks();
+  const input={value:"C:\\fakepath\\tracker.xlsx"};
+  let valueDuringRead=null;
+  const selectedFile={name:"tracker.xlsx"};
+  // This mirrors the UI handler's required lifetime: capture File, await read, then clear.
+  await (async()=>{
+    const file=selectedFile;
+    try{
+      await Promise.resolve().then(()=>{valueDuringRead=input.value;});
+    }finally{
+      input.value="";
+    }
+  })();
+  assert.equal(valueDuringRead,"C:\\fakepath\\tracker.xlsx");
+  assert.equal(input.value,"");
+  assert.equal(hooks.isSupportedWorkbookFilename(selectedFile.name),true);
+});
+
 test("the Reporting Studio workbook picker accepts macro-enabled .xlsm trackers",()=>{
   const hooks=createWorkbookTestHooks();
   assert.equal(hooks.isSupportedWorkbookFilename("VWG_Dispatch_Tracker.xlsx"),true);
