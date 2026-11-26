@@ -108,10 +108,22 @@ jobs:
           for (const token of ['validateAndSanitiseSnapshot','loadLocalSnapshot','clearLocalSnapshot','dispatcher-reporting-snapshot-1','SANITISED LOCAL SNAPSHOT','snapshotQualityPanel']) {
             if (!js.includes(token)) throw new Error('Dashboard local snapshot capability or disclosure is missing: ' + token);
           }
-          const dashboardOutbound = /\b(fetch\s*\(|new\s+XMLHttpRequest|new\s+WebSocket|sendBeacon|localStorage\s*\.|sessionStorage\s*\.|indexedDB\s*\.)/i;
-          if (dashboardOutbound.test(js)) throw new Error('Public dashboard snapshot import must not use a network client or browser persistence.');
-          for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button']) {
-            if (!css.includes(selector)) throw new Error('Dashboard snapshot import styling is missing: ' + selector);
+          const dashboardOutbound = /\b(fetch\s*\(|new\s+XMLHttpRequest|new\s+WebSocket|sendBeacon|sessionStorage\s*\.|indexedDB\s*\.)/i;
+          if (dashboardOutbound.test(js)) throw new Error('Public dashboard must not make network calls or persist imported snapshots.');
+          const localDirectoryKey = 'vwg-dispatcher.private-agent-directory.v1';
+          const localDirectoryCalls = [...js.matchAll(/localStorage\s*\.\s*(getItem|setItem|removeItem)\s*\(/g)].map(match => match[1]);
+          if (!js.includes('const PRIVATE_AGENT_DIRECTORY_KEY="' + localDirectoryKey + '"') ||
+              !js.includes('function readSavedPrivateAgentDirectory(') ||
+              !js.includes('function savePrivateAgentDirectory(') ||
+              !js.includes('function restorePrivateAgentDirectoryForSnapshot(') ||
+              localDirectoryCalls.length !== 3) {
+            throw new Error('The only permitted dashboard persistence is the separately keyed private colleague-name directory.');
+          }
+          for (const control of ['id="importAgentLookupButton"','id="clearAgentDirectoryButton"']) {
+            if (!html.includes(control)) throw new Error('Private colleague directory control is missing: ' + control);
+          }
+          for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button','.activity-history-panel','.activity-search-input']) {
+            if (!css.includes(selector)) throw new Error('Dashboard snapshot / Activity Log styling is missing: ' + selector);
           }
           for (const [name, page] of [['Dispatcher', html], ['Offline Studio', studioHtml]]) {
             if (!page.includes('class="brand-mark"') || !page.includes('class="logo-glow"') || !page.includes('class="logo-glyph"')) {
