@@ -59,18 +59,6 @@ test("imported owner counts are not labelled as open workload without resolution
 });
 
 
-test("imported Activity Log has a dedicated light investigation layout and responsive filters",()=>{
-  assert.match(dashboard,/class="audit-demo-strip local-snapshot-strip"/);
-  assert.match(dashboard,/class="activity-search-label">SEARCH/);
-  assert.match(dashboard,/class="activity-search-input"/);
-  assert.match(dashboard,/activity-time-cell/);
-  assert.match(dashboard,/activity-event-type/);
-  assert.match(css,/\.activity-history-panel \.audit-filter-toolbar\.imported-audit-filters\s*\{/);
-  assert.match(css,/\.activity-history-panel \.data-table thead th\s*\{[^}]*position:\s*sticky/s);
-  assert.match(css,/\.page-content\[data-view="audit"\] \.audit-demo-strip\.local-snapshot-strip/);
-  assert.match(css,/@media\s*\(max-width:\s*560px\)/);
-});
-
 test("dashboard exposes a device-local private name directory without placing names in snapshots",()=>{
   assert.match(dashboard,/const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher\.private-agent-directory\.v1"/);
   assert.match(dashboard,/function readSavedPrivateAgentDirectory\(\)/);
@@ -80,4 +68,18 @@ test("dashboard exposes a device-local private name directory without placing na
   assert.match(dashboard,/applyPrivateAgentLookupRows\(message\.privateAgentLookup,false\)/);
   assert.match(dashboard,/restorePrivateAgentDirectoryForSnapshot\(\);/);
   assert.match(dashboard,/localStorage\.removeItem\(PRIVATE_AGENT_DIRECTORY_KEY\)/);
+});
+
+
+test("imported Activity Log keeps the dark Cherry Glass palette with responsive filters",()=>{
+  assert.match(dashboard,/class="audit-demo-strip local-snapshot-strip"/);
+  assert.match(dashboard,/class="activity-search-label">SEARCH/);
+  assert.match(dashboard,/class="activity-search-input"/);
+  assert.match(dashboard,/activity-time-cell/);
+  assert.match(dashboard,/activity-event-type/);
+  assert.ok(css.includes(".activity-history-panel .audit-filter-toolbar.imported-audit-filters"));
+  assert.ok(css.includes(".activity-history-panel .data-table thead th {\n  position: sticky"));
+  assert.ok(css.includes("background: linear-gradient(145deg, rgba(30, 12, 21, .96), rgba(17, 10, 17, .98))"));
+  assert.ok(css.includes("background: rgba(8, 6, 11, .78)"));
+  assert.match(css,/@media\\s*\\(max-width:\\s*560px\\)/);
 });
