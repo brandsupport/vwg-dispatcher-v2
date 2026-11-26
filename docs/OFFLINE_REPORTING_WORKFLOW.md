@@ -49,7 +49,7 @@ Map these fields:
 | Inbox / folder | Yes | One of Agency Detags, Detags, Transfers or Unadopts. |
 | Current status | Yes | Operational dispatcher state. Values such as Assigned, Queued, Recovered or Handed Over are **not** proof that a ticket is resolved. |
 | Current owner | Yes | Used to calculate current open workload. Direct values are HMAC-pseudonymised before output. |
-| Brand | No today | The current workbook has no Brand column. Add an explicit approved Brand field to the tracker; until then all tickets remain unclassified. |
+| Brand | No (Assignments tab) | When the optional Email Details tab is supplied, the Studio joins its Brand to ticket rows in memory using Email Key / ID. Matched ticket brands feed Brand Insights; unmatched tickets remain Other / unclassified. No subject-based inference is used. |
 | Received timestamp | No | Parsed as UK-local time because the source header explicitly identifies UK time. Invalid or ambiguous values are excluded from date metrics. |
 | Resolution status | No today | Proposed tracker field. Use explicit Open / Resolved / Closed / Reopened values; do not reuse the operational Assignment Status. |
 | Resolved timestamp | No today | Proposed tracker field. Required alongside Received At (UK) to calculate elapsed solve time. |
@@ -59,7 +59,7 @@ The current workbook cannot support a resolution rate or solve-time calculation:
 
 ### Assignment history — optional
 
-Map ticket reference, new owner / assigned agent, and assignment type. Inbox is optional when the ticket snapshot supplies the authoritative inbox.
+Map ticket reference, new owner / assigned agent, and assignment type. Inbox is optional when the ticket snapshot supplies the authoritative inbox. For the VWG workbook, both `Source Inbox` (the current operational sheet header) and `Folder Path` (the newer event-schema header) are accepted for the Activity Log Inbox mapping. The free-text `Details / Notes` column is never exported.
 
 For the VWG tracker, map **Event Type** (column B) as the assignment event type and **Original Assignee** as the colleague reference. **AUTO_ASSIGNMENT** contributes to automatic first allocations; **MANUAL_ASSIGNMENT_CAPTURED** contributes to manual first allocations. Identical duplicate first-allocation rows for the same ticket, agent, inbox and method are de-duplicated; genuinely conflicting first-assignment records are excluded as ambiguous. **Assignment Flag** (column G) is a Boolean marker and must not be mapped as the event type.
 
@@ -100,7 +100,7 @@ The dispatcher sets a row to **Missing - Confirmation Pending** when the first s
 
 ## Import the aggregate snapshot into Dispatcher 2.0
 
-After sanitising approved extracts, use **Download JSON snapshot** in the Studio. Open the Dispatcher dashboard in another tab, select **Import snapshot** in the top bar, and choose the downloaded `dispatcher-reporting-snapshot.json` file.
+After sanitising approved extracts, use **Open dashboard with this data** in the Studio results. This opens Dispatcher 2.0 in a new tab and transfers the sanitised aggregate snapshot directly between the two same-origin tabs using a one-time browser `BroadcastChannel` message. The snapshot is not uploaded, stored in browser storage or sent to an API. The dashboard confirms a successful import and then renders the imported data. **Download JSON snapshot** and the dashboard's **Import snapshot** button remain available as a manual fallback.
 
 The dashboard accepts only the supported `dispatcher-reporting-snapshot-1` aggregate format. It checks the four inbox totals, overall totals, brand totals, allocation reconciliation, HMAC-style pseudonymous agent references, optional roster structure and shift values, optional Email Details status/inbox/brand/owner rollups, workflow event allow-list and quality counters. Unknown properties (including raw email, order, VIN or colleague fields) are discarded when the dashboard rebuilds its in-memory data object.
 
