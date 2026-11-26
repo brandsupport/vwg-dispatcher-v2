@@ -910,9 +910,7 @@ function restorePrivateAgentDirectoryForSnapshot(){
   return privateAgentNames.size;
 }
 function updatePrivateNameControls(){
-  const importButton=document.getElementById("importAgentLookupButton");
   const clearButton=document.getElementById("clearAgentDirectoryButton");
-  if(importButton)importButton.hidden=!state.importedSnapshot;
   if(clearButton)clearButton.hidden=!state.importedSnapshot||privateAgentNames.size===0;
 }
 function clearSavedPrivateAgentDirectory(){
@@ -927,24 +925,7 @@ function memberInitials(name){
   if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
   return value.split(/\\s+/).filter(Boolean).slice(0,2).map(part=>Array.from(part)[0]||"").join("").toUpperCase()||"AG";
 }
-function parseCsvRows(input){
-  const source=String(input||"").replace(/^\\uFEFF/,"");
-  const rows=[];let row=[],field="",quoted=false;
-  for(let i=0;i<source.length;i++){
-    const ch=source[i];
-    if(quoted){
-      if(ch==='"'&&source[i+1]==='"'){field+='"';i++;}
-      else if(ch==='"')quoted=false;
-      else field+=ch;
-    }else if(ch==='"')quoted=true;
-    else if(ch===","){row.push(field);field="";}
-    else if(ch==="\\n"){row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);row=[];field="";}
-    else field+=ch;
-  }
-  row.push(field.replace(/\\r$/,""));if(row.some(value=>value.trim()))rows.push(row);
-  if(quoted)throw new Error("The private lookup CSV has an unterminated quoted field.");
-  return rows;
-}
+
 function knownSnapshotAgentRefs(){
   const snapshot=state.importedSnapshot;
   if(!snapshot)return new Set();
@@ -983,17 +964,7 @@ function applyPrivateAgentLookupRows(rows,announce=true){
     :"Loaded "+incoming.size+" colleague names for this tab. Browser storage is unavailable, so they were not remembered.");
   return incoming.size;
 }
-async function loadPrivateAgentLookup(file){
-  if(!file)return;
-  if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before importing its private name lookup.");
-  if(file.size>1024*1024)throw new Error("The private name lookup must be smaller than 1 MB.");
-  const rows=parseCsvRows(await file.text());
-  if(rows.length<2)throw new Error("The private name lookup contains no agent records.");
-  const headers=rows[0].map(value=>value.trim().toLowerCase());
-  const refIndex=headers.indexOf("agent_ref"),nameIndex=headers.indexOf("display_name");
-  if(refIndex<0||nameIndex<0)throw new Error("The private lookup needs agent_ref and display_name columns.");
-  applyPrivateAgentLookupRows(rows.slice(1).map(row=>({agent_ref:row[refIndex],display_name:row[nameIndex]})),true);
-}
+
 function applyLocalSnapshotObject(parsed,announce=true){
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
@@ -1009,8 +980,6 @@ function applyLocalSnapshotObject(parsed,announce=true){
   document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Snapshot in tab memory · Private names remembered on this device";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
-  document.getElementById("importAgentLookupButton").hidden=false;
-  document.getElementById("agentLookupFileInput").value="";
   state.selectedAgent=null;
   state.memberSearch="";
   state.search="";
@@ -1043,8 +1012,6 @@ function clearLocalSnapshot(){
   document.getElementById("resetSnapshotButton").hidden=true;
   document.getElementById("importSnapshotButton").textContent="Import snapshot";
   document.getElementById("snapshotFileInput").value="";
-  document.getElementById("importAgentLookupButton").hidden=true;
-  document.getElementById("agentLookupFileInput").value="";
   privateAgentNames=new Map();
   updatePrivateNameControls();
   state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
@@ -2192,7 +2159,7 @@ function renderTeam(){
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
     '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Colleague names are resolved from a private directory saved only in this browser; direct Studio handoff fills it automatically. The sanitised JSON stays pseudonymised and no names are sent to the server. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolved status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; Activity Log owner associations are not authenticated actor proof. Resolution rate is calculated against the current-owner portfolio.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
-    (state.importedSnapshot&&!privateAgentNames.size?'<div class="team-name-prompt"><span><strong>Colleague names are not loaded yet.</strong><small>Open this snapshot directly from Reporting Studio and names are transferred automatically. For a downloaded JSON snapshot, import the private name file once; it will be remembered on this device only.</small></span><button class="btn btn-secondary" type="button" data-action="load-agent-names">Import names once</button></div>':'')+
+    (state.importedSnapshot&&!privateAgentNames.size?'<div class="team-name-prompt"><span><strong>No colleague names matched this snapshot.</strong><small>Re-run sanitisation in Reporting Studio in this browser. It now saves the private colleague directory automatically, then import the new JSON snapshot. Check the Team & Shifts Colleague and Outlook Category mappings if names are still missing.</small></span></div>':'')+
     (state.importedSnapshot&&privateAgentNames.size?'<div class="team-name-prompt team-name-saved"><span><strong>Private colleague directory active.</strong><small>'+privateAgentNames.size+' colleague names are available across the dashboard and will be restored for future snapshots on this device. They are not stored in the public project or shared JSON.</small></span><button class="btn btn-secondary" type="button" data-action="clear-agent-names">Clear saved names</button></div>':'')+
     '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and '+(state.importedSnapshot&&!hasResolutionTracking()?"records with a current owner. Resolution state is not tracked.": "current open-work "+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile."))+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
@@ -3482,7 +3449,6 @@ function handleAction(action){
   if(action==="export-individual-report"){exportIndividualPerformanceReport();return;}
   if(action==="export-brand-report"){exportBrandVolumeReport();return;}
   if(action==="export-reliability-report"){exportReliabilitySnapshotReport();return;}
-  if(action==="load-agent-names"){document.getElementById("importAgentLookupButton").click();return;}
   if(action==="clear-agent-names"){clearSavedPrivateAgentDirectory();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
@@ -3523,14 +3489,7 @@ function bindStudioSnapshotReceiver(){
 }
 
 document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
-document.getElementById("importAgentLookupButton").addEventListener("click",()=>document.getElementById("agentLookupFileInput").click());
 document.getElementById("clearAgentDirectoryButton").addEventListener("click",clearSavedPrivateAgentDirectory);
-document.getElementById("agentLookupFileInput").addEventListener("change",async event=>{
-  const file=event.target.files?.[0];if(!file)return;
-  try{await loadPrivateAgentLookup(file);}
-  catch(error){showToast("Could not import private names: "+error.message);}
-  finally{event.target.value="";}
-});
 document.getElementById("snapshotFileInput").addEventListener("change",async event=>{
   const file=event.target.files?.[0];
   if(!file)return;
