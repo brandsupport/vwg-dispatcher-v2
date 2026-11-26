@@ -2844,13 +2844,13 @@ function renderImportedActivityAudit(){
   const rowsRead=quality?.rows_read||0,rowsAccepted=quality?.rows_accepted||0;
   const rows=visible.map(event=>
     '<tr>'+
-      '<td class="mono">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
-      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
-      '<td>'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
-      '<td>'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
-      '<td>'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
-      '<td>'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
-      '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
+      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
+      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
     '</tr>'
   );
   const eventTypes=[...new Set(all.map(event=>event.event_type))].sort();
