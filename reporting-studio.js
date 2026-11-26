@@ -137,7 +137,41 @@ function parseCSV(text){
   return {headers,records};
 }
 function isSupportedWorkbookFilename(fileName){return /\.(?:xlsx|xls|xlsm)$/i.test(String(fileName||"").trim());}
-function openWorkbookPicker(input){
+function describeFileReadError(error){
+  if(!error)return "Unknown error";
+  return (error.name||"Error")+": "+(error.message||String(error));
+}
+async function openWorkbookPicker(input){
+  // Chrome's File System Access picker gives us a fresh handle to the selected
+  // file instead of relying on the HTMLInputElement FileList reference.
+  if(typeof window!=="undefined"&&typeof window.showOpenFilePicker==="function"){
+    try{
+      const handles=await window.showOpenFilePicker({
+        id:"vwg-reporting-workbook",
+        multiple:false,
+        types:[{
+          description:"Excel workbook",
+          accept:{
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":[".xlsx"],
+            "application/vnd.ms-excel":[".xls"],
+            "application/vnd.ms-excel.sheet.macroEnabled.12":[".xlsm"]
+          }
+        }]
+      });
+      const handle=handles?.[0];
+      if(!handle)return false;
+      const file=await handle.getFile();
+      if(!isSupportedWorkbookFilename(file?.name))throw new Error("Select an Excel workbook (.xlsx, .xls or .xlsm).");
+      await processWorkbookFile(file,"Chrome direct picker");
+      return true;
+    }catch(error){
+      if(error?.name==="AbortError")return false;
+      const detail=describeFileReadError(error);
+      $("workbookFileMeta").textContent="Chrome's direct file picker failed — "+detail;
+      alert("Chrome's direct file picker could not open the workbook: "+detail+". The standard file control below is still available as a fallback. Workbook data was not uploaded.");
+      return false;
+    }
+  }
   if(!input)return false;
   if(typeof input.showPicker==="function"){
     try{input.showPicker();return true;}catch(error){}
@@ -146,14 +180,47 @@ function openWorkbookPicker(input){
   return false;
 }
 function isArrayBufferValue(value){return Object.prototype.toString.call(value)==="[object ArrayBuffer]";}
+async function readFileStreamArrayBuffer(file){
+  if(!file||typeof file.stream!=="function")throw new Error("Blob.stream() is unavailable for this selected file.");
+  const stream=file.stream();
+  if(!stream||typeof stream.getReader!=="function")throw new Error("The selected file did not provide a readable byte stream.");
+  const reader=stream.getReader();
+  const chunks=[];
+  let totalBytes=0;
+  try{
+    while(true){
+      const part=await reader.read();
+      if(part.done)break;
+      if(part.value==null)continue;
+      const bytes=part.value instanceof Uint8Array
+        ?part.value
+        :ArrayBuffer.isView(part.value)
+          ?new Uint8Array(part.value.buffer,part.value.byteOffset,part.value.byteLength)
+          :new Uint8Array(part.value);
+      totalBytes+=bytes.byteLength;
+      chunks.push(bytes);
+    }
+  }finally{
+    try{reader.releaseLock?.();}catch(error){}
+  }
+  const output=new Uint8Array(totalBytes);
+  let offset=0;
+  for(const chunk of chunks){output.set(chunk,offset);offset+=chunk.byteLength;}
+  return output.buffer;
+}
 async function readFileArrayBuffer(file){
-  let primaryError=null;
+  const attempts={stream:"unavailable",arrayBuffer:"unavailable",fileReader:"unavailable"};
+  try{
+    const result=await readFileStreamArrayBuffer(file);
+    if(isArrayBufferValue(result))return result;
+    throw new Error("The stream reader returned an invalid buffer.");
+  }catch(error){attempts.stream=describeFileReadError(error);}
   if(file&&typeof file.arrayBuffer==="function"){
     try{
       const result=await file.arrayBuffer();
       if(isArrayBufferValue(result))return result;
       throw new Error("The browser returned an invalid file buffer.");
-    }catch(error){primaryError=error;}
+    }catch(error){attempts.arrayBuffer=describeFileReadError(error);}
   }
   if(typeof FileReader==="function"){
     try{
@@ -166,14 +233,10 @@ async function readFileArrayBuffer(file){
         reader.onabort=()=>reject(new Error("The workbook read was cancelled."));
         reader.readAsArrayBuffer(file);
       });
-    }catch(fallbackError){
-      const first=primaryError?((primaryError.name||"Read error")+": "+(primaryError.message||String(primaryError))):"File.arrayBuffer() is unavailable";
-      const second=(fallbackError.name||"Read error")+": "+(fallbackError.message||String(fallbackError));
-      throw new Error("Chrome could not read the selected file through either browser reader. First attempt: "+first+". Second attempt: "+second+". This usually means Windows or a sync/preview process is blocking access to the local file. Close the workbook in Excel and any preview window, then save or copy a fresh copy into your local Downloads folder (not OneDrive, SharePoint, a network drive, or a USB location) and select that copy.");
-    }
+    }catch(error){attempts.fileReader=describeFileReadError(error);}
   }
-  const detail=primaryError?((primaryError.name||"Read error")+": "+(primaryError.message||String(primaryError))):"This browser does not provide a supported file reader.";
-  throw new Error("Chrome could not read the selected file ("+detail+"). Close the workbook in Excel and any preview window, then save or copy a fresh copy into your local Downloads folder and select that copy.");
+  const metadata="Selected file metadata: "+String(file?.name||"(unnamed)")+", "+String(Number(file?.size)||0)+" bytes.";
+  throw new Error("The browser could not read the selected file bytes. Stream reader: "+attempts.stream+"; File.arrayBuffer(): "+attempts.arrayBuffer+"; FileReader: "+attempts.fileReader+". "+metadata+" The workbook stayed in this browser and was not uploaded. If all three methods report NotReadableError, Chrome is denying access to the selected file itself; changing worksheet mappings or the Excel parser will not resolve that browser-level read failure.");
 }
 function autoMap(headers,aliases){
   const indexed=headers.map(header=>({header,key:norm(header)}));
@@ -1070,11 +1133,11 @@ async function withWorkbookInputLocked(input,process){
   try{return await process();}
   finally{if(input)input.value="";}
 }
-async function processWorkbookFile(file){
+async function processWorkbookFile(file,source="file input"){
   if(!file)return;
   const input=$("workbookFile");
   const zone=$("workbookDropZone");
-  $("workbookFileMeta").textContent="Reading "+(file.name||"selected workbook")+"…";
+  $("workbookFileMeta").textContent="Reading via "+source+": "+(file.name||"selected workbook")+"…";
   if(zone){zone.classList.add("is-reading");zone.classList.remove("is-ready","is-error");}
   try{
     for(const kind of Object.keys(files)){

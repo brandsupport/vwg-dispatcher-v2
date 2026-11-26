@@ -11,19 +11,21 @@ function makeNode(){
     classList:{add(){},remove(){},toggle(){}}
   };
 }
-function loadStudio(){
+function loadStudio(extraContext={}){
   const nodes=new Map();
   const document={
     getElementById(id){if(!nodes.has(id))nodes.set(id,makeNode());return nodes.get(id);},
     addEventListener(){},
     createElement(){return makeNode();}
   };
-  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout};
+  const context={document,crypto:webcrypto,TextEncoder,Uint8Array,Blob,URL,alert(){},console,setTimeout,clearTimeout,...extraContext};
   vm.createContext(context);
   const source=fs.readFileSync(new URL("../reporting-studio.js",import.meta.url),"utf8");
   const expose=`
     globalThis.__reportingTestHooks = {
       parseCSV,
+      readFileArrayBuffer,
+      openWorkbookPicker,
       normaliseInbox,
       normaliseWorkflowEvent,
       parseExplicitDate,
@@ -64,6 +66,85 @@ function loadStudio(){
   vm.runInContext(source+expose,context,{filename:"reporting-studio.js"});
   return context.__reportingTestHooks;
 }
+
+
+test("reads workbook bytes from the Blob stream before using fallback readers",async()=>{
+  const hooks=loadStudio();
+  let arrayBufferCalled=false;
+  let streamRead=false;
+  const file={
+    name:"stream-test.xlsx",size:3,
+    stream(){
+      let emitted=false;
+      return {getReader(){return {
+        async read(){
+          if(emitted)return {done:true};
+          emitted=true;streamRead=true;
+          return {done:false,value:new Uint8Array([1,2,3])};
+        },
+        releaseLock(){}
+      };}};
+    },
+    async arrayBuffer(){arrayBufferCalled=true;return new Uint8Array([9]).buffer;}
+  };
+  const buffer=await hooks.readFileArrayBuffer(file);
+  assert.deepEqual([...new Uint8Array(buffer)],[1,2,3]);
+  assert.equal(streamRead,true);
+  assert.equal(arrayBufferCalled,false);
+});
+
+test("falls back to File.arrayBuffer when the stream reader fails",async()=>{
+  const hooks=loadStudio();
+  const expected=new Uint8Array([4,5,6]).buffer;
+  const file={
+    name:"fallback-test.xlsx",size:3,
+    stream(){return {getReader(){return {async read(){throw new Error("stream interrupted");},releaseLock(){}};}};},
+    async arrayBuffer(){return expected;}
+  };
+  const buffer=await hooks.readFileArrayBuffer(file);
+  assert.deepEqual([...new Uint8Array(buffer)],[4,5,6]);
+});
+
+test("uses Chrome's direct file picker and reads the returned file handle locally",async()=>{
+  let pickerOptions=null;
+  let handleRead=false;
+  let streamRead=false;
+  const file={
+    name:"direct-picker-test.xlsx",size:3,
+    stream(){
+      let emitted=false;
+      return {getReader(){return {
+        async read(){
+          if(emitted)return {done:true};
+          emitted=true;streamRead=true;
+          return {done:false,value:new Uint8Array([7,8,9])};
+        },
+        releaseLock(){}
+      };}};
+    }
+  };
+  const fakeXlsx={
+    read(buffer){
+      assert.deepEqual([...new Uint8Array(buffer)],[7,8,9]);
+      return {SheetNames:["Unrelated"],Sheets:{Unrelated:{}}};
+    },
+    utils:{sheet_to_json(){return [];}}
+  };
+  const hooks=loadStudio({
+    window:{showOpenFilePicker:async options=>{
+      pickerOptions=options;
+      return [{getFile:async()=>{handleRead=true;return file;}}];
+    }},
+    XLSX:fakeXlsx
+  });
+  const opened=await hooks.openWorkbookPicker(hooks.getNode("workbookFile"));
+  assert.equal(opened,true);
+  assert.equal(handleRead,true);
+  assert.equal(streamRead,true);
+  assert.equal(pickerOptions.multiple,false);
+  assert.ok(pickerOptions.types[0].accept["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(".xlsx"));
+  assert.match(hooks.getNode("workbookFileMeta").textContent,/workbook selected and read locally/);
+});
 
 test("CSV parser handles quoted commas, escaped quotes and embedded newlines",()=>{
   const hooks=loadStudio();
