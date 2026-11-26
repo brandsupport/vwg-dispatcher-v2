@@ -2873,7 +2873,7 @@ function renderImportedActivityAudit(){
     ])+
     '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
     '<div class="audit-filter-toolbar imported-audit-filters">'+
-      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+      '<label class="live-queue-search"><span class="activity-search-label">SEARCH</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
       '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
       '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
       '<label class="filter-control"><span>FROM DATE · UTC</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
