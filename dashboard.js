@@ -877,6 +877,51 @@ function importedSourceAvailable(source){
   return Boolean(state.importedSnapshot&&state.importedSnapshot.data_quality.sources.some(row=>row.source===source));
 }
 function displayAgentName(reference){return privateAgentNames.get(reference)||reference;}
+const PRIVATE_AGENT_DIRECTORY_KEY="vwg-dispatcher.private-agent-directory.v1";
+function readSavedPrivateAgentDirectory(){
+  try{
+    if(typeof localStorage==="undefined")return new Map();
+    const raw=localStorage.getItem(PRIVATE_AGENT_DIRECTORY_KEY);
+    if(!raw)return new Map();
+    const rows=JSON.parse(raw);
+    if(!Array.isArray(rows))return new Map();
+    const result=new Map();
+    for(const row of rows.slice(0,250)){
+      const reference=String(row?.agent_ref||"").trim();
+      const name=String(row?.display_name||"").trim().slice(0,100);
+      if(/^Agent-[A-F0-9]{10}$/.test(reference)&&name)result.set(reference,name);
+    }
+    return result;
+  }catch(error){return new Map();}
+}
+function savePrivateAgentDirectory(directory){
+  try{
+    if(typeof localStorage==="undefined")return false;
+    const rows=[...directory.entries()].slice(0,250).map(([agent_ref,display_name])=>({agent_ref,display_name}));
+    localStorage.setItem(PRIVATE_AGENT_DIRECTORY_KEY,JSON.stringify(rows));
+    return true;
+  }catch(error){return false;}
+}
+function restorePrivateAgentDirectoryForSnapshot(){
+  const known=knownSnapshotAgentRefs();
+  const saved=readSavedPrivateAgentDirectory();
+  privateAgentNames=new Map([...saved.entries()].filter(([reference])=>known.has(reference)));
+  updatePrivateNameControls();
+  return privateAgentNames.size;
+}
+function updatePrivateNameControls(){
+  const importButton=document.getElementById("importAgentLookupButton");
+  const clearButton=document.getElementById("clearAgentDirectoryButton");
+  if(importButton)importButton.hidden=!state.importedSnapshot;
+  if(clearButton)clearButton.hidden=!state.importedSnapshot||privateAgentNames.size===0;
+}
+function clearSavedPrivateAgentDirectory(){
+  try{if(typeof localStorage!=="undefined")localStorage.removeItem(PRIVATE_AGENT_DIRECTORY_KEY);}catch(error){}
+  privateAgentNames=new Map();
+  updatePrivateNameControls();
+  render();
+  showToast("Private colleague names cleared from this browser.");
+}
 function memberInitials(name){
   const value=String(name||"").trim();
   if(/^Agent-[A-F0-9]{10}$/i.test(value))return "AG";
@@ -917,20 +962,26 @@ function knownSnapshotAgentRefs(){
 function applyPrivateAgentLookupRows(rows,announce=true){
   if(!state.importedSnapshot)throw new Error("Import the sanitised JSON snapshot before applying its private name lookup.");
   if(!Array.isArray(rows))throw new Error("The private name lookup must be a list of agent references and display names.");
-  const known=knownSnapshotAgentRefs(),next=new Map();
+  const known=knownSnapshotAgentRefs(),incoming=new Map();
   for(const row of rows){
-    const reference=String(row?.agent_ref||"").trim(),name=String(row?.display_name||"").trim();
+    const reference=String(row?.agent_ref||"").trim(),name=String(row?.display_name||"").trim().slice(0,100);
     if(!reference&&!name)continue;
     if(!/^Agent-[A-F0-9]{10}$/.test(reference)||!name)throw new Error("A private lookup row has an invalid agent reference or blank display name.");
     if(!known.has(reference))continue;
-    if(next.has(reference)&&next.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
-    next.set(reference,name);
+    if(incoming.has(reference)&&incoming.get(reference)!==name)throw new Error("The private lookup contains conflicting names for one agent reference.");
+    incoming.set(reference,name);
   }
-  if(!next.size)throw new Error("No private agent references matched the imported snapshot. Use the same local workspace key when creating the name lookup.");
-  privateAgentNames=next;
+  if(!incoming.size)throw new Error("No private agent references matched the imported snapshot. Use the same local workspace key when creating the name lookup.");
+  const directory=readSavedPrivateAgentDirectory();
+  for(const [reference,name] of incoming)directory.set(reference,name);
+  const persisted=savePrivateAgentDirectory(directory);
+  privateAgentNames=new Map([...directory.entries()].filter(([reference])=>known.has(reference)));
+  updatePrivateNameControls();
   render();
-  if(announce)showToast("Loaded "+next.size+" colleague names in this browser tab only.");
-  return next.size;
+  if(announce)showToast(persisted
+    ?"Loaded "+incoming.size+" colleague names and remembered the private directory on this device."
+    :"Loaded "+incoming.size+" colleague names for this tab. Browser storage is unavailable, so they were not remembered.");
+  return incoming.size;
 }
 async function loadPrivateAgentLookup(file){
   if(!file)return;
@@ -946,7 +997,7 @@ async function loadPrivateAgentLookup(file){
 function applyLocalSnapshotObject(parsed,announce=true){
   const clean=validateAndSanitiseSnapshot(parsed);
   state.importedSnapshot=clean;
-  privateAgentNames=new Map();
+  restorePrivateAgentDirectoryForSnapshot();
   state.period="snapshot";
   const periodSelect=document.getElementById("periodSelect");
   periodSelect.value="snapshot";
@@ -955,7 +1006,7 @@ function applyLocalSnapshotObject(parsed,announce=true){
   const datasetBadge=document.getElementById("datasetBadge");
   datasetBadge.innerHTML="<span></span> LOCAL SNAPSHOT";
   datasetBadge.title="Public, unauthenticated preview. Only company-approved sanitised aggregate snapshots should be imported.";
-  document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Browser memory only · Refresh clears the import";
+  document.getElementById("footerNote").textContent="Public preview · Approved sanitised snapshot only · Snapshot in tab memory · Private names remembered on this device";
   document.getElementById("resetSnapshotButton").hidden=false;
   document.getElementById("importSnapshotButton").textContent="Replace snapshot";
   document.getElementById("importAgentLookupButton").hidden=false;
@@ -967,7 +1018,8 @@ function applyLocalSnapshotObject(parsed,announce=true){
   state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
   render();
   const warnings=clean.data_quality.sources.reduce((sum,row)=>sum+row.rows_skipped+row.duplicate_rows+row.unknown_inbox+row.unknown_brand+row.unknown_status+row.ambiguous_time,0)+clean.data_quality.ambiguous_initial_assignment_tickets;
-  if(announce)showToast("Sanitised snapshot loaded locally"+(warnings?" · review data-quality counts":"")+". Refreshing the page clears it.");
+  updatePrivateNameControls();
+  if(announce)showToast("Sanitised snapshot loaded locally"+(privateAgentNames.size?" · "+privateAgentNames.size+" saved colleague names restored":"")+(warnings?" · review data-quality counts":"")+".");
   return clean;
 }
 async function loadLocalSnapshot(file){
@@ -994,6 +1046,7 @@ function clearLocalSnapshot(){
   document.getElementById("importAgentLookupButton").hidden=true;
   document.getElementById("agentLookupFileInput").value="";
   privateAgentNames=new Map();
+  updatePrivateNameControls();
   state.auditSearch="";state.auditEventType="all";state.auditAgent="all";state.auditFromDate="";state.auditToDate="";
   state.selectedAgent=null;
   state.memberSearch="";
@@ -2130,7 +2183,7 @@ function renderTeam(){
   const eventTypes=workflowSummaryRows().filter(event=>event.events>0).length;
   pageContent.innerHTML=heading("TEAM PERFORMANCE INTELLIGENCE","See the work clearly. Compare it fairly.","Separate first assignments, current open workload and workflow events — then add performance measures only when their source evidence exists.",'<button class="btn btn-secondary" data-action="export-team">↓ Export team snapshot</button>')+
     (state.importedSnapshot
-      ? '<div class="team-demo-strip local-snapshot-strip"><span><i></i> SANITISED SNAPSHOT · READ ONLY</span><span>'+allProfiles.length+' agent references</span><span>Colleague names <b>'+(privateAgentNames.size?privateAgentNames.size+" loaded privately":"private CSV not loaded")+'</b></span><span>Shift / rota data <b>'+(state.importedSnapshot.team_roster?.length?"Included":"Not supplied")+'</b></span></div>'
+      ? '<div class="team-demo-strip local-snapshot-strip"><span><i></i> SANITISED SNAPSHOT · READ ONLY</span><span>'+allProfiles.length+' agent references</span><span>Colleague names <b>'+(privateAgentNames.size?privateAgentNames.size+" from device directory":"not loaded")+'</b></span><span>Shift / rota data <b>'+(state.importedSnapshot.team_roster?.length?"Included":"Not supplied")+'</b></span></div>'
       : '<div class="team-demo-strip"><span><i></i> DEMONSTRATION DATA · READ ONLY</span><span>All 14 profiles are anonymised sample records</span><span>Outlook / Excel <b>Not connected</b></span></div>')+
     kpiGrid([
       kpi(state.importedSnapshot?"Agent references in view":"Agent profiles in view",String(profiles.length),state.importedSnapshot?"Pseudonymised snapshot references · global search applies":"Anonymised sample profiles · global search applies","♧"),
@@ -2138,8 +2191,9 @@ function renderTeam(){
       kpi(state.importedSnapshot&&!hasResolutionTracking()?"Current owner records":"Current open workload",fmt(openWorkload),state.importedSnapshot?(hasResolutionTracking()?"Owner snapshot · independent of inbox filter":"Current owner counts; resolution state not tracked"):"All-profile sample snapshot · not period or inbox scoped","◷"),
       kpi("Workflow event types",state.importedSnapshot?String(eventTypes):String(WORKFLOW_EVENT_SUMMARY.length),state.importedSnapshot?"Mapped event categories in current inbox scope":"Team-level aggregates shown separately below","⇄")
     ])+
-    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Colleague names are shown after the matching private lookup has been loaded; direct Studio handoff now carries that lookup in browser memory. The shared JSON snapshot remains pseudonymised. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolved status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; Activity Log owner associations are not authenticated actor proof. Resolution rate is calculated against the current-owner portfolio.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
-    (state.importedSnapshot&&!privateAgentNames.size?'<div class="team-name-prompt"><span><strong>Colleague names are not loaded.</strong><small>Use the private agent-name lookup CSV exported by Reporting Studio. The names stay in this browser tab only.</small></span><button class="btn btn-secondary" type="button" data-action="load-agent-names">Load colleague names</button></div>':'')+
+    '<div class="team-scope-note"><strong>How to read this screen:</strong> '+(state.importedSnapshot?"Colleague names are resolved from a private directory saved only in this browser; direct Studio handoff fills it automatically. The sanitised JSON stays pseudonymised and no names are sent to the server. "+(hasResolutionTracking()?"Open workload is a point-in-time count.":"The source has no resolved status, so owner counts must not be read as open workload.")+" First-assignment counts are explicit; Activity Log owner associations are not authenticated actor proof. Resolution rate is calculated against the current-owner portfolio.":"The period and inbox filters change first-assignment counts. Open workload is a separate current-state sample. Workflow events are team-level synthetic aggregates. None of these sample figures is a real colleague performance assessment.")+'</div>'+
+    (state.importedSnapshot&&!privateAgentNames.size?'<div class="team-name-prompt"><span><strong>Colleague names are not loaded yet.</strong><small>Open this snapshot directly from Reporting Studio and names are transferred automatically. For a downloaded JSON snapshot, import the private name file once; it will be remembered on this device only.</small></span><button class="btn btn-secondary" type="button" data-action="load-agent-names">Import names once</button></div>':'')+
+    (state.importedSnapshot&&privateAgentNames.size?'<div class="team-name-prompt team-name-saved"><span><strong>Private colleague directory active.</strong><small>'+privateAgentNames.size+' colleague names are available across the dashboard and will be restored for future snapshots on this device. They are not stored in the public project or shared JSON.</small></span><button class="btn btn-secondary" type="button" data-action="clear-agent-names">Clear saved names</button></div>':'')+
     '<div class="section-heading team-section-heading"><div><h2>Member snapshot</h2><p>Initial allocations within the selected scope and '+(state.importedSnapshot&&!hasResolutionTracking()?"records with a current owner. Resolution state is not tracked.": "current open-work "+(state.importedSnapshot?"snapshot by pseudonymised owner.":"sample for each anonymised profile."))+'</p></div><span class="subtle-tag">NO PERFORMANCE RANKING</span></div>'+
     (profiles.length?'<div class="team-profile-grid">'+profiles.map(agent=>
       '<button class="team-profile-card '+(state.selectedAgent===agent.id?'selected':'')+'" data-agent="'+agent.id+'" type="button" aria-pressed="'+(state.selectedAgent===agent.id)+'">'+
@@ -2791,13 +2845,13 @@ function renderImportedActivityAudit(){
   const rowsRead=quality?.rows_read||0,rowsAccepted=quality?.rows_accepted||0;
   const rows=visible.map(event=>
     '<tr>'+
-      '<td class="mono">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
-      '<td><strong>'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
-      '<td>'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
-      '<td>'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
-      '<td>'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
-      '<td>'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
-      '<td class="total-cell">'+fmt(event.incident_count)+'</td>'+
+      '<td class="mono activity-time-cell">'+esc(event.event_time_egypt||"Time not supplied")+'</td>'+
+      '<td class="activity-event-cell"><strong class="activity-event-type">'+esc(event.event_type.replaceAll("_"," "))+'</strong><small class="activity-ref-sub">'+(event.system_event?"System event":esc(event.ticket_ref))+'</small></td>'+
+      '<td class="activity-inbox-cell">'+esc(event.inbox_code==="system"?"System / cross-Inbox":FOLDERS.find(folder=>folder.id===event.inbox_code)?.name||event.inbox_code)+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.original_agent_ref?displayAgentName(event.original_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-person-cell">'+esc(event.current_agent_ref?displayAgentName(event.current_agent_ref):"Not recorded")+'</td>'+
+      '<td class="activity-flag-cell">'+statusPill(event.assignment_flag?"TRUE":"FALSE")+'</td>'+
+      '<td class="total-cell activity-count-cell">'+fmt(event.incident_count)+'</td>'+
     '</tr>'
   );
   const eventTypes=[...new Set(all.map(event=>event.event_type))].sort();
@@ -2819,7 +2873,7 @@ function renderImportedActivityAudit(){
     ])+
     '<section class="panel activity-history-panel"><div class="panel-heading"><div><h2 class="panel-title">Activity Log entries</h2><p class="panel-subtitle">Original assignee and current owner show who was associated with the email, not the authenticated person who performed the action.</p></div><span class="subtle-tag">'+sourceStatus+'</span></div>'+
     '<div class="audit-filter-toolbar imported-audit-filters">'+
-      '<label class="live-queue-search"><span>⌕</span><input type="search" data-audit-search placeholder="Search event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></label>'+
+      '<label class="live-queue-search"><span class="activity-search-label">SEARCH</span><span class="activity-search-input"><span aria-hidden="true">⌕</span><input type="search" data-audit-search placeholder="Event, ticket reference or colleague…" value="'+esc(state.auditSearch)+'" autocomplete="off"></span></label>'+
       '<label class="filter-control"><span>EVENT TYPE</span><select data-audit-filter="auditEventType">'+auditSelectOptions(eventTypes,state.auditEventType,"All event types")+'</select></label>'+
       '<label class="filter-control"><span>COLLEAGUE</span><select data-audit-filter="auditAgent"><option value="all">All colleagues</option>'+agentRefs.map(reference=>'<option value="'+esc(reference)+'"'+(reference===state.auditAgent?' selected':'')+'>'+esc(displayAgentName(reference))+'</option>').join("")+'</select></label>'+
       '<label class="filter-control"><span>FROM DATE · UTC</span><input type="date" data-audit-filter="auditFromDate" value="'+esc(state.auditFromDate)+'"></label>'+
@@ -3429,6 +3483,7 @@ function handleAction(action){
   if(action==="export-brand-report"){exportBrandVolumeReport();return;}
   if(action==="export-reliability-report"){exportReliabilitySnapshotReport();return;}
   if(action==="load-agent-names"){document.getElementById("importAgentLookupButton").click();return;}
+  if(action==="clear-agent-names"){clearSavedPrivateAgentDirectory();return;}
   if(action==="close-agent"){state.selectedAgent=null;render();return;}
   if(action==="close-roster-agent"){state.selectedRosterAgent=null;render();return;}
   if(action==="reset-roster-filters"){state.rosterSearch="";state.rosterShift="all";state.rosterAvailability="all";state.selectedRosterAgent=null;render();return;}
@@ -3456,7 +3511,7 @@ function bindStudioSnapshotReceiver(){
         namesLoaded=applyPrivateAgentLookupRows(message.privateAgentLookup,false);
       }
       channel.postMessage({type:"VWG_SNAPSHOT_IMPORTED",token,success:true});
-      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" and "+namesLoaded+" colleague names":"")+".");
+      showToast("Dashboard populated with the sanitised snapshot"+(namesLoaded?" and "+namesLoaded+" colleague names remembered on this device":"")+".");
       const cleanUrl=new URL(window.location.href);
       cleanUrl.searchParams.delete("receiveSnapshot");
       window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.search+cleanUrl.hash);
@@ -3469,6 +3524,7 @@ function bindStudioSnapshotReceiver(){
 
 document.getElementById("importSnapshotButton").addEventListener("click",()=>document.getElementById("snapshotFileInput").click());
 document.getElementById("importAgentLookupButton").addEventListener("click",()=>document.getElementById("agentLookupFileInput").click());
+document.getElementById("clearAgentDirectoryButton").addEventListener("click",clearSavedPrivateAgentDirectory);
 document.getElementById("agentLookupFileInput").addEventListener("change",async event=>{
   const file=event.target.files?.[0];if(!file)return;
   try{await loadPrivateAgentLookup(file);}

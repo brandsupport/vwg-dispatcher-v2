@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./dashboard.css?v=20261126-reporting-performance-polish-1">
-  <script src="./dashboard.js?v=20261126-team-brand-resolution-1" defer></script>
+  <link rel="stylesheet" href="./dashboard.css?v=20261126-premium-ui-activity-v2">
+  <script src="./dashboard.js?v=20261126-premium-ui-private-directory-v2" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -85,7 +85,8 @@
           </label>
           <div class="dataset-actions">
             <button class="dataset-import-button" id="importSnapshotButton" type="button">Import snapshot</button>
-            <button class="dataset-import-button" id="importAgentLookupButton" type="button" title="Load the private agent-name lookup CSV from Reporting Studio" hidden>Load colleague names</button>
+            <button class="dataset-import-button" id="importAgentLookupButton" type="button" title="Optional one-time fallback. Names are kept only in this browser." hidden>Import names once</button>
+            <button class="dataset-import-button dataset-clear-names" id="clearAgentDirectoryButton" type="button" title="Remove the private colleague directory saved in this browser." hidden>Clear saved names</button>
             <button class="dataset-reset-button" id="resetSnapshotButton" type="button" hidden>Use demo</button>
             <input id="snapshotFileInput" type="file" accept=".json,application/json" hidden>
             <input id="agentLookupFileInput" type="file" accept=".csv,text/csv" hidden>
