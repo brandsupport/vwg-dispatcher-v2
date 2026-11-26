@@ -134,6 +134,31 @@ test("validates explicit resolution-time summaries and resolver references",()=>
   assert.equal(clean.tickets.resolution_by_agent[0].total_resolution_minutes,120);
 });
 
+
+test("validates per-owner resolution and brand-by-agent share metrics",()=>{
+  const input=snapshotFixture();
+  input.tickets.resolution_by_current_owner=[
+    {agent_ref:"Agent-AAAAAAAAAA",owned_tickets:1,resolved_tickets:1,timed_tickets:1,total_resolution_minutes:60,resolution_rate_pct:100}
+  ];
+  input.brand_by_agent=[
+    {agent_ref:"Agent-AAAAAAAAAA",brand_code:"audi",ticket_count:1,agent_portfolio_total:1,brand_ticket_total:1,agent_portfolio_share_pct:100,brand_owner_share_pct:100}
+  ];
+  const clean=JSON.parse(JSON.stringify(validate(input)));
+  assert.equal(clean.tickets.resolution_by_current_owner[0].resolution_rate_pct,100);
+  assert.equal(clean.tickets.resolution_by_current_owner[0].total_resolution_minutes,60);
+  assert.equal(clean.brand_by_agent[0].brand_code,"audi");
+  assert.equal(clean.brand_by_agent[0].agent_portfolio_share_pct,100);
+  assert.equal(clean.brand_by_agent[0].brand_owner_share_pct,100);
+});
+
+test("rejects brand-by-agent rows with non-pseudonymised colleague identifiers",()=>{
+  const input=snapshotFixture();
+  input.brand_by_agent=[
+    {agent_ref:"Momo",brand_code:"audi",ticket_count:1,agent_portfolio_total:1,brand_ticket_total:1,agent_portfolio_share_pct:100,brand_owner_share_pct:100}
+  ];
+  assert.throws(()=>validate(input),/invalid agent or brand reference/);
+});
+
 test("rejects an overall total that does not reconcile with inbox totals", () => {
   const input = snapshotFixture();
   input.tickets.overall.ticket_records = 99;
