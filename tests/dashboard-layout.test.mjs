@@ -36,7 +36,7 @@ test("unsupported brand and resolution metrics are labelled as not captured",()=
   assert.match(dashboard,/BRAND FIELD NOT CAPTURED/);
   assert.match(dashboard,/function hasResolutionTracking\(\)/);
   assert.match(dashboard,/resolution_tracking==="source_status_present"/);
-  assert.match(dashboard,/Avg solve time · owned cases/);
+  assert.match(dashboard,/Avg solve time · current owner/);
   assert.match(dashboard,/Resolution rate/);
   assert.match(dashboard,/First response/);
 });
