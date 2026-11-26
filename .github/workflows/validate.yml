@@ -15,6 +15,7 @@ on:
       - "README.md"
       - "docs/**"
       - "backend/**"
+      - "integrations/onedrive/**"
       - ".github/workflows/validate.yml"
   pull_request:
     paths:
@@ -29,6 +30,7 @@ on:
       - "README.md"
       - "docs/**"
       - "backend/**"
+      - "integrations/onedrive/**"
       - ".github/workflows/validate.yml"
 
 permissions:
@@ -55,6 +57,8 @@ jobs:
       - name: Test D1 migration and schema constraints
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Test OneDrive bridge smoke module boundary
+        run: node --test tests/onedrive-bridge-smoke.test.mjs
       - name: Check dashboard JavaScript syntax
         run: node --check dashboard.js
       - name: Test dashboard startup and navigation wiring
