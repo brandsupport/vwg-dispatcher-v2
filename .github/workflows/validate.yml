@@ -127,8 +127,12 @@ jobs:
               localDirectoryCalls.length !== 3) {
             throw new Error('The only permitted dashboard persistence is the separately keyed private colleague-name directory.');
           }
-          for (const control of ['id="importAgentLookupButton"','id="clearAgentDirectoryButton"']) {
-            if (!html.includes(control)) throw new Error('Private colleague directory control is missing: ' + control);
+          // Names are populated automatically by Reporting Studio; the old manual CSV importer is intentionally removed.
+          if (html.includes('id="importAgentLookupButton"') || html.includes('id="agentLookupFileInput"')) {
+            throw new Error('The obsolete manual colleague-name CSV importer must not return.');
+          }
+          if (!html.includes('id="clearAgentDirectoryButton"')) {
+            throw new Error('Private colleague directory clear control is missing.');
           }
           for (const selector of ['.dataset-actions','.dataset-import-button','.dataset-reset-button','.activity-history-panel','.activity-search-input']) {
             if (!css.includes(selector)) throw new Error('Dashboard snapshot / Activity Log styling is missing: ' + selector);
