@@ -1082,6 +1082,12 @@ async function sanitise(){
     }else if(!mappings.tickets.brand&&!brandEnrichedTicketCount){
       warnings.push("No ticket Brand field or matching Email Details Brand records were found. Ticket brand totals remain Other / unclassified.");
     }
+    if(mappings.tickets.brand||brandEnrichedTicketCount){
+      const absentPortfolioBrands=["cupra","seat","skoda","vwcv"].filter(code=>(brandStats[code]||0)===0);
+      if(absentPortfolioBrands.length){
+        warnings.push("No ticket rows were present for these brands in the selected Brand field / Email Details join: "+absentPortfolioBrands.map(code=>BRAND_LABELS[code]).join(", ")+". The dashboard will show zero for them until source records include those brand values; no brand is inferred from subject or message text.");
+      }
+    }
     if(!mappings.tickets.status&&!mappings.tickets.resolution_status)warnings.push("No current-status field is mapped. Resolved and outstanding totals cannot be classified.");
     if(!mappings.tickets.resolved_at&&!resolutionEventsWithTime)warnings.push("No resolution timestamp is available. Resolution counts and rates can still be calculated from current Status values, but average solve time is not available.");
     if(!mappings.tickets.resolved_by&&!resolutionEventsWithAgent)warnings.push("No resolver field or resolution event owner was supplied. Resolved-by-agent attribution is not available.");
