@@ -96,6 +96,23 @@ function validateWithDashboard(snapshot){
   return JSON.parse(JSON.stringify(validate(snapshot)));
 }
 
+function filterImportedActivityRows(snapshot,filters={}){
+  const dashboard=fs.readFileSync(new URL("../dashboard.js",import.meta.url),"utf8");
+  const start=dashboard.indexOf("function importedActivityRows(){");
+  const end=dashboard.indexOf("\nfunction exportImportedActivityLog(",start);
+  assert.ok(start>=0&&end>start,"Imported activity filtering must be extractable");
+  const state={
+    importedSnapshot:snapshot,folder:"all",auditSearch:"",
+    auditEventType:"all",auditAgent:"all",auditFromDate:"",auditToDate:"",
+    ...filters
+  };
+  const context={state,displayAgentName:reference=>({
+    "Agent-AAAAAAAAAA":"Belal","Agent-BBBBBBBBBB":"Mariam"
+  }[reference]||reference)};
+  vm.createContext(context);
+  return vm.runInContext(dashboard.slice(start,end)+"\nimportedActivityRows",context)();
+}
+
 function calculateDashboardViews(snapshot,folder="all"){
   const dashboard=fs.readFileSync(new URL("../dashboard.js",import.meta.url),"utf8");
   const extractConstant=name=>{
@@ -205,7 +222,7 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
   const eventCounts=Object.fromEntries(overall.workflow.map(row=>[row.id,row.events]));
   assert.deepEqual(eventCounts,{
     handover:1,flag:1,automatic:0,manual:0,recovery:1,
-    reassignment:0,exceptions:0,email_lifecycle:0,baseline:1
+    reassignment:0,exceptions:0,email_lifecycle:0,resolution:1,baseline:1
   });
 
   const detags=calculateDashboardViews(imported,"detags");
@@ -214,7 +231,7 @@ test("synthetic tracker exports and Email Details pass through Studio and Dashbo
   });
   assert.deepEqual(detags.workflow.map(row=>[row.id,row.events]),[
     ["handover",1],["flag",0],["automatic",0],["manual",0],["recovery",1],
-    ["reassignment",0],["exceptions",0],["email_lifecycle",0],["baseline",0]
+    ["reassignment",0],["exceptions",0],["email_lifecycle",0],["resolution",0],["baseline",0]
   ]);
 
   const rawValues=[
@@ -510,9 +527,9 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
 
   assert.equal(snapshot.tickets.total,4);
   assert.deepEqual(snapshot.tickets.overall,{
-    ticket_records:4,initially_assigned:3,resolved:0,outstanding:4,unassigned:1
+    ticket_records:4,initially_assigned:3,resolved:1,outstanding:3,unassigned:1
   });
-  assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
+  assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
   assert.equal(snapshot.tickets.brand_field_mapped,false);
   const events=Object.fromEntries(snapshot.workflow.map(row=>[row.event_type,(snapshot.workflow.filter(item=>item.event_type===row.event_type).reduce((n,item)=>n+item.event_count,0))]));
   assert.deepEqual(events,{
@@ -528,8 +545,12 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   const visibleEvents=Object.fromEntries(views.workflow.map(row=>[row.id,row.events]));
   assert.deepEqual(visibleEvents,{
     handover:1,flag:2,automatic:2,manual:1,recovery:1,
-    reassignment:0,exceptions:1,email_lifecycle:0,baseline:1
+    reassignment:0,exceptions:1,email_lifecycle:0,resolution:0,baseline:1
   });
+  assert.equal(views.workflow.find(row=>row.id==="handover").uniqueTickets,1);
+  assert.equal(views.workflow.find(row=>row.id==="handover").ratePct,25);
+  assert.equal(views.workflow.find(row=>row.id==="flag").uniqueTickets,2);
+  assert.equal(views.workflow.find(row=>row.id==="flag").ratePct,50);
 
   const serialised=JSON.stringify(imported);
   assert.ok(snapshot.activity_log.every(row=>/^Ref-[A-F0-9]{10}$/.test(row.ticket_ref)));
@@ -544,6 +565,40 @@ test("real tracker sheet headers map safely and Event Type drives Activity Log c
   ]) assert.equal(serialised.includes(prohibited),false,"unmapped sensitive value leaked: "+prohibited);
 });
 
+
+
+test("imported audit history filters by event, colleague and UTC date range",()=>{
+  const snapshot={activity_log:[
+    {event_time_utc:"2026-11-22T10:00:00.000Z",event_time_egypt:"2026-11-22 12:00:00",event_type:"handover",inbox_code:"detags",ticket_ref:"Ref-AAAAAAAAAA",original_agent_ref:"Agent-AAAAAAAAAA",current_agent_ref:"Agent-BBBBBBBBBB",assignment_flag:true,incident_count:0,system_event:false},
+    {event_time_utc:"2026-11-23T10:00:00.000Z",event_time_egypt:"2026-11-23 12:00:00",event_type:"resolved",inbox_code:"detags",ticket_ref:"Ref-BBBBBBBBBB",original_agent_ref:"Agent-BBBBBBBBBB",current_agent_ref:"Agent-BBBBBBBBBB",assignment_flag:true,incident_count:0,system_event:false},
+    {event_time_utc:"2026-11-22T11:00:00.000Z",event_time_egypt:"2026-11-22 13:00:00",event_type:"handover",inbox_code:"agency",ticket_ref:"Ref-CCCCCCCCCC",original_agent_ref:"Agent-BBBBBBBBBB",current_agent_ref:"Agent-AAAAAAAAAA",assignment_flag:true,incident_count:0,system_event:false}
+  ]};
+  const rows=filterImportedActivityRows(snapshot,{
+    auditEventType:"handover",auditAgent:"Agent-AAAAAAAAAA",
+    auditFromDate:"2026-11-22",auditToDate:"2026-11-22"
+  });
+  assert.equal(rows.length,2);
+  assert.ok(rows.every(row=>row.event_type==="handover"));
+  assert.ok(rows.every(row=>row.event_time_utc.startsWith("2026-11-22")));
+});
+
+test("Reports & Exports cards route to distinct local CSV builders",()=>{
+  const dashboard=read("dashboard.js");
+  for(const [action,builder] of [
+    ["export-daily-report","exportDailyOperationsReport"],
+    ["export-weekly-report","exportWeeklyPerformanceReport"],
+    ["export-management-report","exportManagementSnapshotReport"],
+    ["export-individual-report","exportIndividualPerformanceReport"],
+    ["export-brand-report","exportBrandVolumeReport"],
+    ["export-reliability-report","exportReliabilitySnapshotReport"]
+  ]){
+    assert.ok(dashboard.includes('"'+action+'"'),"missing report card action "+action);
+    assert.ok(dashboard.includes('if(action==="'+action+'"){'+builder+'();return;}'),"missing report builder handler "+builder);
+    assert.ok(dashboard.includes("function "+builder+"("),"missing export builder "+builder);
+  }
+  assert.ok(dashboard.includes("dispatcher-brand-volume-and-agent-share.csv"));
+  assert.ok(dashboard.includes("dispatcher-individual-performance-report.csv"));
+});
 
 test("Email Details workbook selection never falls back to an Assignments-like worksheet",async()=>{
   const assignmentHeaders=[

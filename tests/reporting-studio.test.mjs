@@ -28,6 +28,8 @@ function loadStudio(extraContext={}){
       openWorkbookPicker,
       normaliseInbox,
       normaliseWorkflowEvent,
+      normaliseBrand,
+      isResolved,
       parseExplicitDate,
       parseExplicitTimestamp,
       autoMap,
@@ -269,7 +271,7 @@ test("VWG Activity Log uses Event Type instead of the Boolean Assignment Flag",a
   for(const raw of ["KEY-001","KEY-002","Belal","Balqees","Mariam","Details / Notes"])assert.equal(json.includes(raw),false,"raw source value leaked: "+raw);
   assert.ok(result.privateLookup.some(row=>row.display_name==="Belal"));
   assert.ok(result.privateLookup.some(row=>row.display_name==="Balqees"));
-  assert.equal(snapshot.tickets.resolution_tracking,"not_captured");
+  assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
 });
 
 test("uses the earliest timestamped first-allocation event and de-duplicates repeats",async()=>{
@@ -323,6 +325,51 @@ test("uses explicit resolution status, resolver and timestamps for solve-time me
   assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="volkswagen").count,1);
   const json=JSON.stringify(snapshot);
   for(const raw of ["KEY-RES-01","KEY-RES-02","Belal","Balqees"])assert.equal(json.includes(raw),false,"raw value leaked into snapshot: "+raw);
+});
+
+
+test("maps resolved and closed ticket statuses and calculates brand share by current owner",async()=>{
+  const hooks=loadStudio();
+  const tickets=[
+    "Email Key / ID,Source Inbox,Status,Brand,Received At (UK),Current Owner",
+    "KEY-CLOSED-01,Detags,Closed,Skoda Auto,2026-11-24 08:30:00,Agent One",
+    "KEY-RESOLVED-02,Agency Detags,Resolved,SEAT UK,2026-11-24 09:00:00,Agent Two",
+    "KEY-OPEN-03,Detags,Assigned,CUPRA UK,2026-11-24 09:30:00,Agent One",
+    "KEY-CLOSED-04,Transfers,Assigned,Volkswagen Commercial Vehicles,2026-11-24 10:00:00,Agent Three"
+  ].join("\r\n");
+  const activity=[
+    "Event Time (Egypt),Event Type,Email Key / ID,Source Inbox,Original Assignee,Current Owner,Assignment Flag,Incident Count,Details / Notes",
+    "2026-11-24 11:30:00,CLOSED,KEY-CLOSED-01,Detags,Agent One,Agent One,TRUE,0,",
+    "2026-11-24 14:00:00,RESOLVED,KEY-CLOSED-04,Transfers,Agent Three,Agent Three,TRUE,0,"
+  ].join("\r\n");
+  const {snapshot,privateLookup}=await hooks.processVwg(tickets,activity);
+  assert.equal(hooks.isResolved("Closed"),true);
+  assert.equal(hooks.isResolved("Resolved"),true);
+  assert.equal(hooks.isResolved("Closed by agent"),true);
+  assert.equal(snapshot.tickets.overall.resolved,3);
+  assert.equal(snapshot.tickets.overall.outstanding,1);
+  assert.equal(snapshot.tickets.resolution_tracking,"source_status_present");
+  assert.equal(snapshot.tickets.resolution_by_agent.length,2);
+  const agentOne=snapshot.tickets.resolution_by_current_owner.find(row=>
+    privateLookup.find(person=>person.agent_ref===row.agent_ref)?.display_name==="Agent One");
+  assert.ok(agentOne);
+  assert.equal(agentOne.owned_tickets,2);
+  assert.equal(agentOne.resolved_tickets,1);
+  assert.equal(agentOne.resolution_rate_pct,50);
+  assert.equal(agentOne.timed_tickets,1);
+  assert.equal(agentOne.total_resolution_minutes,60);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="skoda").count,1);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="seat").count,1);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="cupra").count,1);
+  assert.equal(snapshot.tickets.by_brand.find(row=>row.brand_code==="vwcv").count,1);
+  assert.equal(snapshot.brand_by_agent.find(row=>row.brand_code==="skoda").agent_portfolio_share_pct,50);
+  assert.equal(snapshot.brand_by_agent.find(row=>row.brand_code==="seat").agent_portfolio_share_pct,100);
+  assert.equal(snapshot.brand_by_agent.find(row=>row.brand_code==="cupra").agent_portfolio_share_pct,50);
+  assert.equal(snapshot.brand_by_agent.find(row=>row.brand_code==="vwcv").agent_portfolio_share_pct,100);
+  const json=JSON.stringify(snapshot);
+  for(const raw of ["KEY-CLOSED-01","KEY-RESOLVED-02","KEY-OPEN-03","KEY-CLOSED-04","Agent One","Agent Two","Agent Three"]){
+    assert.equal(json.includes(raw),false,"raw identifier or colleague name leaked into aggregate: "+raw);
+  }
 });
 
 test("the same local workspace key keeps agent references stable between runs",async()=>{
